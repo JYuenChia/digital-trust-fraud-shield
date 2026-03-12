@@ -3,7 +3,7 @@ import React from 'react';
 interface GlassmorphicCardProps {
   children: React.ReactNode;
   className?: string;
-  glowColor?: 'cyan' | 'magenta' | 'none';
+  glowColor?: 'cyan' | 'magenta' | 'orange' | 'none';
   onClick?: () => void;
   style?: React.CSSProperties;
 }
@@ -27,6 +27,7 @@ export const GlassmorphicCard: React.FC<GlassmorphicCardProps> = ({
   const glowClasses = {
     cyan: 'hover:shadow-[0_0_30px_rgba(0,217,255,0.4)]',
     magenta: 'hover:shadow-[0_0_30px_rgba(255,0,110,0.4)]',
+    orange: 'hover:shadow-[0_0_30px_rgba(255,107,53,0.4)]',
     none: '',
   };
 

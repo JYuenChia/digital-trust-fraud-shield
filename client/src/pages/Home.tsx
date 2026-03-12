@@ -6,16 +6,16 @@ import APIConsole from '@/components/APIConsole';
 import TransactionTable from '@/components/TransactionTable';
 
 /**
- * Home Page - Digital Trust Fraud Shield Analytics Dashboard
+ * Dashboard Page - Digital Trust Fraud Shield Analytics
  * 
- * Design Philosophy: Ethereal Cyberpunk Minimalism
+ * Design Philosophy: Modern FinTech with warm orange accents
  * - Asymmetric Bento Grid layout (4-column, variable height)
- * - Frosted glassmorphism panels with neon accents
+ * - Frosted glassmorphism panels with orange accents
  * - Real-time risk scoring and anomaly detection
- * - Cinematic lighting with soft glows and shadows
+ * - Cinematic lighting with soft orange glows
  */
 
-export default function Home() {
+export default function Dashboard() {
   const [riskScore, setRiskScore] = useState(67);
   const [anomalyData, setAnomalyData] = useState([
     { time: '00:00', value: 12 },
@@ -49,36 +49,36 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#0a0e27] overflow-hidden">
-      {/* Background with ethereal glow effects */}
+    <div className="min-h-screen bg-[#0f0d0a] overflow-hidden">
+      {/* Background with warm orange glow effects */}
       <div className="fixed inset-0 pointer-events-none">
-        {/* Cyan glow - top left */}
+        {/* Orange glow - top left */}
         <div
-          className="absolute top-0 left-0 w-96 h-96 rounded-full blur-3xl opacity-20"
+          className="absolute top-0 left-0 w-96 h-96 rounded-full blur-3xl opacity-15"
           style={{
-            background: 'radial-gradient(circle, rgba(0, 217, 255, 0.3), transparent)',
+            background: 'radial-gradient(circle, rgba(255, 107, 53, 0.3), transparent)',
           }}
         />
-        {/* Magenta glow - bottom right */}
+        {/* Golden orange glow - bottom right */}
         <div
-          className="absolute bottom-0 right-0 w-96 h-96 rounded-full blur-3xl opacity-20"
+          className="absolute bottom-0 right-0 w-96 h-96 rounded-full blur-3xl opacity-15"
           style={{
-            background: 'radial-gradient(circle, rgba(255, 0, 110, 0.3), transparent)',
+            background: 'radial-gradient(circle, rgba(247, 147, 30, 0.3), transparent)',
           }}
         />
       </div>
 
       {/* Header */}
-      <header className="relative z-20 border-b border-[rgba(0,217,255,0.1)] bg-[rgba(10,14,39,0.8)] backdrop-blur-md">
+      <header className="relative z-20 border-b border-[rgba(255,107,53,0.1)] bg-[rgba(26,20,16,0.8)] backdrop-blur-md mt-16">
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-foreground font-space-grotesk">
-                Digital Trust
-                <span className="text-[#00d9ff] ml-2">Fraud Shield</span>
+              <h1 className="text-3xl font-bold text-foreground font-sora">
+                Fraud Detection
+                <span className="text-primary ml-2">Dashboard</span>
               </h1>
               <p className="text-sm text-muted-foreground mt-2">
-                Real-Time AI-Powered Fraud Detection & Risk Analysis
+                Real-Time AI-Powered Risk Analysis & Monitoring
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -95,7 +95,7 @@ export default function Home() {
           {/* 1. Risk Gauge - Large (2x2 on desktop) */}
           <GlassmorphicCard
             className="lg:col-span-2 lg:row-span-2 animate-slide-in-up"
-            glowColor="cyan"
+            glowColor="orange"
           >
             <div className="h-[400px] md:h-[350px]">
               <RiskGauge riskScore={riskScore} label="Current Risk Score" />
@@ -106,7 +106,7 @@ export default function Home() {
           <GlassmorphicCard
             className="lg:col-span-2 animate-slide-in-up"
             style={{ animationDelay: '0.1s' }}
-            glowColor="magenta"
+            glowColor="orange"
           >
             <div className="p-6 h-[200px] md:h-[180px]">
               <AnomalyChart
@@ -122,7 +122,7 @@ export default function Home() {
           <GlassmorphicCard
             className="lg:col-span-2 animate-slide-in-up"
             style={{ animationDelay: '0.2s' }}
-            glowColor="cyan"
+            glowColor="orange"
           >
             <div className="p-6 h-[200px] md:h-[180px]">
               <AnomalyChart
@@ -138,7 +138,7 @@ export default function Home() {
           <GlassmorphicCard
             className="lg:col-span-2 lg:row-span-2 animate-slide-in-up"
             style={{ animationDelay: '0.3s' }}
-            glowColor="cyan"
+            glowColor="orange"
           >
             <div className="h-[400px] md:h-[350px]">
               <APIConsole title="Risk API Console" />
@@ -149,7 +149,7 @@ export default function Home() {
           <GlassmorphicCard
             className="lg:col-span-4 animate-slide-in-up"
             style={{ animationDelay: '0.4s' }}
-            glowColor="cyan"
+            glowColor="orange"
           >
             <div className="p-6 h-[320px] md:h-[280px]">
               <TransactionTable title="Recent Activity" />
@@ -159,7 +159,7 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-[rgba(0,217,255,0.1)] bg-[rgba(10,14,39,0.8)] backdrop-blur-md mt-12">
+      <footer className="relative z-10 border-t border-[rgba(255,107,53,0.1)] bg-[rgba(26,20,16,0.8)] backdrop-blur-md mt-12">
         <div className="max-w-7xl mx-auto px-6 py-6 text-center text-xs text-muted-foreground">
           <p>Digital Trust Fraud Shield © 2026 | Real-Time Fraud Detection Engine</p>
         </div>
@@ -167,10 +167,11 @@ export default function Home() {
 
       {/* Global Styles */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
-        
-        .font-space-grotesk {
-          font-family: 'Space Grotesk', sans-serif;
+        .font-sora {
+          font-family: 'Sora', sans-serif;
+        }
+        .font-poppins {
+          font-family: 'Poppins', sans-serif;
         }
 
         /* Smooth scrollbar */
