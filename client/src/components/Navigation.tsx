@@ -37,27 +37,27 @@ export const Navigation: React.FC<NavigationProps> = ({ currentPath = '/' }) => 
         <div className="flex items-center justify-between">
           {/* Logo */}
           <Link href="/">
-            <a className="flex items-center gap-2 text-2xl font-bold text-foreground hover:text-primary transition-colors">
+            <div className="flex items-center gap-2 text-2xl font-bold text-foreground hover:text-primary transition-colors cursor-pointer">
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <span className="text-white text-sm font-bold">DT</span>
               </div>
               <span className="font-sora">Digital Trust</span>
-            </a>
+            </div>
           </Link>
 
           {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-8">
             {navItems.map((item) => (
               <Link key={item.href} href={item.href}>
-                <a
-                  className={`text-sm font-medium transition-colors ${
+                <span
+                  className={`text-sm font-medium transition-colors cursor-pointer ${
                     isActive(item.href)
                       ? 'text-primary'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {item.label}
-                </a>
+                </span>
               </Link>
             ))}
           </div>
@@ -65,16 +65,16 @@ export const Navigation: React.FC<NavigationProps> = ({ currentPath = '/' }) => 
           {/* CTA Button */}
           <div className="hidden md:block">
             <Link href="/dashboard">
-              <a className="px-6 py-2 bg-primary text-white rounded-full font-medium hover:bg-[#e85d04] transition-colors">
+              <button className="px-6 py-2 bg-primary text-white rounded-full font-medium hover:bg-[#e85d04] transition-colors cursor-pointer border-none">
                 Get Started
-              </a>
+              </button>
             </Link>
           </div>
 
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="md:hidden text-foreground hover:text-primary transition-colors"
+            className="md:hidden text-foreground hover:text-primary transition-colors border-none bg-transparent cursor-pointer"
           >
             {isOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -86,25 +86,25 @@ export const Navigation: React.FC<NavigationProps> = ({ currentPath = '/' }) => 
             <div className="flex flex-col gap-3">
               {navItems.map((item) => (
                 <Link key={item.href} href={item.href}>
-                  <a
+                  <span
                     onClick={() => setIsOpen(false)}
-                    className={`block px-4 py-2 rounded-lg transition-colors ${
+                    className={`block px-4 py-2 rounded-lg transition-colors cursor-pointer ${
                       isActive(item.href)
                         ? 'bg-primary text-white'
                         : 'text-foreground hover:bg-secondary'
                     }`}
                   >
                     {item.label}
-                  </a>
+                  </span>
                 </Link>
               ))}
               <Link href="/dashboard">
-                <a
+                <button
                   onClick={() => setIsOpen(false)}
-                  className="block px-4 py-2 bg-primary text-white rounded-lg font-medium text-center hover:bg-[#e85d04] transition-colors"
+                  className="block w-full px-4 py-2 bg-primary text-white rounded-lg font-medium text-center hover:bg-[#e85d04] transition-colors cursor-pointer border-none"
                 >
                   Get Started
-                </a>
+                </button>
               </Link>
             </div>
           </div>
