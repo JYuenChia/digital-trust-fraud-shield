@@ -43,74 +43,83 @@
 }
 
 :root {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.98 0.001 286.375);
-  --secondary-foreground: oklch(0.4 0.015 65);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.141 0.005 285.823);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  /* Cyberpunk Minimalism - Dark Mode Color Palette */
+  --primary: #00d9ff; /* Neon Cyan */
+  --primary-foreground: #0a0e27; /* Deep Obsidian */
+  --sidebar-primary: #00d9ff;
+  --sidebar-primary-foreground: #0a0e27;
+  --chart-1: #00d9ff; /* Cyan */
+  --chart-2: #ff006e; /* Magenta */
+  --chart-3: #64e9ff; /* Light Cyan */
+  --chart-4: #ff4d9f; /* Light Magenta */
+  --chart-5: #00a8cc; /* Deep Cyan */
+  --radius: 0.5rem; /* Subtle rounded corners */
+  --background: #0a0e27; /* Deep Obsidian */
+  --foreground: #f8f9fa; /* Bright White */
+  --card: #0f172a; /* Slightly lighter obsidian */
+  --card-foreground: #f8f9fa; /* Bright White */
+  --popover: #0f172a;
+  --popover-foreground: #f8f9fa;
+  --secondary: #1e293b; /* Slate-900 */
+  --secondary-foreground: #64e9ff; /* Light Cyan */
+  --muted: #334155; /* Slate-700 */
+  --muted-foreground: #94a3b8; /* Slate-400 */
+  --accent: #00d9ff; /* Neon Cyan */
+  --accent-foreground: #0a0e27; /* Deep Obsidian */
+  --destructive: #ff006e; /* Magenta for alerts */
+  --destructive-foreground: #f8f9fa; /* Bright White */
+  --border: rgba(0, 217, 255, 0.1); /* Cyan with transparency */
+  --input: rgba(15, 23, 42, 0.8); /* Obsidian with transparency */
+  --ring: #00d9ff; /* Neon Cyan */
+  --sidebar: #0f172a;
+  --sidebar-foreground: #f8f9fa;
+  --sidebar-accent: #00d9ff;
+  --sidebar-accent-foreground: #0a0e27;
+  --sidebar-border: rgba(0, 217, 255, 0.1);
+  --sidebar-ring: #00d9ff;
+  
+  /* Glassmorphism & Glow Effects */
+  --glass-bg: rgba(15, 23, 42, 0.7);
+  --glass-border: rgba(0, 217, 255, 0.2);
+  --glow-cyan: 0 0 20px rgba(0, 217, 255, 0.3);
+  --glow-magenta: 0 0 20px rgba(255, 0, 110, 0.3);
+  --glow-intense: 0 0 40px rgba(0, 217, 255, 0.5);
 }
 
 .dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  /* Dark mode is the default for cyberpunk aesthetic */
+  --primary: #00d9ff;
+  --primary-foreground: #0a0e27;
+  --sidebar-primary: #00d9ff;
+  --sidebar-primary-foreground: #0a0e27;
+  --background: #0a0e27;
+  --foreground: #f8f9fa;
+  --card: #0f172a;
+  --card-foreground: #f8f9fa;
+  --popover: #0f172a;
+  --popover-foreground: #f8f9fa;
+  --secondary: #1e293b;
+  --secondary-foreground: #64e9ff;
+  --muted: #334155;
+  --muted-foreground: #94a3b8;
+  --accent: #00d9ff;
+  --accent-foreground: #0a0e27;
+  --destructive: #ff006e;
+  --destructive-foreground: #f8f9fa;
+  --border: rgba(0, 217, 255, 0.1);
+  --input: rgba(15, 23, 42, 0.8);
+  --ring: #00d9ff;
+  --chart-1: #00d9ff;
+  --chart-2: #ff006e;
+  --chart-3: #64e9ff;
+  --chart-4: #ff4d9f;
+  --chart-5: #00a8cc;
+  --sidebar: #0f172a;
+  --sidebar-foreground: #f8f9fa;
+  --sidebar-accent: #00d9ff;
+  --sidebar-accent-foreground: #0a0e27;
+  --sidebar-border: rgba(0, 217, 255, 0.1);
+  --sidebar-ring: #00d9ff;
 }
 
 @layer base {
@@ -173,5 +182,162 @@
       padding-right: 2rem;
       max-width: 1280px; /* Standard content width */
     }
+  }
+}
+
+/* Cyberpunk Animations & Cinematic Effects */
+@keyframes glow-pulse {
+  0%, 100% {
+    opacity: 0.8;
+    filter: drop-shadow(0 0 20px rgba(0, 217, 255, 0.4));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 30px rgba(0, 217, 255, 0.6));
+  }
+}
+
+@keyframes glow-pulse-magenta {
+  0%, 100% {
+    opacity: 0.8;
+    filter: drop-shadow(0 0 20px rgba(255, 0, 110, 0.4));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 30px rgba(255, 0, 110, 0.6));
+  }
+}
+
+@keyframes slide-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes scan-line {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes neon-flicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    opacity: 1;
+  }
+  20%, 24%, 55% {
+    opacity: 0.8;
+  }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+.animate-glow-pulse-magenta {
+  animation: glow-pulse-magenta 2s ease-in-out infinite;
+}
+
+.animate-slide-in-up {
+  animation: slide-in-up 0.5s ease-out;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+  background-size: 1000px 100%;
+}
+
+.animate-scan-line {
+  animation: scan-line 3s linear infinite;
+}
+
+.animate-neon-flicker {
+  animation: neon-flicker 0.15s infinite;
+}
+
+/* Glassmorphism utilities */
+.glass-effect {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 217, 255, 0.2);
+}
+
+.glass-effect-magenta {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 0, 110, 0.2);
+}
+
+/* Glow effects */
+.glow-cyan {
+  box-shadow: 0 0 20px rgba(0, 217, 255, 0.3), inset 0 0 20px rgba(0, 217, 255, 0.1);
+}
+
+.glow-magenta {
+  box-shadow: 0 0 20px rgba(255, 0, 110, 0.3), inset 0 0 20px rgba(255, 0, 110, 0.1);
+}
+
+.glow-intense {
+  box-shadow: 0 0 40px rgba(0, 217, 255, 0.5), inset 0 0 20px rgba(0, 217, 255, 0.2);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .grid {
+    grid-auto-rows: auto;
+  }
+  
+  .col-span-2 {
+    @apply col-span-1;
+  }
+  
+  .col-span-4 {
+    @apply col-span-1;
+  }
+  
+  .row-span-2 {
+    @apply row-span-1;
   }
 }
