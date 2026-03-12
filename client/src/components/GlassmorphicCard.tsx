@@ -37,7 +37,7 @@ export const GlassmorphicCard: React.FC<GlassmorphicCardProps> = ({
       style={style}
       className={`
         relative rounded-lg overflow-hidden
-        bg-[rgba(5,29,62,0.8)] backdrop-blur-md
+        bg-[rgba(26,20,16,0.8)] backdrop-blur-md
         border border-[rgba(247,127,0,0.2)]
         shadow-[0_8px_32px_rgba(0,0,0,0.3)]
         transition-all duration-300 ease-out

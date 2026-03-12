@@ -78,7 +78,7 @@ export const AnomalyChart: React.FC<AnomalyChartProps> = ({
             {/* Tooltip */}
             <Tooltip
               contentStyle={{
-                backgroundColor: 'rgba(5, 29, 62, 0.9)',
+                backgroundColor: 'rgba(15, 13, 10, 0.9)',
                 border: `1px solid ${glowColor}40`,
                 borderRadius: '8px',
                 boxShadow: `0 0 20px ${glowColor}40`,

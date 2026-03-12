@@ -65,7 +65,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
       {/* Table */}
       <div className="flex-1 overflow-y-auto">
         <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-[rgba(5,29,62,0.8)] border-b border-[rgba(247,127,0,0.1)]">
+          <thead className="sticky top-0 bg-[rgba(26,20,16,0.8)] border-b border-[rgba(247,127,0,0.1)]">
             <tr>
               <th className="px-3 py-2 text-left text-muted-foreground font-medium">ID</th>
               <th className="px-3 py-2 text-left text-muted-foreground font-medium">Time</th>
@@ -82,8 +82,8 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
                 <tr
                   key={txn.id}
                   className={`
-                    border border-[rgba(247,127,0,0.05)] rounded
-                    hover:bg-[rgba(247,127,0,0.05)] hover:border-[rgba(247,127,0,0.2)]
+                    border border-[rgba(247,127,0,0.1)] rounded
+                    hover:bg-[rgba(247,127,0,0.1)] hover:border-[rgba(247,127,0,0.2)]
                     transition-all duration-200 cursor-pointer
                   `}
                 >

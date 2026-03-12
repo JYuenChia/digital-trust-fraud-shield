@@ -78,9 +78,9 @@ export const APIConsole: React.FC<APIConsoleProps> = ({
   };
 
   return (
-    <div className="w-full h-full flex flex-col bg-[rgba(5,29,62,0.9)] rounded-lg border border-[rgba(247,127,0,0.2)] overflow-hidden">
+    <div className="w-full h-full flex flex-col bg-[rgba(15,13,10,0.9)] rounded-lg border border-[rgba(247,127,0,0.2)] overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-[rgba(247,127,0,0.1)] bg-[rgba(5,29,62,0.8)]">
+      <div className="px-4 py-3 border-b border-[rgba(247,127,0,0.1)] bg-[rgba(26,20,16,0.8)]">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-semibold text-[#F77F00] uppercase tracking-widest font-mono">
             {title}
@@ -93,7 +93,7 @@ export const APIConsole: React.FC<APIConsoleProps> = ({
       </div>
 
       {/* Console Content */}
-      <div className="flex-1 overflow-y-auto p-4 font-mono text-xs space-y-1 bg-[rgba(5,29,62,0.95)]">
+      <div className="flex-1 overflow-y-auto p-4 font-mono text-xs space-y-1 bg-[rgba(15,13,10,0.95)]">
         {logs.length === 0 ? (
           <div className="text-muted-foreground">
             <span className="text-[#F77F00]">&gt;</span> Waiting for transactions...
@@ -124,7 +124,7 @@ export const APIConsole: React.FC<APIConsoleProps> = ({
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-2 border-t border-[rgba(247,127,0,0.1)] bg-[rgba(5,29,62,0.8)] text-xs text-muted-foreground">
+      <div className="px-4 py-2 border-t border-[rgba(247,127,0,0.1)] bg-[rgba(26,20,16,0.8)] text-xs text-muted-foreground">
         <span className="text-[#F77F00]">fraud-shield@api</span>
         <span>:~$ </span>
       </div>
