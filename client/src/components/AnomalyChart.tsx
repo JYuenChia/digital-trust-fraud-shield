@@ -24,8 +24,8 @@ export const AnomalyChart: React.FC<AnomalyChartProps> = ({
   height = 250,
 }) => {
   const colorMap = {
-    cyan: '#00d9ff',
-    magenta: '#ff006e',
+    cyan: '#F77F00',
+    magenta: '#D62828',
   };
 
   const glowColor = colorMap[color];
@@ -58,7 +58,7 @@ export const AnomalyChart: React.FC<AnomalyChartProps> = ({
             {/* Minimal grid */}
             <CartesianGrid
               strokeDasharray="3 3"
-              stroke="rgba(0, 217, 255, 0.05)"
+              stroke="rgba(247, 127, 0, 0.05)"
               vertical={false}
             />
 
@@ -78,7 +78,7 @@ export const AnomalyChart: React.FC<AnomalyChartProps> = ({
             {/* Tooltip */}
             <Tooltip
               contentStyle={{
-                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                backgroundColor: 'rgba(5, 29, 62, 0.9)',
                 border: `1px solid ${glowColor}40`,
                 borderRadius: '8px',
                 boxShadow: `0 0 20px ${glowColor}40`,

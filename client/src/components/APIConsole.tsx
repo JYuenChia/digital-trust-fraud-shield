@@ -65,24 +65,24 @@ export const APIConsole: React.FC<APIConsoleProps> = ({
   const getLevelColor = (level: string) => {
     switch (level) {
       case 'info':
-        return '#00d9ff'; // Cyan
+        return '#F77F00'; // Orange
       case 'success':
         return '#00ff88'; // Green
       case 'warning':
-        return '#ffd700'; // Yellow
+        return '#FCBF49'; // Golden
       case 'error':
-        return '#ff006e'; // Magenta
+        return '#D62828'; // Red
       default:
         return '#f8f9fa';
     }
   };
 
   return (
-    <div className="w-full h-full flex flex-col bg-[rgba(10,14,39,0.9)] rounded-lg border border-[rgba(0,217,255,0.2)] overflow-hidden">
+    <div className="w-full h-full flex flex-col bg-[rgba(5,29,62,0.9)] rounded-lg border border-[rgba(247,127,0,0.2)] overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-[rgba(0,217,255,0.1)] bg-[rgba(15,23,42,0.8)]">
+      <div className="px-4 py-3 border-b border-[rgba(247,127,0,0.1)] bg-[rgba(5,29,62,0.8)]">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-semibold text-[#00d9ff] uppercase tracking-widest font-mono">
+          <h3 className="text-xs font-semibold text-[#F77F00] uppercase tracking-widest font-mono">
             {title}
           </h3>
           <div className="flex gap-2">
@@ -93,10 +93,10 @@ export const APIConsole: React.FC<APIConsoleProps> = ({
       </div>
 
       {/* Console Content */}
-      <div className="flex-1 overflow-y-auto p-4 font-mono text-xs space-y-1 bg-[rgba(10,14,39,0.95)]">
+      <div className="flex-1 overflow-y-auto p-4 font-mono text-xs space-y-1 bg-[rgba(5,29,62,0.95)]">
         {logs.length === 0 ? (
           <div className="text-muted-foreground">
-            <span className="text-[#00d9ff]">&gt;</span> Waiting for transactions...
+            <span className="text-[#F77F00]">&gt;</span> Waiting for transactions...
           </div>
         ) : (
           logs.map((log) => (
@@ -116,7 +116,7 @@ export const APIConsole: React.FC<APIConsoleProps> = ({
 
         {/* Blinking cursor */}
         {isActive && (
-          <div className="text-[#00d9ff]">
+          <div className="text-[#F77F00]">
             <span>&gt;</span>
             <span className="animate-pulse">_</span>
           </div>
@@ -124,8 +124,8 @@ export const APIConsole: React.FC<APIConsoleProps> = ({
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-2 border-t border-[rgba(0,217,255,0.1)] bg-[rgba(15,23,42,0.8)] text-xs text-muted-foreground">
-        <span className="text-[#00d9ff]">fraud-shield@api</span>
+      <div className="px-4 py-2 border-t border-[rgba(247,127,0,0.1)] bg-[rgba(5,29,62,0.8)] text-xs text-muted-foreground">
+        <span className="text-[#F77F00]">fraud-shield@api</span>
         <span>:~$ </span>
       </div>
 

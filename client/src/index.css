@@ -51,15 +51,15 @@
 
 :root {
   /* Warm Orange/Brown Theme - Modern FinTech */
-  --primary: #ff6b35; /* Warm Orange */
-  --primary-foreground: #1a1410; /* Deep Brown-Black */
-  --sidebar-primary: #ff6b35;
-  --sidebar-primary-foreground: #1a1410;
-  --chart-1: #ff6b35; /* Warm Orange */
-  --chart-2: #f7931e; /* Golden Orange */
-  --chart-3: #ffa500; /* Bright Orange */
-  --chart-4: #ff8c42; /* Light Orange */
-  --chart-5: #e85d04; /* Deep Orange */
+  --primary: #F77F00; /* Warm Orange */
+  --primary-foreground: #003049; /* Deep Navy */
+  --sidebar-primary: #F77F00;
+  --sidebar-primary-foreground: #003049;
+  --chart-1: #F77F00; /* Warm Orange */
+  --chart-2: #D62828; /* Deep Red-Orange */
+  --chart-3: #FCBF49; /* Golden Orange */
+  --chart-4: #F77F00; /* Warm Orange */
+  --chart-5: #D62828; /* Deep Red-Orange */
   --radius: 0.5rem; /* Subtle rounded corners */
   --background: #0f0d0a; /* Deep Dark Brown */
   --foreground: #f5f5f5; /* Off-White */
@@ -86,47 +86,47 @@
   --sidebar-ring: #ff6b35;
   
   /* Glassmorphism & Glow Effects */
-  --glass-bg: rgba(26, 20, 16, 0.7);
-  --glass-border: rgba(255, 107, 53, 0.2);
-  --glow-orange: 0 0 20px rgba(255, 107, 53, 0.3);
-  --glow-gold: 0 0 20px rgba(247, 147, 30, 0.3);
-  --glow-intense: 0 0 40px rgba(255, 107, 53, 0.5);
+  --glass-bg: rgba(5, 29, 62, 0.7);
+  --glass-border: rgba(247, 127, 0, 0.2);
+  --glow-orange: 0 0 20px rgba(247, 127, 0, 0.3);
+  --glow-gold: 0 0 20px rgba(252, 191, 73, 0.3);
+  --glow-intense: 0 0 40px rgba(247, 127, 0, 0.5);
 }
 
 .dark {
   /* Dark mode is the default for warm theme */
-  --primary: #ff6b35;
-  --primary-foreground: #1a1410;
-  --sidebar-primary: #ff6b35;
-  --sidebar-primary-foreground: #1a1410;
-  --background: #0f0d0a;
+  --primary: #F77F00;
+  --primary-foreground: #003049;
+  --sidebar-primary: #F77F00;
+  --sidebar-primary-foreground: #003049;
+  --background: #003049;
   --foreground: #f5f5f5;
-  --card: #1a1410;
+  --card: #051d3e;
   --card-foreground: #f5f5f5;
-  --popover: #1a1410;
+  --popover: #051d3e;
   --popover-foreground: #f5f5f5;
-  --secondary: #2d2620;
-  --secondary-foreground: #ffa500;
-  --muted: #4a4238;
-  --muted-foreground: #a89f99;
-  --accent: #ff6b35;
-  --accent-foreground: #1a1410;
-  --destructive: #d32f2f;
+  --secondary: #0a3a5c;
+  --secondary-foreground: #FCBF49;
+  --muted: #1a5276;
+  --muted-foreground: #a8b5c3;
+  --accent: #F77F00;
+  --accent-foreground: #003049;
+  --destructive: #D62828;
   --destructive-foreground: #f5f5f5;
-  --border: rgba(255, 107, 53, 0.15);
-  --input: rgba(26, 20, 16, 0.8);
-  --ring: #ff6b35;
-  --chart-1: #ff6b35;
-  --chart-2: #f7931e;
-  --chart-3: #ffa500;
-  --chart-4: #ff8c42;
-  --chart-5: #e85d04;
-  --sidebar: #1a1410;
+  --border: rgba(247, 127, 0, 0.15);
+  --input: rgba(5, 29, 62, 0.8);
+  --ring: #F77F00;
+  --chart-1: #F77F00;
+  --chart-2: #D62828;
+  --chart-3: #FCBF49;
+  --chart-4: #F77F00;
+  --chart-5: #D62828;
+  --sidebar: #051d3e;
   --sidebar-foreground: #f5f5f5;
-  --sidebar-accent: #ff6b35;
-  --sidebar-accent-foreground: #1a1410;
-  --sidebar-border: rgba(255, 107, 53, 0.15);
-  --sidebar-ring: #ff6b35;
+  --sidebar-accent: #F77F00;
+  --sidebar-accent-foreground: #003049;
+  --sidebar-border: rgba(247, 127, 0, 0.15);
+  --sidebar-ring: #F77F00;
 }
 
 @layer base {

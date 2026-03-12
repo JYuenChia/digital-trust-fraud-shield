@@ -36,9 +36,9 @@ export const RiskGauge: React.FC<RiskGaugeProps> = ({
 
   // Determine color based on risk level
   const getGaugeColor = (score: number) => {
-    if (score < 30) return '#00d9ff'; // Cyan - Safe
-    if (score < 60) return '#ffd700'; // Yellow - Medium
-    return '#ff006e'; // Magenta - High Risk
+    if (score < 30) return '#00ff88'; // Green - Safe
+    if (score < 60) return '#FCBF49'; // Golden - Medium
+    return '#D62828'; // Red - High Risk
   };
 
   const gaugeColor = getGaugeColor(displayScore);
@@ -63,7 +63,7 @@ export const RiskGauge: React.FC<RiskGaugeProps> = ({
           cy="100"
           r="45"
           fill="none"
-          stroke="rgba(0, 217, 255, 0.1)"
+          stroke="rgba(247, 127, 0, 0.2)"
           strokeWidth="8"
         />
 
@@ -89,7 +89,7 @@ export const RiskGauge: React.FC<RiskGaugeProps> = ({
           cx="100"
           cy="100"
           r="20"
-          fill="#0a0e27"
+          fill="#003049"
           stroke={gaugeColor}
           strokeWidth="2"
           style={{

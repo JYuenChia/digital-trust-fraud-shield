@@ -38,9 +38,9 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
       case 'approved':
         return { bg: 'bg-[rgba(0,255,136,0.1)]', text: 'text-[#00ff88]', border: 'border-[rgba(0,255,136,0.2)]' };
       case 'flagged':
-        return { bg: 'bg-[rgba(255,215,0,0.1)]', text: 'text-[#ffd700]', border: 'border-[rgba(255,215,0,0.2)]' };
+        return { bg: 'bg-[rgba(252,191,73,0.1)]', text: 'text-[#FCBF49]', border: 'border-[rgba(252,191,73,0.2)]' };
       case 'blocked':
-        return { bg: 'bg-[rgba(255,0,110,0.1)]', text: 'text-[#ff006e]', border: 'border-[rgba(255,0,110,0.2)]' };
+        return { bg: 'bg-[rgba(214,40,40,0.1)]', text: 'text-[#D62828]', border: 'border-[rgba(214,40,40,0.2)]' };
       default:
         return { bg: 'bg-transparent', text: 'text-foreground', border: 'border-transparent' };
     }
@@ -59,13 +59,13 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
         <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           {title}
         </h3>
-        <div className="h-0.5 w-12 mt-2 rounded-full bg-[#00d9ff]" />
+        <div className="h-0.5 w-12 mt-2 rounded-full bg-[#F77F00]" />
       </div>
 
       {/* Table */}
       <div className="flex-1 overflow-y-auto">
         <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-[rgba(15,23,42,0.8)] border-b border-[rgba(0,217,255,0.1)]">
+          <thead className="sticky top-0 bg-[rgba(5,29,62,0.8)] border-b border-[rgba(247,127,0,0.1)]">
             <tr>
               <th className="px-3 py-2 text-left text-muted-foreground font-medium">ID</th>
               <th className="px-3 py-2 text-left text-muted-foreground font-medium">Time</th>
@@ -82,8 +82,8 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
                 <tr
                   key={txn.id}
                   className={`
-                    border border-[rgba(0,217,255,0.05)] rounded
-                    hover:bg-[rgba(0,217,255,0.05)] hover:border-[rgba(0,217,255,0.2)]
+                    border border-[rgba(247,127,0,0.05)] rounded
+                    hover:bg-[rgba(247,127,0,0.05)] hover:border-[rgba(247,127,0,0.2)]
                     transition-all duration-200 cursor-pointer
                   `}
                 >

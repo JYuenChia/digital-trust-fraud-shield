@@ -49,27 +49,27 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#0f0d0a] overflow-hidden">
+    <div className="min-h-screen bg-[#003049] overflow-hidden">
       {/* Background with warm orange glow effects */}
       <div className="fixed inset-0 pointer-events-none">
         {/* Orange glow - top left */}
         <div
           className="absolute top-0 left-0 w-96 h-96 rounded-full blur-3xl opacity-15"
           style={{
-            background: 'radial-gradient(circle, rgba(255, 107, 53, 0.3), transparent)',
+            background: 'radial-gradient(circle, rgba(247, 127, 0, 0.3), transparent)',
           }}
         />
         {/* Golden orange glow - bottom right */}
         <div
           className="absolute bottom-0 right-0 w-96 h-96 rounded-full blur-3xl opacity-15"
           style={{
-            background: 'radial-gradient(circle, rgba(247, 147, 30, 0.3), transparent)',
+            background: 'radial-gradient(circle, rgba(252, 191, 73, 0.3), transparent)',
           }}
         />
       </div>
 
       {/* Header */}
-      <header className="relative z-20 border-b border-[rgba(255,107,53,0.1)] bg-[rgba(26,20,16,0.8)] backdrop-blur-md mt-16">
+      <header className="relative z-20 border-b border-[rgba(247,127,0,0.1)] bg-[rgba(5,29,62,0.8)] backdrop-blur-md mt-16">
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
             <div>
@@ -159,7 +159,7 @@ export default function Dashboard() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-[rgba(255,107,53,0.1)] bg-[rgba(26,20,16,0.8)] backdrop-blur-md mt-12">
+      <footer className="relative z-10 border-t border-[rgba(247,127,0,0.1)] bg-[rgba(5,29,62,0.8)] backdrop-blur-md mt-12">
         <div className="max-w-7xl mx-auto px-6 py-6 text-center text-xs text-muted-foreground">
           <p>Digital Trust Fraud Shield © 2026 | Real-Time Fraud Detection Engine</p>
         </div>
