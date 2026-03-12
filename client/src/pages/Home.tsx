@@ -73,7 +73,7 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-foreground font-sora">
+              <h1 className="text-3xl font-bold text-foreground">
                 Fraud Detection
                 <span className="text-primary ml-2">Dashboard</span>
               </h1>
@@ -167,12 +167,6 @@ export default function Dashboard() {
 
       {/* Global Styles */}
       <style>{`
-        .font-sora {
-          font-family: 'Sora', sans-serif;
-        }
-        .font-poppins {
-          font-family: 'Poppins', sans-serif;
-        }
 
         /* Smooth scrollbar */
         ::-webkit-scrollbar {

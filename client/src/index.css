@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Font Configuration */
+:root {
+  --font-heading: 'Funnel Display', system-ui, sans-serif;
+  --font-body: 'Geist', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Geist Mono', monospace;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -128,6 +135,13 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+  }
+  code, pre {
+    font-family: var(--font-mono);
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),

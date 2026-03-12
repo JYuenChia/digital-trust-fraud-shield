@@ -69,13 +69,13 @@ export default function Landing() {
           </div>
 
           {/* Headline */}
-          <h1 className="text-5xl md:text-6xl font-bold text-foreground mb-6 font-sora leading-tight">
+          <h1 className="text-5xl md:text-6xl font-bold text-foreground mb-6 leading-tight">
             Accelerate Your Security
             <span className="text-primary"> With AI</span>
           </h1>
 
           {/* Subheading */}
-          <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto font-poppins">
+          <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
             AI-driven fraud detection & risk analysis. Empower your team, protect every transaction, and maximize security effortlessly.
           </p>
 
@@ -110,7 +110,7 @@ export default function Landing() {
       <section id="features" className="relative z-10 py-20 px-6">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-foreground mb-4 font-sora">
+            <h2 className="text-4xl font-bold text-foreground mb-4">
               Powerful Features
             </h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
@@ -129,10 +129,10 @@ export default function Landing() {
                   <div className="w-12 h-12 bg-[rgba(255,107,53,0.1)] rounded-lg flex items-center justify-center mb-4 group-hover:bg-[rgba(255,107,53,0.2)] transition-colors">
                     <Icon size={24} className="text-primary" />
                   </div>
-                  <h3 className="text-xl font-semibold text-foreground mb-2 font-sora">
+                  <h3 className="text-xl font-semibold text-foreground mb-2">
                     {feature.title}
                   </h3>
-                  <p className="text-muted-foreground font-poppins">
+                  <p className="text-muted-foreground">
                     {feature.description}
                   </p>
                 </div>
@@ -146,10 +146,10 @@ export default function Landing() {
       <section className="relative z-10 py-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <div className="bg-[rgba(26,20,16,0.8)] border border-[rgba(255,107,53,0.2)] rounded-3xl p-12">
-            <h2 className="text-4xl font-bold text-foreground mb-4 font-sora">
+            <h2 className="text-4xl font-bold text-foreground mb-4">
               Ready to protect your transactions?
             </h2>
-            <p className="text-muted-foreground mb-8 max-w-2xl mx-auto font-poppins">
+            <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
               Join hundreds of companies using Digital Trust Fraud Shield to secure their payments.
             </p>
             <Link href="/dashboard">
@@ -169,15 +169,7 @@ export default function Landing() {
         </div>
       </footer>
 
-      {/* Global Styles */}
-      <style>{`
-        .font-sora {
-          font-family: 'Sora', sans-serif;
-        }
-        .font-poppins {
-          font-family: 'Poppins', sans-serif;
-        }
-      `}</style>
+
     </div>
   );
 }

@@ -41,7 +41,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentPath = '/' }) => 
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <span className="text-white text-sm font-bold">DT</span>
               </div>
-              <span className="font-sora">Digital Trust</span>
+              <span>Digital Trust</span>
             </div>
           </Link>
 
