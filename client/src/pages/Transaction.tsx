@@ -1,8 +1,22 @@
-import React, { useState } from 'react';
-import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown } from 'lucide-react';
 
 export default function Transaction() {
   const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked'>('idle');
+  const [isCurrencyOpen, setIsCurrencyOpen] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState('MYR');
+  
+  const currencyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (currencyRef.current && !currencyRef.current.contains(event.target as Node)) {
+        setIsCurrencyOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleProcessTransaction = () => {
     setModalState('processing');
@@ -61,17 +75,32 @@ export default function Transaction() {
           <div className="flex flex-col gap-6">
             <h2 className="text-white text-lg font-semibold border-b border-white/10 pb-4">Recipient Information</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 p-4 rounded-xl">
-                <span className="text-[#8A8A8A] text-sm">Recipient Name</span>
-                <span className="text-white font-semibold">John Lee</span>
+              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
+                <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Recipient Name</label>
+                <input 
+                  type="text" 
+                  defaultValue="" 
+                  placeholder="Enter recipient name"
+                  className="bg-transparent text-white font-semibold outline-none w-full placeholder:text-[#525252]"
+                />
               </div>
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 p-4 rounded-xl">
-                <span className="text-[#8A8A8A] text-sm">Account Number</span>
-                <span className="text-white font-mono text-sm tracking-widest text-[#FF5500]">**** **** 4291</span>
+              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
+                <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Account Number</label>
+                <input 
+                  type="text" 
+                  defaultValue="" 
+                  placeholder="Enter account number"
+                  className="bg-transparent text-white font-mono text-sm tracking-widest text-[#FF5500] outline-none w-full placeholder:text-[#525252]"
+                />
               </div>
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 p-4 rounded-xl">
-                <span className="text-[#8A8A8A] text-sm">Wallet Provider</span>
-                <span className="text-white font-semibold">SecureBank</span>
+              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
+                <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Wallet Provider</label>
+                <input 
+                  type="text" 
+                  defaultValue="" 
+                  placeholder="Enter bank or wallet name"
+                  className="bg-transparent text-white font-semibold outline-none w-full placeholder:text-[#525252]"
+                />
               </div>
             </div>
           </div>
@@ -80,17 +109,50 @@ export default function Transaction() {
           <div className="flex flex-col gap-6">
             <h2 className="text-white text-lg font-semibold border-b border-white/10 pb-4">Transaction Details</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="flex flex-col gap-2 bg-[#141414] border border-[#FF5500]/30 shadow-[0_0_15px_rgba(255,85,0,0.1)] p-4 rounded-xl">
-                <span className="text-[#8A8A8A] text-sm">Transfer Amount</span>
-                <span className="text-white font-bold font-['Sora'] text-2xl">2,000.00</span>
+              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
+                <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Amount</label>
+                <input 
+                  type="text" 
+                  defaultValue="" 
+                  placeholder="0.00"
+                  className="bg-transparent text-white font-bold font-['Sora'] text-2xl outline-none w-full placeholder:text-[#525252]"
+                />
               </div>
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 p-4 rounded-xl">
-                <span className="text-[#8A8A8A] text-sm">Currency</span>
-                <span className="text-white font-semibold">MYR</span>
+              <div ref={currencyRef} className={`relative flex flex-col gap-2 bg-[#141414] border transition-all p-4 rounded-xl group/currency ${isCurrencyOpen ? 'border-[#FF5500] shadow-[0_0_20px_rgba(255,85,0,0.2)]' : 'border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)]'}`}>
+                <label className={`text-sm cursor-default transition-colors ${isCurrencyOpen ? 'text-[#FF5500]' : 'text-[#8A8A8A] group-focus-within/currency:text-[#FF5500]'}`}>Currency</label>
+                <div 
+                  className="flex items-center justify-between cursor-pointer w-full"
+                  onClick={() => setIsCurrencyOpen(!isCurrencyOpen)}
+                >
+                  <span className="bg-transparent text-white font-semibold outline-none">{selectedCurrency}</span>
+                  <ChevronDown size={20} className={`text-[#8A8A8A] transition-transform ${isCurrencyOpen ? 'rotate-180 text-[#FF5500]' : ''}`} />
+                </div>
+                
+                {isCurrencyOpen && (
+                  <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-[#1A1A1A] border border-white/20 rounded-lg p-2 flex flex-col gap-1 shadow-2xl z-50">
+                    {['MYR', 'USD', 'EUR', 'SGD'].map((currency) => (
+                      <div 
+                        key={currency}
+                        onClick={() => {
+                          setSelectedCurrency(currency);
+                          setIsCurrencyOpen(false);
+                        }}
+                        className={`px-3 py-2.5 rounded-md cursor-pointer transition-colors text-sm ${selectedCurrency === currency ? 'bg-[#FF5500]/20 text-[#FF5500] font-semibold' : 'text-[#E0E0E0] hover:bg-white/5'}`}
+                      >
+                        {currency}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 p-4 rounded-xl">
-                <span className="text-[#8A8A8A] text-sm">Transfer Note (Optional)</span>
-                <span className="text-white font-semibold italic opacity-50">Rent for January</span>
+              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
+                <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Note (Optional)</label>
+                <input 
+                  type="text" 
+                  defaultValue="" 
+                  placeholder="Enter transfer note"
+                  className="bg-transparent text-white font-semibold italic opacity-80 outline-none w-full placeholder:text-[#525252]"
+                />
               </div>
             </div>
           </div>

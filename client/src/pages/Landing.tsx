@@ -111,13 +111,14 @@ export default function Landing() {
         
         {/* Intro Area */}
         <ScrollReveal className="flex flex-col items-center gap-[80px] pt-[60px] pb-[80px] w-full mt-10 relative">
+          
           {/* Subtle Orange Glow behind text */}
-          <div className="absolute top-[10%] left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-[#FF5500] opacity-[0.25] blur-[100px] rounded-full pointer-events-none z-[-1]" />
+          <div className="absolute top-[10%] left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-[#FF5500] opacity-[0.15] blur-[120px] rounded-full pointer-events-none z-[-1]" />
           
           <div className="flex flex-col items-center gap-8 w-full max-w-4xl text-center">
             
             <h1 className="text-white font-['Sora'] text-[64px] font-[800] leading-[1.1] tracking-[-2px]">
-              Safeguard Every Transaction
+              <span className="text-[#FF5500]">Safeguard</span> Every Transaction
             </h1>
             
             <p className="text-[#8A8A8A] font-['Inter'] text-[18px] leading-[1.6] max-w-3xl">
