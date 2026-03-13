@@ -6,7 +6,8 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import Navigation from "./components/Navigation";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Landing from "./pages/Landing";
-import Dashboard from "./pages/Home";
+import Transaction from "./pages/Transaction";
+import Dashboard from "./pages/Dashboard";
 
 
 function Router() {
@@ -14,6 +15,7 @@ function Router() {
     <Switch>
       <Route path={"/"} component={Landing} />
       <Route path={"/dashboard"} component={Dashboard} />
+      <Route path={"/transaction"} component={Transaction} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

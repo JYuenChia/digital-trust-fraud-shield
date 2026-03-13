@@ -1,175 +1,210 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link } from 'wouter';
-import { ArrowRight, Shield, Zap, TrendingUp, Lock } from 'lucide-react';
 
-/**
- * Landing Page - Digital Trust Fraud Shield
- * 
- * Design: Modern FinTech landing page with warm orange accents
- * - Hero section with headline and CTA
- * - Feature showcase
- * - Trusted by section
- * - Call-to-action footer
- */
+// Helper component for scroll animations
+const ScrollReveal: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          ref.current?.classList.add('translate-y-0', 'opacity-100');
+          ref.current?.classList.remove('translate-y-16', 'opacity-0');
+        } else {
+          // Fade out when scrolling up/out of view
+          ref.current?.classList.add('translate-y-16', 'opacity-0');
+          ref.current?.classList.remove('translate-y-0', 'opacity-100');
+        }
+      },
+      {
+        threshold: 0.1,
+        rootMargin: "0px 0px -50px 0px"
+      }
+    );
+    
+    if (ref.current) {
+      observer.observe(ref.current);
+    }
+    
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className={`transition-all duration-700 ease-out translate-y-16 opacity-0 ${className}`}>
+      {children}
+    </div>
+  );
+};
 
 export default function Landing() {
   const features = [
     {
-      icon: Shield,
-      title: 'Real-Time Protection',
-      description: 'AI-powered fraud detection in milliseconds, protecting every transaction.',
+      num: '01.',
+      title: 'Real-Time Detection',
+      desc: 'Analyzes transactions instantly and predicts fraud.',
+      highlight: false
     },
     {
-      icon: Zap,
-      title: 'Lightning Fast',
-      description: 'Sub-millisecond response times ensure seamless user experience.',
+      num: '02.',
+      title: 'AI Risk Scoring',
+      desc: 'Each transaction receives a probability score to identify risk.',
+      highlight: true
     },
     {
-      icon: TrendingUp,
-      title: 'Behavioral Analytics',
-      description: 'Learn and adapt to user patterns for smarter fraud detection.',
+      num: '03.',
+      title: 'Smart Monitoring',
+      desc: 'Tracks transaction patterns such as location and behavior.',
+      highlight: false
     },
     {
-      icon: Lock,
-      title: 'Privacy First',
-      description: 'Enterprise-grade security with zero data compromise.',
-    },
+      num: '04.',
+      title: 'Fraud Alerts',
+      desc: 'Flags high-risk transactions effectively.',
+      highlight: false
+    }
   ];
 
-  const companies = ['FeatherDev', 'Boltshift', 'GlobalBank', 'LightHub'];
+  const hiwSteps = [
+    {
+      num: '1',
+      title: 'User submits a transaction',
+      desc: 'The transaction is securely initiated through the digital gateway.'
+    },
+    {
+      num: '2',
+      title: 'System analyzes transaction features',
+      desc: 'Cross-checks device fingerprint, location, and historical patterns.'
+    },
+    {
+      num: '3',
+      title: 'ML model calculates fraud probability',
+      desc: 'Machine learning algorithms assign a risk likelihood to the behavior.'
+    },
+    {
+      num: '4',
+      title: 'Risk score is generated',
+      desc: 'A specific risk value determines if intervention is required.'
+    },
+    {
+      num: '5',
+      title: 'Dashboard displays result',
+      desc: 'Alerts the user and generates reports automatically.'
+    }
+  ];
 
   return (
-    <div className="min-h-screen bg-[#0f0d0a] overflow-hidden">
-      {/* Background Gradient */}
-      <div className="fixed inset-0 pointer-events-none">
-        {/* Orange glow - top center */}
-        <div
-          className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full blur-3xl opacity-15"
-          style={{
-            background: 'radial-gradient(circle, rgba(255, 107, 53, 0.4), transparent)',
-          }}
-        />
-        {/* Dark brown gradient - bottom */}
-        <div
-          className="absolute bottom-0 left-0 right-0 h-[400px]"
-          style={{
-            background: 'linear-gradient(to top, rgba(255, 107, 53, 0.1), transparent)',
-          }}
-        />
+    <div className="min-h-screen bg-[#0C0C0C] font-['Inter'] flex flex-col items-center overflow-x-hidden pt-16 relative">
+      
+      {/* Background Gradients (Bottom Only) */}
+      {/* Ambient Glossy Background */}
+      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden flex justify-center">
+        {/* Center Glow */}
+        <div className="absolute w-[120%] h-[800px] bg-[#FF5500] opacity-[0.55] blur-[160px] rounded-[100%] bottom-[-400px] left-1/2 -translate-x-1/2" />
+        {/* Left Glow */}
+        <div className="absolute w-[80%] h-[600px] bg-[#FF3B30] opacity-[0.12] blur-[140px] rounded-[100%] bottom-[-300px] left-[-20%]" />
+        {/* Right Glow */}
+        <div className="absolute w-[80%] h-[600px] bg-[#FF5500] opacity-[0.08] blur-[140px] rounded-[100%] bottom-[-300px] right-[-20%]" />
       </div>
 
-      {/* Hero Section */}
-      <section className="relative z-10 pt-32 pb-20 px-6">
-        <div className="max-w-4xl mx-auto text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[rgba(255,107,53,0.1)] border border-[rgba(255,107,53,0.2)] rounded-full mb-8">
-            <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-sm text-primary font-medium">New version is out! Read more</span>
-            <ArrowRight size={16} className="text-primary" />
-          </div>
+      <div className="w-full max-w-[1547px] relative z-10 px-10 flex flex-col gap-10 py-10">
+        
+        {/* Intro Area */}
+        <ScrollReveal className="flex flex-col items-center gap-[80px] pt-[60px] pb-[80px] w-full mt-10 relative">
+          {/* Subtle Orange Glow behind text */}
+          <div className="absolute top-[10%] left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-[#FF5500] opacity-[0.25] blur-[100px] rounded-full pointer-events-none z-[-1]" />
+          
+          <div className="flex flex-col items-center gap-8 w-full max-w-4xl text-center">
+            
+            <h1 className="text-white font-['Sora'] text-[64px] font-[800] leading-[1.1] tracking-[-2px]">
+              Safeguard Every Transaction
+            </h1>
+            
+            <p className="text-[#8A8A8A] font-['Inter'] text-[18px] leading-[1.6] max-w-3xl">
+              Our intelligent engine analyzes millions of data points in milliseconds,<br />
+              providing your team with actionable insights to protect users from digital payment fraud.
+            </p>
 
-          {/* Headline */}
-          <h1 className="text-5xl md:text-6xl font-bold text-foreground mb-6 leading-tight">
-            Accelerate Your Security
-            <span className="text-primary"> With AI</span>
-          </h1>
-
-          {/* Subheading */}
-          <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-            AI-driven fraud detection & risk analysis. Empower your team, protect every transaction, and maximize security effortlessly.
-          </p>
-
-          {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-            <Link href="/dashboard">
-              <a className="inline-flex items-center justify-center gap-2 px-8 py-3 bg-primary text-white rounded-full font-semibold hover:bg-[#e85d04] transition-colors">
-                <span>Get started for free</span>
-              </a>
-            </Link>
-            <button className="inline-flex items-center justify-center gap-2 px-8 py-3 border border-[rgba(255,107,53,0.3)] text-foreground rounded-full font-semibold hover:bg-[rgba(255,107,53,0.05)] transition-colors">
-              <span>▶</span>
-              <span>Watch Demo</span>
-            </button>
-          </div>
-
-          {/* Trusted By */}
-          <div className="pt-8 border-t border-[rgba(255,107,53,0.1)]">
-            <p className="text-sm text-muted-foreground mb-6">Trusted by 200+ companies</p>
-            <div className="flex flex-wrap justify-center gap-8 opacity-60">
-              {companies.map((company) => (
-                <div key={company} className="text-sm font-medium text-muted-foreground">
-                  {company}
-                </div>
-              ))}
+            <div className="flex items-center gap-6 mt-4">
+              <Link href="/dashboard">
+                <button className="bg-[#FF3B30] border border-[#FF5500] text-white px-8 py-4 rounded-lg font-['Inter'] font-semibold text-[15px] cursor-pointer hover:bg-[#E0352B] transition-colors">
+                  Explore Dashboard
+                </button>
+              </Link>
+              <button className="bg-[#1A1A1A]/80 backdrop-blur-2xl border border-white/20 text-white px-8 py-4 rounded-lg font-['Inter'] font-semibold text-[15px] cursor-pointer hover:bg-white/10 transition-colors">
+                View Documentation
+              </button>
             </div>
           </div>
-        </div>
-      </section>
+        </ScrollReveal>
 
-      {/* Features Section */}
-      <section id="features" className="relative z-10 py-20 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-foreground mb-4">
-              Powerful Features
-            </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Everything you need to protect your transactions and build trust.
+        {/* Feature Section */}
+        <ScrollReveal className="flex flex-col gap-[60px] py-[80px] w-full">
+          {/* Feature Header */}
+          <div className="flex justify-between items-end w-full">
+            <div className="flex flex-col gap-2">
+              <h2 className="text-white font-['Sora'] text-[40px] font-bold leading-tight">
+                Your trusted partner for<br />
+                <span className="text-[#FF5500]">fraud prevention.</span>
+              </h2>
+            </div>
+            <p className="text-[#8A8A8A] font-['Inter'] text-[16px] leading-[1.6] max-w-[400px] text-right">
+              Our system unites and secures a growing<br />
+              ecosystem of specialized financial data to eliminate threats.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {features.map((feature, index) => {
-              const Icon = feature.icon;
-              return (
-                <div
-                  key={index}
-                  className="p-8 bg-[rgba(26,20,16,0.6)] border border-[rgba(255,107,53,0.1)] rounded-2xl hover:border-[rgba(255,107,53,0.3)] transition-colors group"
-                >
-                  <div className="w-12 h-12 bg-[rgba(255,107,53,0.1)] rounded-lg flex items-center justify-center mb-4 group-hover:bg-[rgba(255,107,53,0.2)] transition-colors">
-                    <Icon size={24} className="text-primary" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-foreground mb-2">
-                    {feature.title}
+          {/* Carousel */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 w-full">
+            {features.map((feat, i) => (
+              <div 
+                key={i} 
+                className="group p-10 rounded-2xl flex flex-col gap-4 aspect-square justify-center transition-all duration-300 bg-[#1A1A1A]/80 border border-white/10 hover:bg-[#FF5500] hover:shadow-[0_0_40px_rgba(255,85,0,0.3)] hover:scale-[1.02]"
+              >
+                <div className="font-['Sora'] text-2xl font-bold text-[#FF5500] group-hover:text-[#1A1A1A]">
+                  {feat.num}
+                </div>
+                <h3 className="font-['Sora'] text-xl font-bold mt-4 text-white group-hover:text-[#111111]">
+                  {feat.title}
+                </h3>
+                <p className="font-['Inter'] text-sm leading-[1.6] text-[#8A8A8A] group-hover:text-[#333333] group-hover:font-medium">
+                  {feat.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+        </ScrollReveal>
+
+        {/* How It Works Section */}
+        <ScrollReveal className="flex flex-col gap-[60px] py-[80px] w-full">
+          <h2 className="text-white font-['Sora'] text-[40px] font-bold">
+            How It Works
+          </h2>
+          
+          <div className="flex flex-col w-full">
+            {hiwSteps.map((step, idx) => (
+              <div key={idx} className="flex flex-col md:flex-row gap-0 group">
+                <div className="w-[100px] md:w-[150px] shrink-0 border-r border-[#FF3B3020] relative pt-6 pb-12 pr-8 text-right">
+                  <span className="text-[#FF5500] font-['Sora'] text-[32px] font-bold opacity-50 group-hover:opacity-100 transition-opacity">
+                    {step.num}
+                  </span>
+                  {/* Timeline dot */}
+                  <div className="absolute right-[-6px] top-9 w-3 h-3 rounded-full bg-[#FF5500] shadow-[0_0_10px_#FF5500]" />
+                </div>
+                <div className="pt-6 pb-12 pl-12 flex flex-col gap-3">
+                  <h3 className="text-white font-['Sora'] text-2xl font-bold">
+                    {step.title}
                   </h3>
-                  <p className="text-muted-foreground">
-                    {feature.description}
+                  <p className="text-[#8A8A8A] font-['Inter'] text-[16px]">
+                    {step.desc}
                   </p>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
-        </div>
-      </section>
+        </ScrollReveal>
 
-      {/* CTA Section */}
-      <section className="relative z-10 py-20 px-6">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="bg-[rgba(26,20,16,0.8)] border border-[rgba(255,107,53,0.2)] rounded-3xl p-12">
-            <h2 className="text-4xl font-bold text-foreground mb-4">
-              Ready to protect your transactions?
-            </h2>
-            <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Join hundreds of companies using Digital Trust Fraud Shield to secure their payments.
-            </p>
-            <Link href="/dashboard">
-              <a className="inline-flex items-center justify-center gap-2 px-8 py-3 bg-primary text-white rounded-full font-semibold hover:bg-[#e85d04] transition-colors">
-                <span>Start Free Trial</span>
-                <ArrowRight size={20} />
-              </a>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-[rgba(255,107,53,0.1)] bg-[rgba(26,20,16,0.4)] mt-20">
-        <div className="max-w-7xl mx-auto px-6 py-8 text-center text-sm text-muted-foreground">
-          <p>Digital Trust Fraud Shield © 2026 | Protecting transactions worldwide</p>
-        </div>
-      </footer>
-
-
+      </div>
     </div>
   );
 }

@@ -27,7 +27,7 @@ export const GlassmorphicCard: React.FC<GlassmorphicCardProps> = ({
   const glowClasses = {
     cyan: 'hover:shadow-[0_0_30px_rgba(0,217,255,0.4)]',
     magenta: 'hover:shadow-[0_0_30px_rgba(255,0,110,0.4)]',
-    orange: 'hover:shadow-[0_0_30px_rgba(247,127,0,0.4)]',
+    orange: 'hover:shadow-[0_0_30px_rgba(255,85,0,0.4)]',
     none: '',
   };
 
@@ -36,9 +36,9 @@ export const GlassmorphicCard: React.FC<GlassmorphicCardProps> = ({
       onClick={onClick}
       style={style}
       className={`
-        relative rounded-lg overflow-hidden
-        bg-[rgba(26,20,16,0.8)] backdrop-blur-md
-        border border-[rgba(247,127,0,0.2)]
+        relative rounded-xl overflow-hidden
+        bg-[#1A1A1A]/80 backdrop-blur-2xl
+        border border-[#FF5500]/20
         shadow-[0_8px_32px_rgba(0,0,0,0.3)]
         transition-all duration-300 ease-out
         ${glowClasses[glowColor]}
@@ -47,10 +47,10 @@ export const GlassmorphicCard: React.FC<GlassmorphicCardProps> = ({
       `}
     >
       {/* Inner glow effect */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[rgba(247,127,0,0.05)] to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#FF5500]/5 to-transparent pointer-events-none" />
       
       {/* Content */}
-      <div className="relative z-10">
+      <div className="relative z-10 font-['Inter']">
         {children}
       </div>
     </div>

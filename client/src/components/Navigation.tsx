@@ -1,114 +1,76 @@
-import React, { useState } from 'react';
-import { Link } from 'wouter';
-import { Menu, X } from 'lucide-react';
+import React from 'react';
+import { Link, useLocation } from 'wouter';
+import { ShieldAlert, Search, Bell } from 'lucide-react';
 
-/**
- * Navigation Component
- * 
- * Design: Modern FinTech with warm orange accents
- * - Fixed header with logo and navigation menu
- * - Responsive mobile menu
- * - Active link highlighting
- */
-
-interface NavigationProps {
-  currentPath?: string;
-}
-
-export const Navigation: React.FC<NavigationProps> = ({ currentPath = '/' }) => {
-  const [isOpen, setIsOpen] = useState(false);
+export const Navigation: React.FC = () => {
+  const [location] = useLocation();
 
   const navItems = [
-    { label: 'Home', href: '/' },
-    { label: 'Dashboard', href: '/dashboard' },
-    { label: 'Features', href: '/#features' },
-    { label: 'Pricing', href: '/#pricing' },
-    { label: 'Contact', href: '/#contact' },
+    { label: 'OVERVIEW', href: '/' },
+    { label: 'DASHBOARD', href: '/dashboard' },
+    { label: 'TRANSACTIONS', href: '/transaction' }
   ];
 
-  const isActive = (href: string) => {
-    if (href === '/') return currentPath === '/';
-    return currentPath?.startsWith(href);
-  };
-
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0f0d0a] border-b border-[rgba(255,107,53,0.1)] backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-6 py-4">
-        <div className="flex items-center justify-between">
-          {/* Logo */}
-          <Link href="/">
-            <div className="flex items-center gap-2 text-2xl font-bold text-foreground hover:text-primary transition-colors cursor-pointer">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-white text-sm font-bold">DT</span>
-              </div>
-              <span>Digital Trust</span>
-            </div>
-          </Link>
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0C0C0C]/80 backdrop-blur-md border-b border-[#2A2A2A]">
+      <div className="max-w-[1547px] mx-auto px-10 h-16 flex items-center justify-between relative">
+        
+        {/* Brand */}
+        <Link href="/">
+          <div className="flex items-center gap-3 cursor-pointer">
+            <ShieldAlert size={28} className="text-[#FF3B30]" />
+            <span className="text-white font-['Inter'] font-bold text-[13px] tracking-[1px]">
+              DIGITAL TRUST
+            </span>
+          </div>
+        </Link>
 
-          {/* Desktop Menu */}
-          <div className="hidden md:flex items-center gap-8">
-            {navItems.map((item) => (
+        {/* Tab Links - Centered Exactly */}
+        <div className="hidden md:flex h-full items-end gap-12 absolute left-1/2 -translate-x-1/2">
+          {navItems.map((item) => {
+            const isActive = location === item.href;
+            return (
               <Link key={item.href} href={item.href}>
-                <span
-                  className={`text-sm font-medium transition-colors cursor-pointer ${
-                    isActive(item.href)
-                      ? 'text-primary'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {item.label}
-                </span>
-              </Link>
-            ))}
-          </div>
-
-          {/* CTA Button */}
-          <div className="hidden md:block">
-            <Link href="/dashboard">
-              <button className="px-6 py-2 bg-primary text-white rounded-full font-medium hover:bg-[#e85d04] transition-colors cursor-pointer border-none">
-                Get Started
-              </button>
-            </Link>
-          </div>
-
-          {/* Mobile Menu Button */}
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="md:hidden text-foreground hover:text-primary transition-colors border-none bg-transparent cursor-pointer"
-          >
-            {isOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-        </div>
-
-        {/* Mobile Menu */}
-        {isOpen && (
-          <div className="md:hidden mt-4 pb-4 border-t border-[rgba(255,107,53,0.1)] pt-4">
-            <div className="flex flex-col gap-3">
-              {navItems.map((item) => (
-                <Link key={item.href} href={item.href}>
+                <div className="relative h-full flex flex-col justify-center cursor-pointer group px-1">
                   <span
-                    onClick={() => setIsOpen(false)}
-                    className={`block px-4 py-2 rounded-lg transition-colors cursor-pointer ${
-                      isActive(item.href)
-                        ? 'bg-primary text-white'
-                        : 'text-foreground hover:bg-secondary'
+                    className={`font-['Inter'] text-[13px] font-bold tracking-[1px] transition-colors mt-auto mb-5 ${
+                      isActive ? 'text-white' : 'text-[#8A8A8A] group-hover:text-white'
                     }`}
                   >
                     {item.label}
                   </span>
-                </Link>
-              ))}
-              <Link href="/dashboard">
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="block w-full px-4 py-2 bg-primary text-white rounded-lg font-medium text-center hover:bg-[#e85d04] transition-colors cursor-pointer border-none"
-                >
-                  Get Started
-                </button>
+                  {isActive && (
+                    <div className="absolute bottom-0 left-0 w-full h-[2px] bg-[#FF3B30] rounded-t-sm" />
+                  )}
+                </div>
               </Link>
+            );
+          })}
+        </div>
+
+        {/* Header Actions */}
+        <div className="hidden md:flex items-center gap-6">
+          {/* Search Box */}
+          <div className="flex items-center gap-3 bg-[#1A1A1A] rounded-lg px-4 py-2.5">
+            <Search size={18} className="text-[#8A8A8A]" />
+            <input 
+              type="text" 
+              placeholder="Search here..." 
+              className="bg-transparent border-none outline-none text-[#8A8A8A] text-sm font-['Inter'] w-48 placeholder:text-[#8A8A8A]"
+            />
+          </div>
+          
+          {/* Profile Box */}
+          <div className="flex items-center gap-6">
+            <button className="text-white hover:text-[#FF3B30] transition-colors border-none bg-transparent cursor-pointer">
+              <Bell size={20} />
+            </button>
+            <div className="w-10 h-10 rounded-full bg-[#FF5500] flex items-center justify-center text-white font-['Inter'] font-semibold text-sm cursor-pointer shadow-[0_0_15px_rgba(255,85,0,0.3)]">
+              AM
             </div>
           </div>
-        )}
+        </div>
+
       </div>
     </nav>
   );
