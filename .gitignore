@@ -45,6 +45,15 @@ pids
 *.seed
 *.pid.lock
 
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Large local datasets (keep local, do not push)
+data/*.csv
+
 # Coverage directory used by tools like istanbul
 coverage/
 *.lcov

@@ -1,10 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown } from 'lucide-react';
+import { FRAUD_API_BASE_URL } from '@/const';
+
+type FraudResult = {
+  risk_score: number;
+  status: 'APPROVED' | 'FLAGGED' | 'BLOCKED';
+  color: string;
+  recommendation: string;
+  reason_code: string;
+};
 
 export default function Transaction() {
   const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked'>('idle');
   const [isCurrencyOpen, setIsCurrencyOpen] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState('MYR');
+  const [amount, setAmount] = useState('');
+  const [recipientName, setRecipientName] = useState('');
+  const [fraudResult, setFraudResult] = useState<FraudResult | null>(null);
   
   const currencyRef = useRef<HTMLDivElement>(null);
 
@@ -18,13 +30,37 @@ export default function Transaction() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleProcessTransaction = () => {
+  const handleProcessTransaction = async () => {
     setModalState('processing');
-    setTimeout(() => {
-      const outcomes: ('approved' | 'verification' | 'blocked')[] = ['approved', 'verification', 'blocked'];
-      const randomOutcome = outcomes[Math.floor(Math.random() * outcomes.length)];
-      setModalState(randomOutcome);
-    }, 2500);
+    try {
+      const amountValue = Number(amount || 0);
+      const oldbalanceOrg = 12450;
+      const newbalanceOrig = Math.max(0, oldbalanceOrg - amountValue);
+      const transactionData = {
+        type: 'TRANSFER',
+        amount: amountValue,
+        oldbalanceOrg,
+        newbalanceOrig,
+        oldbalanceDest: 0,
+        newbalanceDest: amountValue,
+        nameDest: 'C123456',
+      };
+      const response = await fetch(`${FRAUD_API_BASE_URL}/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(transactionData),
+      });
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      const result: FraudResult = await response.json();
+      setFraudResult(result);
+      if (result.status === 'APPROVED') setModalState('approved');
+      else if (result.status === 'FLAGGED') setModalState('verification');
+      else setModalState('blocked');
+    } catch (error) {
+      console.error('Error connecting to Fraud Shield API:', error);
+      setModalState('idle');
+      alert('Could not connect to Fraud Shield API. Is it running on port 8000?');
+    }
   };
 
   return (
@@ -79,7 +115,8 @@ export default function Transaction() {
                 <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Recipient Name</label>
                 <input 
                   type="text" 
-                  defaultValue="" 
+                  value={recipientName}
+                  onChange={(e) => setRecipientName(e.target.value)}
                   placeholder="Enter recipient name"
                   className="bg-transparent text-white font-semibold outline-none w-full placeholder:text-[#525252]"
                 />
@@ -113,7 +150,8 @@ export default function Transaction() {
                 <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Amount</label>
                 <input 
                   type="text" 
-                  defaultValue="" 
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
                   className="bg-transparent text-white font-bold font-['Sora'] text-2xl outline-none w-full placeholder:text-[#525252]"
                 />
@@ -191,11 +229,11 @@ export default function Transaction() {
               <div className="bg-[#FFFFFF05] rounded-xl flex flex-col gap-3 p-4">
                 <div className="flex justify-between">
                   <span className="text-[#8A8A8A] text-sm">Pay</span>
-                  <span className="text-white font-semibold">RM 2000</span>
+                  <span className="text-white font-semibold">{selectedCurrency} {amount || '0.00'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#8A8A8A] text-sm">To</span>
-                  <span className="text-white font-semibold">John Lee</span>
+                  <span className="text-white font-semibold">{recipientName || 'Recipient'}</span>
                 </div>
               </div>
 
@@ -227,9 +265,9 @@ export default function Transaction() {
               </div>
               <h2 className="text-white text-2xl font-bold font-['Sora'] text-center">Status: Approved</h2>
               <div className="bg-[#32D74B15] px-4 py-2 rounded-full">
-                <span className="text-[#32D74B] font-semibold text-sm">Risk Score: 23 (Low)</span>
+                <span className="text-[#32D74B] font-semibold text-sm">Risk Score: {Math.round((fraudResult?.risk_score ?? 0) * 100)} (Low)</span>
               </div>
-              <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">Transaction verified and completed successfully.</p>
+              <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.recommendation ?? 'Transaction verified and completed successfully.'}</p>
               <button onClick={() => setModalState('idle')} className="w-full bg-[#32D74B] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#2CBF41]">
                 Done
               </button>
@@ -244,9 +282,9 @@ export default function Transaction() {
               </div>
               <h2 className="text-white text-[22px] font-bold font-['Sora'] text-center leading-tight">Status: Verification Required</h2>
               <div className="bg-[#FF9F0A15] px-4 py-2 rounded-full">
-                <span className="text-[#FF9F0A] font-semibold text-sm">Risk Score: 55 (Medium)</span>
+                <span className="text-[#FF9F0A] font-semibold text-sm">Risk Score: {Math.round((fraudResult?.risk_score ?? 0) * 100)} (Medium)</span>
               </div>
-              <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">Unusual activity detected. Please verify your identity to continue.</p>
+              <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'Unusual activity detected. Please verify your identity to continue.'}</p>
               <button onClick={() => setModalState('idle')} className="w-full bg-[#FF9F0A] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E68F09]">
                 Verify Identity
               </button>
@@ -261,9 +299,9 @@ export default function Transaction() {
               </div>
               <h2 className="text-white text-[22px] font-bold font-['Sora'] text-center">Status: Transaction Blocked</h2>
               <div className="bg-[#FF3B3015] px-4 py-2 rounded-full">
-                <span className="text-[#FF3B30] font-semibold text-sm">Risk Score: 88 (High)</span>
+                <span className="text-[#FF3B30] font-semibold text-sm">Risk Score: {Math.round((fraudResult?.risk_score ?? 0) * 100)} (High)</span>
               </div>
-              <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">This transaction has been blocked due to high fraud risk.</p>
+              <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'This transaction has been blocked due to high fraud risk.'}</p>
               <button onClick={() => setModalState('idle')} className="w-full bg-[#FF3B30] text-white rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E6352B]">
                 Contact Support
               </button>
