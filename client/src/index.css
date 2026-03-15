@@ -197,6 +197,15 @@
       max-width: 1280px; /* Standard content width */
     }
   }
+
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* Cyberpunk Animations & Cinematic Effects */

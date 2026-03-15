@@ -4,10 +4,12 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Navigation from "./components/Navigation";
+import { FraudEventsProvider } from "./contexts/FraudEventsContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Landing from "./pages/Landing";
 import Transaction from "./pages/Transaction";
 import Dashboard from "./pages/Dashboard";
+import Profile from "./pages/Profile";
 
 
 function Router() {
@@ -16,6 +18,7 @@ function Router() {
       <Route path={"/"} component={Landing} />
       <Route path={"/dashboard"} component={Dashboard} />
       <Route path={"/transaction"} component={Transaction} />
+      <Route path={"/profile"} component={Profile} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
@@ -36,9 +39,11 @@ function App() {
         // switchable
       >
         <TooltipProvider>
-          <Navigation />
-          <Toaster />
-          <Router />
+          <FraudEventsProvider>
+            <Navigation />
+            <Toaster />
+            <Router />
+          </FraudEventsProvider>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
