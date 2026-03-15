@@ -1,50 +1,195 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown } from 'lucide-react';
 import { FRAUD_API_BASE_URL } from '@/const';
+import { useFraudEvents } from '@/contexts/FraudEventsContext';
+
+const MALAYSIA_BANKS = [
+  'Maybank',
+  'CIMB Bank',
+  'Public Bank',
+  'RHB Bank',
+  'Hong Leong Bank',
+  'AmBank',
+  'Bank Islam',
+  'BSN',
+  'OCBC Bank',
+  'HSBC Malaysia',
+  'UOB Malaysia',
+  'Affin Bank',
+  'Alliance Bank',
+  'Bank Muamalat',
+  'Standard Chartered Malaysia',
+];
+
+const MALAYSIA_EWALLETS = [
+  'Touch n Go eWallet',
+  'Boost',
+  "GrabPay",
+  'ShopeePay',
+  'MAE Wallet',
+  'BigPay',
+  'Setel Wallet',
+];
+
+type DropdownGroup = {
+  label?: string;
+  options: Array<{
+    label: string;
+    value: string;
+  }>;
+};
+
+function StyledDropdown({
+  label,
+  value,
+  groups,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  groups: DropdownGroup[];
+  onChange: (value: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedOption = groups
+    .flatMap((group) => group.options)
+    .find((option) => option.value === value);
+
+  return (
+    <div ref={dropdownRef} className={`relative flex flex-col gap-2 bg-[#141414] border transition-all p-4 rounded-xl ${isOpen ? 'border-[#FF5500] shadow-[0_0_20px_rgba(255,85,0,0.2)]' : 'border-white/5'}`}>
+      <label className={`text-sm cursor-default transition-colors ${isOpen ? 'text-[#FF5500]' : 'text-[#8A8A8A]'}`}>{label}</label>
+      <div className="flex items-center justify-between cursor-pointer w-full" onClick={() => setIsOpen((prev) => !prev)}>
+        <span className="bg-transparent text-white font-semibold outline-none">{selectedOption?.label ?? value}</span>
+        <ChevronDown size={20} className={`text-[#8A8A8A] transition-transform ${isOpen ? 'rotate-180 text-[#FF5500]' : ''}`} />
+      </div>
+
+      {isOpen && (
+        <div className="hide-scrollbar absolute top-[calc(100%+8px)] left-0 w-full min-w-full max-h-72 overflow-y-auto bg-[#1A1A1A] border border-white/20 rounded-lg p-2 shadow-2xl z-50">
+          {groups.map((group, groupIndex) => (
+            <div key={`${label}-${group.label ?? groupIndex}`} className="flex flex-col gap-1.5">
+              {group.label && <div className="px-3 pt-2 pb-2 text-[11px] uppercase tracking-[0.22em] text-[#6F6F6F]">{group.label}</div>}
+              {group.options.map((option) => (
+                <div
+                  key={option.value}
+                  onClick={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                  }}
+                  className={`px-3 py-2.5 rounded-md cursor-pointer transition-colors text-sm leading-snug whitespace-normal break-words ${value === option.value ? 'bg-[#FF5500]/20 text-[#FF5500] font-semibold' : 'text-[#E0E0E0] hover:bg-white/5'}`}
+                >
+                  {option.label}
+                </div>
+              ))}
+              {groupIndex < groups.length - 1 && <div className="my-3 h-px bg-white/8" />}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 type FraudResult = {
   risk_score: number;
+  model_score: number;
   status: 'APPROVED' | 'FLAGGED' | 'BLOCKED';
   color: string;
   recommendation: string;
   reason_code: string;
+  score_breakdown?: {
+    raw_model_score: number;
+    adjustments: Array<{ factor: string; delta: number }>;
+    pre_floor_score: number;
+    hard_floor: number;
+    hard_floor_reason: string | null;
+    status_floor: number;
+    final_score: number;
+  };
+};
+
+type ContextResult = {
+  type: 'TRANSFER' | 'CASH_OUT';
+  amount: number;
+  oldbalanceOrg: number;
+  newbalanceOrig: number;
+  oldbalanceDest: number;
+  newbalanceDest: number;
+  nameDest: string;
+  hour_of_day: number;
+  is_new_recipient: boolean;
+  device_trust_score: number;
+  ip_risk_score: number;
 };
 
 export default function Transaction() {
+  const { addEvent } = useFraudEvents();
   const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked'>('idle');
-  const [isCurrencyOpen, setIsCurrencyOpen] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState('MYR');
+  const [selectedDeviceId, setSelectedDeviceId] = useState<'demo-web' | 'demo-new-device'>('demo-web');
+  const [selectedIpProfile, setSelectedIpProfile] = useState<'auto' | 'clean' | 'risky'>('auto');
+  const [selectedProvider, setSelectedProvider] = useState('Maybank');
   const [amount, setAmount] = useState('');
   const [recipientName, setRecipientName] = useState('');
+  const [recipientAccount, setRecipientAccount] = useState('');
   const [fraudResult, setFraudResult] = useState<FraudResult | null>(null);
-  
-  const currencyRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (currencyRef.current && !currencyRef.current.contains(event.target as Node)) {
-        setIsCurrencyOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const getBreakdownSummary = () => {
+    const breakdown = fraudResult?.score_breakdown;
+    if (!breakdown) return null;
+
+    const uplift = Math.max(0, breakdown.pre_floor_score - breakdown.raw_model_score);
+    const appliedFloor = Math.max(breakdown.hard_floor, breakdown.status_floor);
+
+    return {
+      uplift,
+      appliedFloor,
+      adjustmentCount: breakdown.adjustments.length,
+    };
+  };
+
+  const formatPercent = (score?: number) => {
+    const value = typeof score === 'number' ? score : 0;
+    const percent = value * 100;
+    if (percent > 0 && percent < 0.1) return '<0.1%';
+    return `${percent.toFixed(1)}%`;
+  };
 
   const handleProcessTransaction = async () => {
     setModalState('processing');
     try {
       const amountValue = Number(amount || 0);
-      const oldbalanceOrg = 12450;
-      const newbalanceOrig = Math.max(0, oldbalanceOrg - amountValue);
-      const transactionData = {
-        type: 'TRANSFER',
-        amount: amountValue,
-        oldbalanceOrg,
-        newbalanceOrig,
-        oldbalanceDest: 0,
-        newbalanceDest: amountValue,
-        nameDest: 'C123456',
-      };
+      if (!Number.isFinite(amountValue) || amountValue <= 0) {
+        throw new Error('Please enter a valid transfer amount greater than 0.');
+      }
+
+      const contextResponse = await fetch(`${FRAUD_API_BASE_URL}/context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender_account: 'ALEX8899',
+          recipient_account: recipientAccount,
+          amount: amountValue,
+          device_id: selectedDeviceId,
+          ip_profile: selectedIpProfile,
+        }),
+      });
+
+      if (!contextResponse.ok) throw new Error(`Context API error: ${contextResponse.status}`);
+      const transactionData: ContextResult = await contextResponse.json();
+
       const response = await fetch(`${FRAUD_API_BASE_URL}/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -53,6 +198,22 @@ export default function Transaction() {
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const result: FraudResult = await response.json();
       setFraudResult(result);
+      addEvent({
+        id: `txn-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+        timestamp: new Date().toISOString(),
+        user: 'Alex Tan',
+        recipientName: recipientName || 'Recipient',
+        recipientAccount: recipientAccount || 'N/A',
+        amount: amountValue,
+        currency: selectedCurrency,
+        status: result.status,
+        riskScore: result.risk_score,
+        modelScore: result.model_score,
+        reasonCode: result.reason_code,
+        recommendation: result.recommendation,
+        deviceProfile: selectedDeviceId,
+        ipProfile: selectedIpProfile,
+      });
       if (result.status === 'APPROVED') setModalState('approved');
       else if (result.status === 'FLAGGED') setModalState('verification');
       else setModalState('blocked');
@@ -87,7 +248,7 @@ export default function Transaction() {
           {/* Sender Information */}
           <div className="flex flex-col gap-6">
             <h2 className="text-white text-lg font-semibold border-b border-white/10 pb-4">Sender Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
               <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 p-4 rounded-xl">
                 <span className="text-[#8A8A8A] text-sm">Sender Name</span>
                 <span className="text-white font-semibold">Alex Tan</span>
@@ -125,27 +286,34 @@ export default function Transaction() {
                 <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Account Number</label>
                 <input 
                   type="text" 
-                  defaultValue="" 
+                  value={recipientAccount}
+                  onChange={(e) => setRecipientAccount(e.target.value)}
                   placeholder="Enter account number"
                   className="bg-transparent text-white font-mono text-sm tracking-widest text-[#FF5500] outline-none w-full placeholder:text-[#525252]"
                 />
               </div>
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
-                <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Wallet Provider</label>
-                <input 
-                  type="text" 
-                  defaultValue="" 
-                  placeholder="Enter bank or wallet name"
-                  className="bg-transparent text-white font-semibold outline-none w-full placeholder:text-[#525252]"
-                />
-              </div>
+              <StyledDropdown
+                label="Wallet Provider"
+                value={selectedProvider}
+                onChange={setSelectedProvider}
+                groups={[
+                  {
+                    label: 'Banks',
+                    options: MALAYSIA_BANKS.map((provider) => ({ label: provider, value: provider })),
+                  },
+                  {
+                    label: 'E-Wallets',
+                    options: MALAYSIA_EWALLETS.map((provider) => ({ label: provider, value: provider })),
+                  },
+                ]}
+              />
             </div>
           </div>
 
           {/* Transaction Details */}
           <div className="flex flex-col gap-6">
             <h2 className="text-white text-lg font-semibold border-b border-white/10 pb-4">Transaction Details</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
                 <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Amount</label>
                 <input 
@@ -156,33 +324,16 @@ export default function Transaction() {
                   className="bg-transparent text-white font-bold font-['Sora'] text-2xl outline-none w-full placeholder:text-[#525252]"
                 />
               </div>
-              <div ref={currencyRef} className={`relative flex flex-col gap-2 bg-[#141414] border transition-all p-4 rounded-xl group/currency ${isCurrencyOpen ? 'border-[#FF5500] shadow-[0_0_20px_rgba(255,85,0,0.2)]' : 'border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)]'}`}>
-                <label className={`text-sm cursor-default transition-colors ${isCurrencyOpen ? 'text-[#FF5500]' : 'text-[#8A8A8A] group-focus-within/currency:text-[#FF5500]'}`}>Currency</label>
-                <div 
-                  className="flex items-center justify-between cursor-pointer w-full"
-                  onClick={() => setIsCurrencyOpen(!isCurrencyOpen)}
-                >
-                  <span className="bg-transparent text-white font-semibold outline-none">{selectedCurrency}</span>
-                  <ChevronDown size={20} className={`text-[#8A8A8A] transition-transform ${isCurrencyOpen ? 'rotate-180 text-[#FF5500]' : ''}`} />
-                </div>
-                
-                {isCurrencyOpen && (
-                  <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-[#1A1A1A] border border-white/20 rounded-lg p-2 flex flex-col gap-1 shadow-2xl z-50">
-                    {['MYR', 'USD', 'EUR', 'SGD'].map((currency) => (
-                      <div 
-                        key={currency}
-                        onClick={() => {
-                          setSelectedCurrency(currency);
-                          setIsCurrencyOpen(false);
-                        }}
-                        className={`px-3 py-2.5 rounded-md cursor-pointer transition-colors text-sm ${selectedCurrency === currency ? 'bg-[#FF5500]/20 text-[#FF5500] font-semibold' : 'text-[#E0E0E0] hover:bg-white/5'}`}
-                      >
-                        {currency}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <StyledDropdown
+                label="Currency"
+                value={selectedCurrency}
+                onChange={setSelectedCurrency}
+                groups={[
+                  {
+                    options: ['MYR', 'USD', 'EUR', 'SGD'].map((currency) => ({ label: currency, value: currency })),
+                  },
+                ]}
+              />
               <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
                 <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Note (Optional)</label>
                 <input 
@@ -192,6 +343,33 @@ export default function Transaction() {
                   className="bg-transparent text-white font-semibold italic opacity-80 outline-none w-full placeholder:text-[#525252]"
                 />
               </div>
+              <StyledDropdown
+                label="Device Profile"
+                value={selectedDeviceId}
+                onChange={(value) => setSelectedDeviceId(value as 'demo-web' | 'demo-new-device')}
+                groups={[
+                  {
+                    options: [
+                      { label: 'Trusted Device', value: 'demo-web' },
+                      { label: 'New Device', value: 'demo-new-device' },
+                    ],
+                  },
+                ]}
+              />
+              <StyledDropdown
+                label="IP Risk Profile"
+                value={selectedIpProfile}
+                onChange={(value) => setSelectedIpProfile(value as 'auto' | 'clean' | 'risky')}
+                groups={[
+                  {
+                    options: [
+                      { label: 'Auto Detect', value: 'auto' },
+                      { label: 'Clean IP', value: 'clean' },
+                      { label: 'High-Risk IP', value: 'risky' },
+                    ],
+                  },
+                ]}
+              />
             </div>
           </div>
 
@@ -265,8 +443,14 @@ export default function Transaction() {
               </div>
               <h2 className="text-white text-2xl font-bold font-['Sora'] text-center">Status: Approved</h2>
               <div className="bg-[#32D74B15] px-4 py-2 rounded-full">
-                <span className="text-[#32D74B] font-semibold text-sm">Risk Score: {Math.round((fraudResult?.risk_score ?? 0) * 100)} (Low)</span>
+                <span className="text-[#32D74B] font-semibold text-sm">Risk Score: {formatPercent(fraudResult?.risk_score)} (Low)</span>
               </div>
+              <p className="text-[#8A8A8A] text-xs text-center">Raw ML Score: {formatPercent(fraudResult?.model_score)}</p>
+              {getBreakdownSummary() && (
+                <p className="text-[#8A8A8A] text-xs text-center">
+                  Context uplift: +{formatPercent(getBreakdownSummary()!.uplift)} | Floor: {formatPercent(getBreakdownSummary()!.appliedFloor)} | Signals: {getBreakdownSummary()!.adjustmentCount}
+                </p>
+              )}
               <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.recommendation ?? 'Transaction verified and completed successfully.'}</p>
               <button onClick={() => setModalState('idle')} className="w-full bg-[#32D74B] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#2CBF41]">
                 Done
@@ -282,8 +466,14 @@ export default function Transaction() {
               </div>
               <h2 className="text-white text-[22px] font-bold font-['Sora'] text-center leading-tight">Status: Verification Required</h2>
               <div className="bg-[#FF9F0A15] px-4 py-2 rounded-full">
-                <span className="text-[#FF9F0A] font-semibold text-sm">Risk Score: {Math.round((fraudResult?.risk_score ?? 0) * 100)} (Medium)</span>
+                <span className="text-[#FF9F0A] font-semibold text-sm">Risk Score: {formatPercent(fraudResult?.risk_score)} (Medium)</span>
               </div>
+              <p className="text-[#8A8A8A] text-xs text-center">Raw ML Score: {formatPercent(fraudResult?.model_score)}</p>
+              {getBreakdownSummary() && (
+                <p className="text-[#8A8A8A] text-xs text-center">
+                  Context uplift: +{formatPercent(getBreakdownSummary()!.uplift)} | Floor: {formatPercent(getBreakdownSummary()!.appliedFloor)} | Signals: {getBreakdownSummary()!.adjustmentCount}
+                </p>
+              )}
               <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'Unusual activity detected. Please verify your identity to continue.'}</p>
               <button onClick={() => setModalState('idle')} className="w-full bg-[#FF9F0A] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E68F09]">
                 Verify Identity
@@ -299,8 +489,14 @@ export default function Transaction() {
               </div>
               <h2 className="text-white text-[22px] font-bold font-['Sora'] text-center">Status: Transaction Blocked</h2>
               <div className="bg-[#FF3B3015] px-4 py-2 rounded-full">
-                <span className="text-[#FF3B30] font-semibold text-sm">Risk Score: {Math.round((fraudResult?.risk_score ?? 0) * 100)} (High)</span>
+                <span className="text-[#FF3B30] font-semibold text-sm">Risk Score: {formatPercent(fraudResult?.risk_score)} (High)</span>
               </div>
+              <p className="text-[#8A8A8A] text-xs text-center">Raw ML Score: {formatPercent(fraudResult?.model_score)}</p>
+              {getBreakdownSummary() && (
+                <p className="text-[#8A8A8A] text-xs text-center">
+                  Context uplift: +{formatPercent(getBreakdownSummary()!.uplift)} | Floor: {formatPercent(getBreakdownSummary()!.appliedFloor)} | Signals: {getBreakdownSummary()!.adjustmentCount}
+                </p>
+              )}
               <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'This transaction has been blocked due to high fraud risk.'}</p>
               <button onClick={() => setModalState('idle')} className="w-full bg-[#FF3B30] text-white rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E6352B]">
                 Contact Support

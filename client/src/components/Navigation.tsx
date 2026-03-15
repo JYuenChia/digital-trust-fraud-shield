@@ -4,6 +4,7 @@ import { ShieldAlert, Search, Bell } from 'lucide-react';
 
 export const Navigation: React.FC = () => {
   const [location] = useLocation();
+  const isProfilePage = location === '/profile';
 
   const navItems = [
     { label: 'OVERVIEW', href: '/' },
@@ -65,9 +66,11 @@ export const Navigation: React.FC = () => {
             <button className="text-white hover:text-[#FF3B30] transition-colors border-none bg-transparent cursor-pointer">
               <Bell size={20} />
             </button>
-            <div className="w-10 h-10 rounded-full bg-[#FF5500] flex items-center justify-center text-white font-['Inter'] font-semibold text-sm cursor-pointer shadow-[0_0_15px_rgba(255,85,0,0.3)]">
-              AM
-            </div>
+            <Link href="/profile">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-['Inter'] font-semibold text-sm cursor-pointer transition-all ${isProfilePage ? 'bg-[#FF3B30] shadow-[0_0_16px_rgba(255,59,48,0.45)]' : 'bg-[#FF5500] shadow-[0_0_15px_rgba(255,85,0,0.3)] hover:bg-[#FF6A1A]'}`}>
+                AM
+              </div>
+            </Link>
           </div>
         </div>
 
