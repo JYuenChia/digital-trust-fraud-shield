@@ -111,6 +111,7 @@ type FraudResult = {
   recommendation: string;
   reason_code: string;
   isVerifiedMerchant?: boolean;
+  notify_guardian?: boolean;
   qr_integrity?: {
     merchant_id: string;
     account_name: string;
@@ -122,6 +123,8 @@ type FraudResult = {
     warnings: string[];
     qr_type?: string;
     raw_preview?: string;
+    pattern_match_percent?: number;
+    pattern_match_message?: string;
   };
   score_breakdown?: {
     raw_model_score: number;
@@ -142,6 +145,7 @@ type ContextResult = {
   oldbalanceDest: number;
   newbalanceDest: number;
   nameDest: string;
+  sender_account?: string;
   hour_of_day: number;
   is_new_recipient: boolean;
   device_trust_score: number;
@@ -160,6 +164,182 @@ type QrPayload = {
   high_error_balance_ratio?: number;
   is_verified_merchant?: boolean;
 };
+
+type SafetyWeatherState = 'calm' | 'cloudy' | 'storm';
+
+type BoatProfile = {
+  safePoints: number;
+  damage: number;
+  warningStrikes: number;
+  locked: boolean;
+};
+
+const BOAT_PROFILE_STORAGE_KEY = 'fraud-shield-bangka-profile-v1';
+const SENIOR_ACCOUNT = 'ALEX8899';
+
+const BOAT_QUIZ = [
+  {
+    id: 'q1',
+    question: 'If a QR asks for urgent payment and gives a strange website, what should you do?',
+    options: ['Pay quickly to avoid penalty', 'Stop and verify with official channel', 'Share OTP to confirm'],
+    answer: 1,
+  },
+  {
+    id: 'q2',
+    question: 'Which is safer before transferring money?',
+    options: ['Trust any message from unknown number', 'Verify recipient details and warning messages', 'Ignore app warnings'],
+    answer: 1,
+  },
+  {
+    id: 'q3',
+    question: 'When should you share TAC or OTP code?',
+    options: ['Only with trusted contacts', 'With support staff in chat', 'Never share with anyone'],
+    answer: 2,
+  },
+];
+
+function SafetyBoatCard({ profile }: { profile: BoatProfile }) {
+  const damage = profile.damage;
+  const warningStrikes = profile.warningStrikes;
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#0F141A] p-4 flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs uppercase tracking-[0.16em] text-[#8A8A8A]">Safety Boat</span>
+        <span className={`text-xs font-semibold ${profile.locked ? 'text-[#FF6B6B]' : 'text-[#72E18B]'}`}>
+          {profile.locked ? 'LOCKED' : 'ACTIVE'}
+        </span>
+      </div>
+
+      <div className="relative h-24 rounded-lg border border-white/10 overflow-hidden bg-[#0C1C2B]">
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(140,210,255,0.32)_0%,rgba(53,123,185,0.52)_45%,rgba(12,49,84,0.95)_100%)]" />
+        <svg viewBox="0 0 180 100" className="absolute left-3 bottom-1 h-20 w-40" aria-hidden="true">
+          <path d="M20 62h120l-10 18c-2 4-6 6-11 6H42c-5 0-9-2-11-6L20 62z" fill="#D89A61" />
+          <rect x="78" y="26" width="5" height="36" rx="2" fill="#B17745" />
+          <path d="M82 28l35 13H82z" fill="#F7D8B2" />
+          <path d="M78 30l-28 12h28z" fill="#F2CFA7" />
+          <circle cx="40" cy="70" r="8" fill="none" stroke="#9EE0F7" strokeWidth="3" />
+
+          {damage >= 20 && <path d="M65 80l8-7" stroke="#662A2A" strokeWidth="2" />}
+          {damage >= 40 && <path d="M92 77l11-8" stroke="#662A2A" strokeWidth="2" />}
+          {damage >= 60 && <path d="M48 74l11-8" stroke="#662A2A" strokeWidth="2" />}
+        </svg>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 text-xs">
+        <div className="rounded-md bg-white/5 px-2 py-2">
+          <p className="text-[#8A8A8A]">Safe Points</p>
+          <p className="text-white font-semibold">{profile.safePoints}</p>
+        </div>
+        <div className="rounded-md bg-white/5 px-2 py-2">
+          <p className="text-[#8A8A8A]">Damage</p>
+          <p className={`font-semibold ${damage >= 60 ? 'text-[#FF6B6B]' : 'text-white'}`}>{damage}%</p>
+        </div>
+        <div className="rounded-md bg-white/5 px-2 py-2">
+          <p className="text-[#8A8A8A]">Warning Alerts</p>
+          <p className={`font-semibold ${warningStrikes >= 2 ? 'text-[#FF9F0A]' : 'text-white'}`}>{warningStrikes}</p>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-[#9CA8B5]">
+        More safe transfers raise points. Repeated risky behavior increases damage and warnings.
+      </p>
+    </div>
+  );
+}
+
+function getSafetyWeatherState(riskScore: number): SafetyWeatherState {
+  if (riskScore >= 0.75) return 'storm';
+  if (riskScore >= 0.35) return 'cloudy';
+  return 'calm';
+}
+
+function SafetyWeatherCard({ riskScore }: { riskScore: number }) {
+  const state = getSafetyWeatherState(riskScore);
+
+  const frameClass = state === 'storm'
+    ? 'safety-frame-storm'
+    : state === 'cloudy'
+      ? 'safety-frame-cloudy'
+      : 'safety-frame-calm';
+
+  const visualClass = state === 'storm' ? 'safety-visual-jolt' : '';
+
+  const config = {
+    calm: {
+      subtitle: 'Safe to continue.',
+      seaClass: 'safety-sea-calm',
+      boatClass: 'safety-boat-calm',
+    },
+    cloudy: {
+      subtitle: 'Please verify before continuing.',
+      seaClass: 'safety-sea-cloudy',
+      boatClass: 'safety-boat-cloudy',
+    },
+    storm: {
+      subtitle: 'Stop. This could be a scam.',
+      seaClass: 'safety-sea-storm',
+      boatClass: 'safety-boat-storm',
+    },
+  }[state];
+
+  return (
+    <div className={`w-full rounded-2xl border bg-[#101318] p-4 ${frameClass}`}>
+      <div className={`relative h-28 overflow-hidden rounded-xl border border-white/10 bg-[#0B1118] ${visualClass}`}>
+        <div className={`absolute inset-0 ${config.seaClass}`} />
+
+        {state === 'calm' && (
+          <>
+            <div className="absolute top-0 right-0 h-20 w-28 safety-sun-glow" />
+            <svg viewBox="0 0 48 48" className="absolute top-2 right-3 h-8 w-8 text-[#FFE79A] safety-sun-icon" fill="currentColor" aria-hidden="true">
+              <circle cx="24" cy="24" r="9" />
+            </svg>
+          </>
+        )}
+        {state === 'cloudy' && (
+          <>
+            <svg viewBox="0 0 64 40" className="absolute top-3 right-3 h-8 w-12 text-[#B6C0CC] safety-cloud-drift" fill="currentColor" aria-hidden="true">
+              <circle cx="20" cy="20" r="12" />
+              <circle cx="35" cy="17" r="10" />
+              <circle cx="45" cy="22" r="9" />
+              <rect x="14" y="22" width="38" height="10" rx="5" />
+            </svg>
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(181,193,207,0.05)_0%,rgba(80,95,112,0.18)_100%)]" />
+          </>
+        )}
+        {state === 'storm' && (
+          <>
+            <svg viewBox="0 0 64 40" className="absolute top-3 right-3 h-8 w-12 text-[#8D98A6]" fill="currentColor" aria-hidden="true">
+              <circle cx="20" cy="20" r="12" />
+              <circle cx="35" cy="17" r="10" />
+              <circle cx="45" cy="22" r="9" />
+              <rect x="14" y="22" width="38" height="10" rx="5" />
+            </svg>
+            <div className="absolute inset-0 safety-rain-lines" />
+            <svg viewBox="0 0 24 24" className="absolute top-10 right-8 h-5 w-5 text-[#FFE177]" fill="currentColor" aria-hidden="true">
+              <path d="M13 2L5 13h5l-1 9 8-11h-5z" />
+            </svg>
+          </>
+        )}
+
+        <svg
+          viewBox="0 0 120 70"
+          className={`absolute bottom-3 left-6 h-14 w-24 text-[#F4B577] ${config.boatClass}`}
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M14 44h92l-8 12c-2 3-5 5-9 5H31c-4 0-7-2-9-5L14 44z" />
+          <rect x="58" y="18" width="4" height="26" rx="2" className="text-[#B67B45]" fill="currentColor" />
+          <path d="M62 20l28 10H62z" className="text-[#F7D8B2]" fill="currentColor" />
+        </svg>
+      </div>
+
+      <div className="mt-3">
+        <p className="text-sm font-semibold text-white">{config.subtitle}</p>
+      </div>
+    </div>
+  );
+}
 
 function parseTlv(raw: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -272,10 +452,9 @@ function parseQrPayload(raw: string): QrPayload | null {
 
 export default function Transaction() {
   const { addEvent } = useFraudEvents();
-  const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked'>('idle');
+  const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked' | 'quiz'>('idle');
   const [selectedCurrency, setSelectedCurrency] = useState('MYR');
-  const [selectedDeviceId, setSelectedDeviceId] = useState<'demo-web' | 'demo-new-device'>('demo-web');
-  const [selectedIpProfile, setSelectedIpProfile] = useState<'auto' | 'clean' | 'risky'>('auto');
+  const [judgeDemoPreset, setJudgeDemoPreset] = useState<'real-auto' | 'new-device' | 'risky-ip' | 'max-risk'>('real-auto');
   const [selectedProvider, setSelectedProvider] = useState('Maybank');
   const [amount, setAmount] = useState('');
   const [recipientName, setRecipientName] = useState('');
@@ -286,28 +465,50 @@ export default function Transaction() {
   const [lastQrPreview, setLastQrPreview] = useState<string>('');
   const [scannedQrPayload, setScannedQrPayload] = useState<QrPayload | null>(null);
   const [qrScanStatus, setQrScanStatus] = useState<{ tone: 'safe' | 'warn'; message: string } | null>(null);
+  const [boatProfile, setBoatProfile] = useState<BoatProfile>({ safePoints: 0, damage: 0, warningStrikes: 0, locked: false });
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
+  const [quizError, setQuizError] = useState<string | null>(null);
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const scannerRegionId = 'qr-reader-shield';
 
-  const getBreakdownSummary = () => {
-    const breakdown = fraudResult?.score_breakdown;
-    if (!breakdown) return null;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(BOAT_PROFILE_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as BoatProfile;
+      if (typeof parsed.safePoints === 'number') {
+        setBoatProfile(parsed);
+      }
+    } catch {
+      // Ignore invalid local data.
+    }
+  }, []);
 
-    const uplift = Math.max(0, breakdown.pre_floor_score - breakdown.raw_model_score);
-    const appliedFloor = Math.max(breakdown.hard_floor, breakdown.status_floor);
+  useEffect(() => {
+    localStorage.setItem(BOAT_PROFILE_STORAGE_KEY, JSON.stringify(boatProfile));
+  }, [boatProfile]);
 
-    return {
-      uplift,
-      appliedFloor,
-      adjustmentCount: breakdown.adjustments.length,
-    };
-  };
+  const activeDeviceId: 'demo-web' | 'demo-new-device' =
+    judgeDemoPreset === 'new-device' || judgeDemoPreset === 'max-risk' ? 'demo-new-device' : 'demo-web';
+  const activeIpProfile: 'auto' | 'risky' =
+    judgeDemoPreset === 'risky-ip' || judgeDemoPreset === 'max-risk' ? 'risky' : 'auto';
 
   const formatPercent = (score?: number) => {
     const value = typeof score === 'number' ? score : 0;
     const percent = value * 100;
     if (percent > 0 && percent < 0.1) return '<0.1%';
     return `${percent.toFixed(1)}%`;
+  };
+
+  const speakGuardianNotification = () => {
+    // Use Web Speech API to notify the elderly user
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance('We have notified your guardian about this high-risk payment. Your family can help protect your account. Please do not proceed.');
+      utterance.rate = 0.9; // Slightly slower for clarity
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
   };
 
   const renderQrIntegritySummary = () => {
@@ -320,9 +521,14 @@ export default function Transaction() {
         <p className={`mt-1 text-sm font-semibold ${qr.is_verified_merchant ? 'text-[#32D74B]' : 'text-[#FF9F0A]'}`}>
           Merchant Verification: {qr.is_verified_merchant ? 'Verified' : 'Unverified'}
         </p>
+        {qr.pattern_match_message && (
+          <p className="mt-2 text-xs text-[#C9D3DF]">
+            {qr.pattern_match_message}
+          </p>
+        )}
         {qr.warnings.length > 0 && (
           <div className="mt-2 flex flex-col gap-1">
-            {qr.warnings.slice(0, 3).map((warning, index) => (
+            {qr.warnings.slice(0, 2).map((warning, index) => (
               <p key={`${warning}-${index}`} className="text-xs text-[#D0D0D0]">
                 • {warning}
               </p>
@@ -354,8 +560,9 @@ export default function Transaction() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         raw_qr: decodedText,
-        device_id: selectedDeviceId,
-        ip_profile: selectedIpProfile,
+        device_id: activeDeviceId,
+        ip_profile: activeIpProfile,
+        sender_account: SENIOR_ACCOUNT,
       }),
     });
 
@@ -364,7 +571,40 @@ export default function Transaction() {
     }
 
     const result: FraudResult = await response.json();
+    
+    // Voice notification if guardian should be notified
+    if (result.notify_guardian) {
+      speakGuardianNotification();
+    }
+    
     return result;
+  };
+
+  const handleQuizSubmit = () => {
+    if (Object.keys(quizAnswers).length < BOAT_QUIZ.length) {
+      setQuizError('Please answer all questions.');
+      return;
+    }
+
+    let score = 0;
+    for (const q of BOAT_QUIZ) {
+      if (quizAnswers[q.id] === q.answer) score += 1;
+    }
+
+    if (score >= 2) {
+      setBoatProfile((prev) => ({
+        ...prev,
+        locked: false,
+        warningStrikes: 0,
+        damage: Math.max(0, prev.damage - 30),
+      }));
+      setQuizAnswers({});
+      setQuizError(null);
+      setModalState('idle');
+      setQrScanStatus({ tone: 'safe', message: 'Great job. Account unlocked. Please stay alert for scams.' });
+    } else {
+      setQuizError('Almost there. Please review and try again.');
+    }
   };
 
   useEffect(() => {
@@ -442,9 +682,9 @@ export default function Transaction() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            sender_account: 'ALEX8899',
-            device_id: selectedDeviceId,
-            ip_profile: selectedIpProfile,
+            sender_account: SENIOR_ACCOUNT,
+            device_id: activeDeviceId,
+            ip_profile: activeIpProfile,
             qr: {
               ...scannedQrPayload,
               amount: amountValue,
@@ -459,11 +699,11 @@ export default function Transaction() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            sender_account: 'ALEX8899',
+            sender_account: SENIOR_ACCOUNT,
             recipient_account: recipientAccount,
             amount: amountValue,
-            device_id: selectedDeviceId,
-            ip_profile: selectedIpProfile,
+            device_id: activeDeviceId,
+            ip_profile: activeIpProfile,
           }),
         });
 
@@ -473,13 +713,44 @@ export default function Transaction() {
         response = await fetch(`${FRAUD_API_BASE_URL}/predict`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(transactionData),
+          body: JSON.stringify({ ...transactionData, sender_account: SENIOR_ACCOUNT }),
         });
       }
 
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const result: FraudResult = await response.json();
       setFraudResult(result);
+
+      if (result.notify_guardian) {
+        speakGuardianNotification();
+      }
+
+      setBoatProfile((prev) => {
+        if (result.status === 'APPROVED') {
+          const pointsGain = 10 + (result.isVerifiedMerchant ? 6 : 0);
+          const nextDamage = Math.max(0, prev.damage - 8);
+          const nextStrikes = Math.max(0, prev.warningStrikes - 1);
+          return {
+            safePoints: prev.safePoints + pointsGain,
+            damage: nextDamage,
+            warningStrikes: nextStrikes,
+            locked: false,
+          };
+        }
+
+        const damageHit = result.status === 'BLOCKED' ? 24 : 14;
+        const nextDamage = Math.min(100, prev.damage + damageHit);
+        const nextStrikes = prev.warningStrikes + 1;
+        const locked = nextDamage >= 60 || nextStrikes >= 3;
+
+        return {
+          ...prev,
+          damage: nextDamage,
+          warningStrikes: nextStrikes,
+          locked,
+        };
+      });
+
       addEvent({
         id: `txn-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
         timestamp: new Date().toISOString(),
@@ -493,8 +764,8 @@ export default function Transaction() {
         modelScore: result.model_score,
         reasonCode: result.reason_code,
         recommendation: result.recommendation,
-        deviceProfile: selectedDeviceId,
-        ipProfile: selectedIpProfile,
+        deviceProfile: activeDeviceId,
+        ipProfile: activeIpProfile,
       });
       if (result.status === 'APPROVED') setModalState('approved');
       else if (result.status === 'FLAGGED') setModalState('verification');
@@ -569,6 +840,13 @@ export default function Transaction() {
                 <span className="text-white font-semibold">DemoPay Wallet</span>
               </div>
             </div>
+            <SafetyBoatCard profile={boatProfile} />
+            {boatProfile.locked && (
+              <div className="rounded-xl border border-[#FF3B30]/40 bg-[#FF3B30]/12 px-4 py-3">
+                <p className="text-sm text-[#FFD4D1] font-medium">Your account is paused for safety.</p>
+                <p className="text-xs text-[#FFC7C3] mt-1">Complete the quick fraud prevention quiz to unlock transfers.</p>
+              </div>
+            )}
           </div>
 
           {/* Recipient Information */}
@@ -634,7 +912,7 @@ export default function Transaction() {
           {/* Transaction Details */}
           <div className="flex flex-col gap-6">
             <h2 className="text-white text-lg font-semibold border-b border-white/10 pb-4">Transaction Details</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
                 <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Amount</label>
                 <input 
@@ -664,33 +942,30 @@ export default function Transaction() {
                   className="bg-transparent text-white font-semibold italic opacity-80 outline-none w-full placeholder:text-[#525252]"
                 />
               </div>
-              <StyledDropdown
-                label="Device Profile"
-                value={selectedDeviceId}
-                onChange={(value) => setSelectedDeviceId(value as 'demo-web' | 'demo-new-device')}
-                groups={[
-                  {
-                    options: [
-                      { label: 'Trusted Device', value: 'demo-web' },
-                      { label: 'New Device', value: 'demo-new-device' },
-                    ],
-                  },
-                ]}
-              />
-              <StyledDropdown
-                label="IP Risk Profile"
-                value={selectedIpProfile}
-                onChange={(value) => setSelectedIpProfile(value as 'auto' | 'clean' | 'risky')}
-                groups={[
-                  {
-                    options: [
-                      { label: 'Auto Detect', value: 'auto' },
-                      { label: 'Clean IP', value: 'clean' },
-                      { label: 'High-Risk IP', value: 'risky' },
-                    ],
-                  },
-                ]}
-              />
+            </div>
+
+            <div className="rounded-xl border border-[#5DA8FF44] bg-[#5DA8FF12] px-4 py-3">
+              <p className="text-sm font-semibold text-[#D4E9FF]">Context Detection is Automatic</p>
+              <p className="mt-1 text-xs text-[#B7D7FA]">Device fingerprint and IP reputation are auto-detected by the backend, just like real production flow.</p>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-[11px] uppercase tracking-[0.14em] text-[#89BDEB]">Judge Demo Preset</span>
+                {[
+                  { key: 'real-auto', label: 'Real Auto' },
+                  { key: 'new-device', label: 'New Device' },
+                  { key: 'risky-ip', label: 'Risky IP' },
+                  { key: 'max-risk', label: 'Max Risk' },
+                ].map((preset) => (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    onClick={() => setJudgeDemoPreset(preset.key as 'real-auto' | 'new-device' | 'risky-ip' | 'max-risk')}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${judgeDemoPreset === preset.key ? 'bg-[#5DA8FF] text-[#0F1722]' : 'bg-[#FFFFFF10] text-[#D2E6FA] hover:bg-[#FFFFFF1A]'}`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -705,10 +980,17 @@ export default function Transaction() {
 
           {/* Button */}
           <button 
-            onClick={() => setModalState('confirming')}
+            onClick={() => {
+              if (boatProfile.locked) {
+                setQuizError(null);
+                setModalState('quiz');
+                return;
+              }
+              setModalState('confirming');
+            }}
             className="w-full bg-[#FF5500] hover:bg-[#E04B00] transition-colors py-5 rounded-xl text-white font-['Sora'] font-bold text-lg mt-4 cursor-pointer"
           >
-            Transfer Now
+            {boatProfile.locked ? 'Unlock Account to Continue' : 'Transfer Now'}
           </button>
         </div>
       </div>
@@ -758,6 +1040,58 @@ export default function Transaction() {
       {/* Modals Flow Container */}
       {modalState !== 'idle' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+
+          {modalState === 'quiz' && (
+            <div className="w-[540px] max-w-full bg-[#1A1A1A] border border-[#FF9F0A55] rounded-3xl p-8 flex flex-col gap-5">
+              <h2 className="text-white text-2xl font-bold font-['Sora']">Fraud Prevention Quiz</h2>
+              <p className="text-[#B8C1CC] text-sm">Answer this short quiz to unlock transfers safely.</p>
+
+              <div className="flex flex-col gap-4">
+                {BOAT_QUIZ.map((q, idx) => (
+                  <div key={q.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-white text-sm font-semibold">{idx + 1}. {q.question}</p>
+                    <div className="mt-3 flex flex-col gap-2">
+                      {q.options.map((option, optionIdx) => (
+                        <label key={`${q.id}-${optionIdx}`} className="flex items-center gap-2 text-sm text-[#D2D8E0]">
+                          <input
+                            type="radio"
+                            name={q.id}
+                            checked={quizAnswers[q.id] === optionIdx}
+                            onChange={() => {
+                              setQuizAnswers((prev) => ({ ...prev, [q.id]: optionIdx }));
+                              setQuizError(null);
+                            }}
+                          />
+                          {option}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {quizError && (
+                <p className="text-sm text-[#FFB7B3]">{quizError}</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setModalState('idle')}
+                  className="flex-1 rounded-lg border border-white/20 py-3 text-white font-semibold hover:bg-white/10 transition-colors"
+                >
+                  Later
+                </button>
+                <button
+                  type="button"
+                  onClick={handleQuizSubmit}
+                  className="flex-1 rounded-lg bg-[#FF9F0A] py-3 text-[#1A1A1A] font-semibold hover:bg-[#E68F09] transition-colors"
+                >
+                  Submit Quiz
+                </button>
+              </div>
+            </div>
+          )}
           
           {/* 1. Confirming Modal */}
           {modalState === 'confirming' && (
@@ -808,11 +1142,7 @@ export default function Transaction() {
               <div className="bg-[#32D74B15] px-4 py-2 rounded-full">
                 <span className="text-[#32D74B] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Safe)</span>
               </div>
-              {getBreakdownSummary() && (
-                <p className="text-[#8A8A8A] text-xs text-center">
-                  Context uplift: +{formatPercent(getBreakdownSummary()!.uplift)} | Floor: {formatPercent(getBreakdownSummary()!.appliedFloor)} | Signals: {getBreakdownSummary()!.adjustmentCount}
-                </p>
-              )}
+              <SafetyWeatherCard riskScore={fraudResult?.risk_score ?? 0.1} />
               {renderQrIntegritySummary()}
               <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.recommendation ?? 'Transaction verified and completed successfully.'}</p>
               <button onClick={() => setModalState('idle')} className="w-full bg-[#32D74B] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#2CBF41]">
@@ -831,11 +1161,7 @@ export default function Transaction() {
               <div className="bg-[#FF9F0A15] px-4 py-2 rounded-full">
                 <span className="text-[#FF9F0A] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Careful)</span>
               </div>
-              {getBreakdownSummary() && (
-                <p className="text-[#8A8A8A] text-xs text-center">
-                  Context uplift: +{formatPercent(getBreakdownSummary()!.uplift)} | Floor: {formatPercent(getBreakdownSummary()!.appliedFloor)} | Signals: {getBreakdownSummary()!.adjustmentCount}
-                </p>
-              )}
+              <SafetyWeatherCard riskScore={fraudResult?.risk_score ?? 0.5} />
               {renderQrIntegritySummary()}
               <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'Unusual activity detected. Please verify your identity to continue.'}</p>
               <button onClick={() => setModalState('idle')} className="w-full bg-[#FF9F0A] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E68F09]">
@@ -854,11 +1180,15 @@ export default function Transaction() {
               <div className="bg-[#FF3B3015] px-4 py-2 rounded-full">
                 <span className="text-[#FF3B30] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Danger)</span>
               </div>
-              {getBreakdownSummary() && (
-                <p className="text-[#8A8A8A] text-xs text-center">
-                  Context uplift: +{formatPercent(getBreakdownSummary()!.uplift)} | Floor: {formatPercent(getBreakdownSummary()!.appliedFloor)} | Signals: {getBreakdownSummary()!.adjustmentCount}
-                </p>
+              {fraudResult?.notify_guardian && (
+                <div className="w-full bg-[#32D74B15] border border-[#32D74B40] rounded-lg px-4 py-3 flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-[#32D74B] flex items-center justify-center flex-shrink-0">
+                    <CheckCircle size={16} className="text-[#0C0C0C]" />
+                  </div>
+                  <p className="text-xs text-[#32D74B] font-medium">Your family guardian has been notified about this alert.</p>
+                </div>
               )}
+              <SafetyWeatherCard riskScore={fraudResult?.risk_score ?? 0.9} />
               {renderQrIntegritySummary()}
               <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'This transaction has been blocked due to high fraud risk.'}</p>
               <button onClick={() => setModalState('idle')} className="w-full bg-[#FF3B30] text-white rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E6352B]">

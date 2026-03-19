@@ -278,6 +278,223 @@
   }
 }
 
+@keyframes safety-wave-calm {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes safety-wave-cloudy {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes safety-wave-storm {
+  0%, 100% {
+    transform: translateY(0px) scaleX(1);
+  }
+  25% {
+    transform: translateY(-10px) scaleX(1.02);
+  }
+  50% {
+    transform: translateY(4px) scaleX(0.98);
+  }
+  75% {
+    transform: translateY(-8px) scaleX(1.02);
+  }
+}
+
+@keyframes safety-boat-calm {
+  0%, 100% {
+    transform: translateY(0px) rotate(-0.5deg);
+  }
+  50% {
+    transform: translateY(-2px) rotate(0.8deg);
+  }
+}
+
+@keyframes safety-boat-rock {
+  0%, 100% {
+    transform: translateY(0px) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(4deg);
+  }
+}
+
+@keyframes safety-cloud-drift {
+  0%, 100% {
+    transform: translateX(0px);
+  }
+  50% {
+    transform: translateX(-6px);
+  }
+}
+
+@keyframes safety-rain-sweep {
+  0% {
+    background-position: 0 -50px;
+  }
+  100% {
+    background-position: -30px 50px;
+  }
+}
+
+@keyframes safety-sun-pulse {
+  0%, 100% {
+    opacity: 0.85;
+    transform: scale(1);
+    filter: drop-shadow(0 0 8px rgba(255, 231, 154, 0.35));
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 14px rgba(255, 231, 154, 0.55));
+  }
+}
+
+@keyframes safety-frame-pulse-cloudy {
+  0%, 100% {
+    border-color: rgba(255, 159, 10, 0.35);
+    box-shadow: 0 0 0 rgba(255, 159, 10, 0.0);
+  }
+  50% {
+    border-color: rgba(255, 159, 10, 0.65);
+    box-shadow: 0 0 20px rgba(255, 159, 10, 0.22);
+  }
+}
+
+@keyframes safety-frame-pulse-storm {
+  0%, 100% {
+    border-color: rgba(255, 59, 48, 0.5);
+    box-shadow: 0 0 0 rgba(255, 59, 48, 0.0);
+  }
+  50% {
+    border-color: rgba(255, 59, 48, 0.85);
+    box-shadow: 0 0 26px rgba(255, 59, 48, 0.35);
+  }
+}
+
+@keyframes safety-visual-jolt {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10% {
+    transform: translateX(-0.8px);
+  }
+  20% {
+    transform: translateX(0.8px);
+  }
+  30% {
+    transform: translateX(-0.6px);
+  }
+  40% {
+    transform: translateX(0.6px);
+  }
+  50% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes safety-storm-flash {
+  0%, 100% {
+    opacity: 0.2;
+  }
+  8% {
+    opacity: 0.45;
+  }
+  12% {
+    opacity: 0.22;
+  }
+  42% {
+    opacity: 0.4;
+  }
+  46% {
+    opacity: 0.2;
+  }
+}
+
+.safety-sea-calm {
+  background: linear-gradient(180deg, rgba(142, 210, 247, 0.42) 0%, rgba(78, 154, 212, 0.58) 45%, rgba(20, 76, 128, 0.95) 100%);
+  animation: safety-wave-calm 4s ease-in-out infinite;
+}
+
+.safety-sea-cloudy {
+  background: linear-gradient(180deg, rgba(136, 149, 164, 0.26) 0%, rgba(88, 110, 133, 0.56) 40%, rgba(31, 49, 69, 0.98) 100%);
+  animation: safety-wave-cloudy 2.6s ease-in-out infinite;
+}
+
+.safety-sea-storm {
+  background: linear-gradient(180deg, rgba(133, 60, 80, 0.25) 0%, rgba(100, 30, 48, 0.62) 35%, rgba(39, 12, 20, 1) 100%);
+  animation: safety-wave-storm 1.3s ease-in-out infinite;
+}
+
+.safety-sea-storm::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 76, 76, 0.1) 100%);
+  animation: safety-storm-flash 2.6s linear infinite;
+}
+
+.safety-boat-calm {
+  animation: safety-boat-calm 3.5s ease-in-out infinite;
+}
+
+.safety-boat-cloudy,
+.safety-boat-storm {
+  animation: safety-boat-rock 1.4s ease-in-out infinite;
+}
+
+.safety-cloud-drift {
+  animation: safety-cloud-drift 3.5s ease-in-out infinite;
+}
+
+.safety-rain-lines {
+  background-image: repeating-linear-gradient(
+    -28deg,
+    rgba(230, 239, 255, 0.18) 0,
+    rgba(230, 239, 255, 0.18) 2px,
+    transparent 2px,
+    transparent 11px
+  );
+  animation: safety-rain-sweep 0.8s linear infinite;
+}
+
+.safety-sun-glow {
+  border-bottom-left-radius: 9999px;
+  background: radial-gradient(circle at top right, rgba(191, 231, 255, 0.28) 0%, rgba(135, 202, 244, 0.18) 36%, rgba(77, 158, 217, 0.08) 62%, transparent 85%);
+}
+
+.safety-sun-icon {
+  animation: safety-sun-pulse 3.2s ease-in-out infinite;
+}
+
+.safety-frame-calm {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.safety-frame-cloudy {
+  border-color: rgba(255, 159, 10, 0.45);
+  animation: safety-frame-pulse-cloudy 1.8s ease-in-out infinite;
+}
+
+.safety-frame-storm {
+  border-color: rgba(255, 59, 48, 0.65);
+  animation: safety-frame-pulse-storm 1.15s ease-in-out infinite;
+}
+
+.safety-visual-jolt {
+  animation: safety-visual-jolt 0.9s ease-in-out infinite;
+}
+
 @keyframes neon-flicker {
   0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
     opacity: 1;

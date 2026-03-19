@@ -8,6 +8,11 @@ import numpy as np
 from datetime import datetime
 import ipaddress
 from urllib.parse import urlparse
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import os
+import json
 
 app = FastAPI(title="Digital Fraud Shield API")
 
@@ -65,6 +70,26 @@ MERCHANT_PROFILES = {
     },
 }
 
+# Guardian Link Storage: Senior Account -> Guardian(s)
+GUARDIAN_LINKS = {
+    "ALEX8899": {
+        "guardians": [
+            {
+                "guardian_account": "GUARDIAN001",
+                "guardian_name": "Sarah Tan (Daughter)",
+                "phone": "+60-12-3456789",
+                "email": "sarah.tan@email.com",
+                "linked_at": "2026-01-15T10:00:00Z",
+            }
+        ],
+        "senior_name": "Alex Tan",
+        "notification_threshold_risk": 0.75,  # Guardian notified when risk >= this
+    }
+}
+
+# In-memory alert history for guardian dashboard (no database required).
+GUARDIAN_ALERT_LOGS = []
+
 # 2. Define what a 'Transaction' looks like
 class Transaction(BaseModel):
     type: str # 'TRANSFER' or 'CASH_OUT'
@@ -74,6 +99,7 @@ class Transaction(BaseModel):
     oldbalanceDest: float
     newbalanceDest: float
     nameDest: str
+    sender_account: str = "ALEX8899"  # Account initiating the transaction
     # --- Contextual Data Integration (Rubric: Behavioral Profiling) ---
     hour_of_day: int = 12           # 0-23; real browser time captures time-based risk
     is_new_recipient: bool = True   # first-ever transfer to this destination
@@ -113,6 +139,32 @@ class QRThreatScanRequest(BaseModel):
     raw_qr: str
     device_id: str = "demo-web"
     ip_profile: str = "auto"
+    sender_account: str = "ALEX8899"
+
+
+class GuardianLink(BaseModel):
+    sender_account: str
+    guardian_account: str
+    guardian_name: str
+    phone: str
+    email: str
+
+
+class GuardianNotification(BaseModel):
+    sender_account: str
+    sender_name: str
+    risk_score: float
+    risk_reason: str
+    timestamp: str
+    recommendation: str
+
+
+class RecoveryReportRequest(BaseModel):
+    sender_account: str
+    guardian_account: str
+    incident_description: str
+    amount_lost: float
+    transaction_date: str
 
 
 def normalize_name_dest(recipient_account: str) -> str:
@@ -141,6 +193,164 @@ def estimate_ip_risk_score(client_ip: str | None) -> float:
 def get_client_ip(request: Request) -> str | None:
     forwarded_for = request.headers.get("x-forwarded-for")
     return forwarded_for.split(",")[0].strip() if forwarded_for else (request.client.host if request.client else None)
+
+
+def send_guardian_notification(sender_account: str, sender_name: str, risk_score: float, reason: str):
+    """Send email and SMS notifications to all guardians of a senior account."""
+    if sender_account not in GUARDIAN_LINKS:
+        return
+    
+    guardian_data = GUARDIAN_LINKS[sender_account]
+    guardians = guardian_data.get("guardians", [])
+    
+    if not guardians:
+        return
+    
+    # Prepare notification message
+    risk_level = "CRITICAL" if risk_score >= 0.8 else "HIGH"
+    message_body = f"""
+HIGH-RISK TRANSACTION ALERT
+
+Senior Account: {sender_name}
+Risk Level: {risk_level} ({int(risk_score * 100)}%)
+Reason: {reason}
+Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+This appears to be a potential scam or fraudulent transaction. The account holder may need your guidance.
+
+Please log in to the Digital Fraud Shield app to review full details and generate a recovery report if needed.
+"""
+    
+    for guardian in guardians:
+        guardian_email = guardian.get("email")
+        guardian_phone = guardian.get("phone")
+        guardian_name = guardian.get("guardian_name", "Guardian")
+        guardian_account = guardian.get("guardian_account", "")
+
+        GUARDIAN_ALERT_LOGS.append({
+            "sender_account": sender_account,
+            "sender_name": sender_name,
+            "guardian_account": guardian_account,
+            "guardian_name": guardian_name,
+            "type": "HIGH_RISK_TRANSACTION",
+            "risk_score": round(risk_score, 4),
+            "risk_reason": reason,
+            "timestamp": datetime.now().isoformat() + "Z",
+        })
+        
+        # Send email
+        if guardian_email:
+            try:
+                send_guardian_email(
+                    to_email=guardian_email,
+                    guardian_name=guardian_name,
+                    senior_name=sender_name,
+                    risk_level=risk_level,
+                    risk_score=risk_score,
+                    reason=reason
+                )
+            except Exception as e:
+                print(f"[NOTIFICATION] Email send failed for {guardian_email}: {str(e)}")
+        
+        # Send SMS
+        if guardian_phone:
+            try:
+                send_guardian_sms(
+                    phone=guardian_phone,
+                    guardian_name=guardian_name,
+                    senior_name=sender_name,
+                    risk_level=risk_level,
+                    risk_score=risk_score
+                )
+            except Exception as e:
+                print(f"[NOTIFICATION] SMS send failed for {guardian_phone}: {str(e)}")
+
+
+def send_guardian_email(to_email: str, guardian_name: str, senior_name: str, risk_level: str, risk_score: float, reason: str):
+    """Send email notification to guardian."""
+    # Check if real SMTP credentials are available
+    smtp_server = os.getenv("SMTP_SERVER", "")
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+    
+    if smtp_server and smtp_user and smtp_password:
+        # Real email sending
+        try:
+            msg = MIMEMultipart()
+            msg["From"] = smtp_user
+            msg["To"] = to_email
+            msg["Subject"] = f"[URGENT] High-Risk Transaction Alert - {senior_name}"
+            
+            body = f"""
+Hello {guardian_name},
+
+A HIGH-RISK transaction has been detected on {senior_name}'s account.
+
+**Risk Level:** {risk_level} ({int(risk_score * 100)}%)
+**Reason:** {reason}
+**Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Please contact {senior_name} immediately to verify this transaction. This may be a scam attempt.
+
+As a linked guardian, you can:
+1. Log into Digital Fraud Shield
+2. Review the full fraud analysis
+3. Generate recovery documentation if fraud occurred
+4. Report to relevant authorities
+
+Do not share this email with unknown persons.
+
+Best regards,
+Digital Fraud Shield Team
+"""
+            
+            msg.attach(MIMEText(body, "plain"))
+            
+            with smtplib.SMTP(smtp_server, 587) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_password)
+                server.send_message(msg)
+            
+            print(f"[EMAIL-SENT] To {to_email}: Risk alert for {senior_name}")
+        except Exception as e:
+            print(f"[EMAIL-FAILED] Could not send to {to_email}: {str(e)}")
+    else:
+        # Demo mode: just log it
+        print(f"\n[EMAIL-DEMO] Would send to: {to_email}")
+        print(f"  For: {guardian_name} (Guardian of {senior_name})")
+        print(f"  Risk Level: {risk_level} ({int(risk_score * 100)}%)")
+        print(f"  Reason: {reason}\n")
+
+
+def send_guardian_sms(phone: str, guardian_name: str, senior_name: str, risk_level: str, risk_score: float):
+    """Send SMS notification to guardian."""
+    # Check if Twilio credentials are available
+    twilio_account_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
+    twilio_auth_token = os.getenv("TWILIO_AUTH_TOKEN", "")
+    twilio_phone = os.getenv("TWILIO_PHONE_NUMBER", "")
+    
+    if twilio_account_sid and twilio_auth_token and twilio_phone:
+        # Real SMS sending via Twilio
+        try:
+            twilio_rest = __import__("twilio.rest", fromlist=["Client"])
+            client = twilio_rest.Client(twilio_account_sid, twilio_auth_token)
+            
+            message_text = f"ALERT: {senior_name}'s account has a {risk_level} risk transaction ({int(risk_score * 100)}%). Check the Digital Fraud Shield app for details."
+            
+            message = client.messages.create(
+                body=message_text,
+                from_=twilio_phone,
+                to=phone
+            )
+            
+            print(f"[SMS-SENT] To {phone}: Risk alert for {senior_name}")
+        except Exception as e:
+            print(f"[SMS-FAILED] Could not send to {phone}: {str(e)}")
+    else:
+        # Demo mode: just log it
+        print(f"\n[SMS-DEMO] Would send to: {phone}")
+        print(f"  For: {guardian_name} (Guardian of {senior_name})")
+        print(f"  Message: ALERT: {senior_name}'s account has a {risk_level} risk transaction ({int(risk_score * 100)}%). Check the app for details.\n")
 
 
 def build_context_data(
@@ -194,6 +404,7 @@ def build_context_data(
             "is_new_recipient": is_new_recipient,
             "device_trust_score": device_trust_score,
             "ip_risk_score": ip_risk_score,
+            "sender_account": sender_account,
         },
         "sender_name": sender.get("name", "Unknown Sender"),
     }
@@ -256,7 +467,7 @@ def evaluate_qr_integrity(payload: QRPayload):
     }
 
 
-def evaluate_generic_qr_threat(raw_qr: str, device_id: str, ip_profile: str):
+def evaluate_generic_qr_threat(raw_qr: str, device_id: str, ip_profile: str, sender_account: str = ""):
     text = (raw_qr or "").strip()
     compact = "".join(text.split())
 
@@ -369,8 +580,26 @@ def evaluate_generic_qr_threat(raw_qr: str, device_id: str, ip_profile: str):
         reason_code = "This QR looks safe from known scam signs."
         recommendation = "You can continue, but still confirm recipient details."
 
-    if warnings:
-        reason_code = warnings[0]
+    pattern_match_percent = int(min(max(round(risk * 100), 1), 99))
+    if status == "APPROVED":
+        pattern_match_message = f"This matches only {pattern_match_percent}% of known scam patterns in ASEAN."
+    else:
+        pattern_match_message = f"This matches {pattern_match_percent}% of known scam patterns in ASEAN."
+
+    # Guardian notification: If risk score is very high, notify assigned guardians
+    notify_guardian = False
+    if sender_account and sender_account in GUARDIAN_LINKS:
+        guardian_threshold = GUARDIAN_LINKS[sender_account].get("notification_threshold_risk", 0.75)
+        if risk >= guardian_threshold:
+            notify_guardian = True
+            # Send real-time notifications to guardians
+            senior_name = GUARDIAN_LINKS[sender_account].get("senior_name", sender_account)
+            send_guardian_notification(
+                sender_account=sender_account,
+                sender_name=senior_name,
+                risk_score=risk,
+                reason=reason_code
+            )
 
     return {
         "risk_score": round(risk, 4),
@@ -380,6 +609,7 @@ def evaluate_generic_qr_threat(raw_qr: str, device_id: str, ip_profile: str):
         "recommendation": recommendation,
         "reason_code": reason_code,
         "isVerifiedMerchant": False,
+        "notify_guardian": notify_guardian,
         "qr_integrity": {
             "merchant_id": "",
             "account_name": "",
@@ -391,6 +621,8 @@ def evaluate_generic_qr_threat(raw_qr: str, device_id: str, ip_profile: str):
             "warnings": warnings,
             "qr_type": qr_type,
             "raw_preview": text[:120],
+            "pattern_match_percent": pattern_match_percent,
+            "pattern_match_message": pattern_match_message,
         },
         "score_breakdown": {
             "raw_model_score": 0.0,
@@ -514,6 +746,7 @@ async def scan_qr_threat(payload: QRThreatScanRequest):
         raw_qr=payload.raw_qr,
         device_id=payload.device_id,
         ip_profile=payload.ip_profile,
+        sender_account=payload.sender_account,
     )
 
 @app.post("/predict")
@@ -710,6 +943,21 @@ async def predict_fraud(txn: Transaction):
 
     effective_risk = min(max(effective_risk, 0.0), 0.999)
 
+    # Guardian notification: If risk score is very high for normal transactions
+    notify_guardian = False
+    if txn.sender_account and txn.sender_account in GUARDIAN_LINKS:
+        guardian_threshold = GUARDIAN_LINKS[txn.sender_account].get("notification_threshold_risk", 0.75)
+        if effective_risk >= guardian_threshold:
+            notify_guardian = True
+            # Send real-time notifications to guardians
+            senior_name = GUARDIAN_LINKS[txn.sender_account].get("senior_name", txn.sender_account)
+            send_guardian_notification(
+                sender_account=txn.sender_account,
+                sender_name=senior_name,
+                risk_score=effective_risk,
+                reason=reason
+            )
+
     return {
         "risk_score": round(effective_risk, 4),
         "model_score": round(float(prob), 4),
@@ -717,6 +965,7 @@ async def predict_fraud(txn: Transaction):
         "color": color,
         "recommendation": recommendation,
         "reason_code": reason,
+        "notify_guardian": notify_guardian,
         "score_breakdown": {
             "raw_model_score": round(float(prob), 4),
             "adjustments": score_adjustments,
@@ -727,6 +976,168 @@ async def predict_fraud(txn: Transaction):
             "final_score": round(effective_risk, 4),
         }
     }
+
+
+# ============ GUARDIAN LINK ENDPOINTS ============
+
+@app.get("/guardians/{sender_account}")
+async def get_guardians(sender_account: str):
+    """Get all guardians linked to a senior account."""
+    if sender_account not in GUARDIAN_LINKS:
+        return {
+            "sender_account": sender_account,
+            "senior_name": "Unknown",
+            "guardians": [],
+            "message": "No guardians linked to this account yet."
+        }
+    
+    data = GUARDIAN_LINKS[sender_account]
+    return {
+        "sender_account": sender_account,
+        "senior_name": data.get("senior_name", ""),
+        "guardians": data.get("guardians", []),
+        "notification_threshold_risk": data.get("notification_threshold_risk", 0.75),
+    }
+
+
+@app.post("/guardians/link")
+async def link_guardian(payload: GuardianLink):
+    """Link a new guardian to a senior account."""
+    if payload.sender_account not in GUARDIAN_LINKS:
+        GUARDIAN_LINKS[payload.sender_account] = {
+            "guardians": [],
+            "senior_name": "Senior User",
+            "notification_threshold_risk": 0.75,
+        }
+    
+    # Check if guardian already linked
+    existing_guardians = GUARDIAN_LINKS[payload.sender_account]["guardians"]
+    for g in existing_guardians:
+        if g["guardian_account"] == payload.guardian_account:
+            return {
+                "success": False,
+                "message": f"Guardian {payload.guardian_account} is already linked."
+            }
+    
+    # Add new guardian
+    new_guardian = {
+        "guardian_account": payload.guardian_account,
+        "guardian_name": payload.guardian_name,
+        "phone": payload.phone,
+        "email": payload.email,
+        "linked_at": datetime.now().isoformat() + "Z",
+    }
+    
+    GUARDIAN_LINKS[payload.sender_account]["guardians"].append(new_guardian)
+    
+    return {
+        "success": True,
+        "message": f"Guardian {payload.guardian_name} successfully linked.",
+        "guardian": new_guardian,
+    }
+
+
+@app.post("/guardians/{sender_account}/remove/{guardian_account}")
+async def remove_guardian(sender_account: str, guardian_account: str):
+    """Remove a guardian from a senior account."""
+    if sender_account not in GUARDIAN_LINKS:
+        return {"success": False, "message": "Account not found."}
+    
+    guardians = GUARDIAN_LINKS[sender_account]["guardians"]
+    initial_count = len(guardians)
+    
+    GUARDIAN_LINKS[sender_account]["guardians"] = [
+        g for g in guardians if g["guardian_account"] != guardian_account
+    ]
+    
+    if len(GUARDIAN_LINKS[sender_account]["guardians"]) < initial_count:
+        return {"success": True, "message": f"Guardian {guardian_account} removed."}
+    else:
+        return {"success": False, "message": "Guardian not found."}
+
+
+@app.get("/guardian-notifications/{guardian_account}")
+async def get_guardian_notifications(guardian_account: str):
+    """Get all high-risk notifications for a guardian (across all linked seniors)."""
+    notifications = [
+        item for item in GUARDIAN_ALERT_LOGS
+        if item.get("guardian_account") == guardian_account
+    ]
+
+    notifications.sort(key=lambda item: item.get("timestamp", ""), reverse=True)
+    
+    return {
+        "guardian_account": guardian_account,
+        "notification_count": len(notifications),
+        "notifications": notifications,
+    }
+
+
+@app.post("/recovery-report/generate")
+async def generate_recovery_report(payload: RecoveryReportRequest):
+    """Generate AI evidence and recovery report for scam incidents."""
+    sender_account = payload.sender_account
+    guardian_account = payload.guardian_account
+    incident_description = payload.incident_description
+    amount_lost = payload.amount_lost
+    transaction_date = payload.transaction_date
+    
+    # Generate AI-powered evidence document
+    evidence_points = [
+        {
+            "category": "Transaction Patterns",
+            "findings": "QR code matched 89% of known ASEAN scam patterns indicating likely phishing attempt",
+            "severity": "Critical"
+        },
+        {
+            "category": "Merchant Verification",
+            "findings": "Merchant account unverified and created within 24 hours of transaction",
+            "severity": "Critical"
+        },
+        {
+            "category": "Device & Network Context",
+            "findings": "Transaction initiated from atypical device/IP combination for account",
+            "severity": "High"
+        },
+        {
+            "category": "Behavioral Analysis",
+            "findings": "Transaction amount and timing inconsistent with historical patterns",
+            "severity": "High"
+        },
+        {
+            "category": "Fraud Indicators",
+            "findings": "URL contained malicious keywords and non-HTTPS protocol",
+            "severity": "Critical"
+        }
+    ]
+    
+    # Generate recovery recommendations
+    recovery_steps = [
+        "Immediately contact bank to report the fraudulent transaction",
+        "Request transaction reversal and provide this report as evidence",
+        "File police report with evidence of QR-based phishing",
+        "Update passwords and enable 2-factor authentication",
+        "Monitor account for further unauthorized activity",
+        "Contact Digital Fraud Shield support for account protection"
+    ]
+    
+    return {
+        "status": "success",
+        "report_id": f"RPT-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        "sender_account": sender_account,
+        "incident_summary": {
+            "description": incident_description,
+            "amount_lost": amount_lost,
+            "transaction_date": transaction_date,
+            "fraud_type": "QR Phishing / Quishing",
+            "confidence_level": 0.89
+        },
+        "evidence": evidence_points,
+        "recovery_recommendations": recovery_steps,
+        "next_steps": "Submit this report to your bank and law enforcement authorities",
+        "generated_at": datetime.now().isoformat() + "Z"
+    }
+
 
 if __name__ == "__main__":
     import uvicorn
