@@ -845,6 +845,16 @@ export default function Transaction() {
               <div className="rounded-xl border border-[#FF3B30]/40 bg-[#FF3B30]/12 px-4 py-3">
                 <p className="text-sm text-[#FFD4D1] font-medium">Your account is paused for safety.</p>
                 <p className="text-xs text-[#FFC7C3] mt-1">Complete the quick fraud prevention quiz to unlock transfers.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuizError(null);
+                    setModalState('quiz');
+                  }}
+                  className="mt-3 rounded-lg bg-[#FF9F0A] px-3 py-2 text-xs font-semibold text-[#111111] hover:bg-[#E68F09]"
+                >
+                  Take Quiz to Unlock
+                </button>
               </div>
             )}
           </div>
@@ -1191,6 +1201,17 @@ export default function Transaction() {
               <SafetyWeatherCard riskScore={fraudResult?.risk_score ?? 0.9} />
               {renderQrIntegritySummary()}
               <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'This transaction has been blocked due to high fraud risk.'}</p>
+              {boatProfile.locked && (
+                <button
+                  onClick={() => {
+                    setQuizError(null);
+                    setModalState('quiz');
+                  }}
+                  className="w-full bg-[#FF9F0A] text-[#111111] rounded-lg py-3 font-semibold text-[14px] cursor-pointer hover:bg-[#E68F09]"
+                >
+                  Unlock with Safety Quiz
+                </button>
+              )}
               <button onClick={() => setModalState('idle')} className="w-full bg-[#FF3B30] text-white rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E6352B]">
                 Contact Support
               </button>
