@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X } from 'lucide-react';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { FRAUD_API_BASE_URL } from '@/const';
 import { useFraudEvents } from '@/contexts/FraudEventsContext';
 
@@ -109,6 +110,19 @@ type FraudResult = {
   color: string;
   recommendation: string;
   reason_code: string;
+  isVerifiedMerchant?: boolean;
+  qr_integrity?: {
+    merchant_id: string;
+    account_name: string;
+    provider: string;
+    is_verified_merchant: boolean;
+    merchant_age_hours: number;
+    high_error_balance_ratio: number;
+    signature_valid: boolean;
+    warnings: string[];
+    qr_type?: string;
+    raw_preview?: string;
+  };
   score_breakdown?: {
     raw_model_score: number;
     adjustments: Array<{ factor: string; delta: number }>;
@@ -134,6 +148,128 @@ type ContextResult = {
   ip_risk_score: number;
 };
 
+type QrPayload = {
+  merchant_id?: string;
+  account_name?: string;
+  provider?: string;
+  amount?: number;
+  currency?: string;
+  created_at?: string;
+  signature?: string;
+  account_created_at?: string;
+  high_error_balance_ratio?: number;
+  is_verified_merchant?: boolean;
+};
+
+function parseTlv(raw: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  let idx = 0;
+
+  while (idx + 4 <= raw.length) {
+    const tag = raw.slice(idx, idx + 2);
+    const lengthStr = raw.slice(idx + 2, idx + 4);
+    if (!/^\d{2}$/.test(tag) || !/^\d{2}$/.test(lengthStr)) break;
+    const length = Number(lengthStr);
+    if (!Number.isFinite(length) || length < 0) break;
+
+    const valueStart = idx + 4;
+    const valueEnd = valueStart + length;
+    if (valueEnd > raw.length) break;
+
+    out[tag] = raw.slice(valueStart, valueEnd);
+    idx = valueEnd;
+  }
+
+  return out;
+}
+
+function parseEmvCoPayload(raw: string): QrPayload | null {
+  // EMVCo merchant-presented mode usually starts with 000201...
+  const compact = raw.replace(/\s+/g, '');
+  if (!/^0002\d{2}/.test(compact)) return null;
+
+  const root = parseTlv(compact);
+
+  let merchantId: string | undefined;
+  let provider: string | undefined;
+
+  // Merchant account info is typically in tags 26..51.
+  for (let tag = 26; tag <= 51; tag++) {
+    const key = String(tag).padStart(2, '0');
+    const value = root[key];
+    if (!value) continue;
+
+    const nested = parseTlv(value);
+    const gui = nested['00'];
+    if (!provider && gui) provider = gui;
+
+    merchantId = nested['01'] || nested['02'] || nested['03'] || nested['04'] || merchantId;
+
+    // Some bank payloads keep account/proxy ID as a direct value instead of nested TLV.
+    if (!merchantId && nested['00'] === undefined && value.length >= 6 && value.length <= 40) {
+      merchantId = value;
+    }
+
+    if (merchantId) break;
+  }
+
+  const amountRaw = root['54'];
+  const amount = amountRaw ? Number(amountRaw) : undefined;
+
+  const parsed: QrPayload = {
+    merchant_id: merchantId,
+    account_name: root['59'] || undefined,
+    amount: Number.isFinite(amount) && (amount as number) > 0 ? amount : undefined,
+    currency: root['53'] === '458' ? 'MYR' : (root['53'] || 'MYR'),
+    provider,
+    signature: 'UNKNOWN',
+  };
+
+  if (!parsed.merchant_id && parsed.account_name) {
+    const normalized = parsed.account_name.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+    if (normalized) {
+      parsed.merchant_id = `M${normalized.slice(0, 18)}`;
+    }
+  }
+
+  if (!parsed.merchant_id && !parsed.account_name) return null;
+  return parsed;
+}
+
+function parseQrPayload(raw: string): QrPayload | null {
+  const text = raw.trim();
+  const compact = text.replace(/\s+/g, '');
+
+  const emvFirst = parseEmvCoPayload(compact);
+  if (emvFirst) return emvFirst;
+
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === 'object') {
+      return parsed as QrPayload;
+    }
+  } catch {
+    // Fallback to URL-style parsing below.
+  }
+
+  try {
+    const url = new URL(text);
+    const amount = Number(url.searchParams.get('amount') || 0);
+    return {
+      merchant_id: url.searchParams.get('merchant_id') || undefined,
+      account_name: url.searchParams.get('account_name') || undefined,
+      provider: url.searchParams.get('provider') || undefined,
+      amount: Number.isFinite(amount) && amount > 0 ? amount : undefined,
+      currency: url.searchParams.get('currency') || undefined,
+      created_at: url.searchParams.get('created_at') || undefined,
+      signature: url.searchParams.get('signature') || undefined,
+    };
+  } catch {
+    // Fallback for bank/ewallet payment QR encoded as EMVCo TLV.
+    return parseEmvCoPayload(compact);
+  }
+}
+
 export default function Transaction() {
   const { addEvent } = useFraudEvents();
   const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked'>('idle');
@@ -145,6 +281,13 @@ export default function Transaction() {
   const [recipientName, setRecipientName] = useState('');
   const [recipientAccount, setRecipientAccount] = useState('');
   const [fraudResult, setFraudResult] = useState<FraudResult | null>(null);
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
+  const [qrScanError, setQrScanError] = useState<string | null>(null);
+  const [lastQrPreview, setLastQrPreview] = useState<string>('');
+  const [scannedQrPayload, setScannedQrPayload] = useState<QrPayload | null>(null);
+  const [qrScanStatus, setQrScanStatus] = useState<{ tone: 'safe' | 'warn'; message: string } | null>(null);
+  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const scannerRegionId = 'qr-reader-shield';
 
   const getBreakdownSummary = () => {
     const breakdown = fraudResult?.score_breakdown;
@@ -167,6 +310,124 @@ export default function Transaction() {
     return `${percent.toFixed(1)}%`;
   };
 
+  const renderQrIntegritySummary = () => {
+    const qr = fraudResult?.qr_integrity;
+    if (!qr) return null;
+
+    return (
+      <div className="w-full rounded-lg border border-white/10 bg-[#FFFFFF05] px-4 py-3 text-left">
+        <p className="text-xs uppercase tracking-[0.16em] text-[#8A8A8A]">QR Integrity Shield</p>
+        <p className={`mt-1 text-sm font-semibold ${qr.is_verified_merchant ? 'text-[#32D74B]' : 'text-[#FF9F0A]'}`}>
+          Merchant Verification: {qr.is_verified_merchant ? 'Verified' : 'Unverified'}
+        </p>
+        {qr.warnings.length > 0 && (
+          <div className="mt-2 flex flex-col gap-1">
+            {qr.warnings.slice(0, 3).map((warning, index) => (
+              <p key={`${warning}-${index}`} className="text-xs text-[#D0D0D0]">
+                • {warning}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const closeQrScanner = () => {
+    setIsQrScannerOpen(false);
+    if (scannerRef.current) {
+      scannerRef.current.clear().catch(() => undefined);
+      scannerRef.current = null;
+    }
+  };
+
+  const applyResultModal = (result: FraudResult) => {
+    setFraudResult(result);
+    if (result.status === 'APPROVED') setModalState('approved');
+    else if (result.status === 'FLAGGED') setModalState('verification');
+    else setModalState('blocked');
+  };
+
+  const scanQrThreat = async (decodedText: string) => {
+    const response = await fetch(`${FRAUD_API_BASE_URL}/scan-qr-threat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        raw_qr: decodedText,
+        device_id: selectedDeviceId,
+        ip_profile: selectedIpProfile,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Threat scan failed: ${response.status}`);
+    }
+
+    const result: FraudResult = await response.json();
+    return result;
+  };
+
+  useEffect(() => {
+    if (!isQrScannerOpen) return;
+
+    setQrScanError(null);
+    const scanner = new Html5QrcodeScanner(
+      scannerRegionId,
+      {
+        fps: 10,
+        qrbox: { width: 260, height: 260 },
+        rememberLastUsedCamera: true,
+      },
+      false,
+    );
+
+    scannerRef.current = scanner;
+    scanner.render(
+      async (decodedText) => {
+        setLastQrPreview(decodedText.slice(0, 120));
+        try {
+          const threatResult = await scanQrThreat(decodedText);
+
+          const parsed = parseQrPayload(decodedText);
+          if (parsed && (parsed.merchant_id || parsed.account_name)) {
+            setScannedQrPayload(parsed);
+            setRecipientAccount(parsed.merchant_id || parsed.account_name || '');
+            setRecipientName(parsed.account_name || recipientName);
+            if (typeof parsed.amount === 'number' && parsed.amount > 0) {
+              setAmount(String(parsed.amount));
+            }
+            if (parsed.provider) {
+              setSelectedProvider(parsed.provider);
+            }
+          } else {
+            setScannedQrPayload(null);
+          }
+
+          closeQrScanner();
+
+          if (parsed && threatResult.status === 'APPROVED') {
+            setFraudResult(threatResult);
+            setQrScanStatus({ tone: 'safe', message: 'QR checked. Recipient details are filled in for you.' });
+          } else {
+            setQrScanStatus({ tone: 'warn', message: threatResult.reason_code || 'This QR needs caution.' });
+            applyResultModal(threatResult);
+          }
+        } catch (error) {
+          console.error('QR threat scan error:', error);
+          setQrScanError('Unable to scan QR risk right now. Please try again.');
+        }
+      },
+      () => {
+        // Ignore scan frame errors to avoid noisy UI.
+      },
+    );
+
+    return () => {
+      scanner.clear().catch(() => undefined);
+      scannerRef.current = null;
+    };
+  }, [isQrScannerOpen, recipientName]);
+
   const handleProcessTransaction = async () => {
     setModalState('processing');
     try {
@@ -175,26 +436,47 @@ export default function Transaction() {
         throw new Error('Please enter a valid transfer amount greater than 0.');
       }
 
-      const contextResponse = await fetch(`${FRAUD_API_BASE_URL}/context`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sender_account: 'ALEX8899',
-          recipient_account: recipientAccount,
-          amount: amountValue,
-          device_id: selectedDeviceId,
-          ip_profile: selectedIpProfile,
-        }),
-      });
+      let response: Response;
+      if (scannedQrPayload) {
+        response = await fetch(`${FRAUD_API_BASE_URL}/predict-qr`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sender_account: 'ALEX8899',
+            device_id: selectedDeviceId,
+            ip_profile: selectedIpProfile,
+            qr: {
+              ...scannedQrPayload,
+              amount: amountValue,
+              merchant_id: recipientAccount || scannedQrPayload.merchant_id,
+              account_name: recipientName || scannedQrPayload.account_name,
+              provider: selectedProvider,
+            },
+          }),
+        });
+      } else {
+        const contextResponse = await fetch(`${FRAUD_API_BASE_URL}/context`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sender_account: 'ALEX8899',
+            recipient_account: recipientAccount,
+            amount: amountValue,
+            device_id: selectedDeviceId,
+            ip_profile: selectedIpProfile,
+          }),
+        });
 
-      if (!contextResponse.ok) throw new Error(`Context API error: ${contextResponse.status}`);
-      const transactionData: ContextResult = await contextResponse.json();
+        if (!contextResponse.ok) throw new Error(`Context API error: ${contextResponse.status}`);
+        const transactionData: ContextResult = await contextResponse.json();
 
-      const response = await fetch(`${FRAUD_API_BASE_URL}/predict`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(transactionData),
-      });
+        response = await fetch(`${FRAUD_API_BASE_URL}/predict`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(transactionData),
+        });
+      }
+
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const result: FraudResult = await response.json();
       setFraudResult(result);
@@ -245,6 +527,27 @@ export default function Transaction() {
             <p className="text-[#8A8A8A] text-lg">Transfer funds safely with AI-powered fraud monitoring.</p>
           </div>
 
+          <div className="rounded-2xl border border-[#FF5500]/30 bg-[#FF5500]/10 px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex flex-col">
+              <span className="text-xs uppercase tracking-[0.18em] text-[#FF8A4D]">Anti-Scam QR Checker</span>
+              <span className="text-sm text-white">Scan any QR to detect phishing or quishing links before you click or pay.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsQrScannerOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FF5500] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#E04B00] transition-colors cursor-pointer"
+            >
+              <ScanLine size={16} />
+              Scan Any QR for Scam
+            </button>
+          </div>
+
+          {qrScanStatus && (
+            <div className={`rounded-xl px-4 py-3 border ${qrScanStatus.tone === 'safe' ? 'border-[#32D74B]/40 bg-[#32D74B]/10 text-[#C7FFD0]' : 'border-[#FF9F0A]/40 bg-[#FF9F0A]/10 text-[#FFD7A1]'}`}>
+              <span className="text-sm font-medium">{qrScanStatus.message}</span>
+            </div>
+          )}
+
           {/* Sender Information */}
           <div className="flex flex-col gap-6">
             <h2 className="text-white text-lg font-semibold border-b border-white/10 pb-4">Sender Information</h2>
@@ -271,6 +574,24 @@ export default function Transaction() {
           {/* Recipient Information */}
           <div className="flex flex-col gap-6">
             <h2 className="text-white text-lg font-semibold border-b border-white/10 pb-4">Recipient Information</h2>
+            {scannedQrPayload && (
+              <div className="flex items-center justify-between rounded-xl border border-[#FF5500]/30 bg-[#FF5500]/8 px-4 py-3">
+                <div className="flex flex-col">
+                  <span className="text-xs uppercase tracking-[0.18em] text-[#FF8A4D]">QR Integrity Shield</span>
+                  <span className="text-sm text-white">Recipient details loaded from QR.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScannedQrPayload(null);
+                    setQrScanStatus(null);
+                  }}
+                  className="text-xs font-semibold text-[#FF8A4D] hover:text-[#FFAA78] cursor-pointer"
+                >
+                  Clear QR
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
                 <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Recipient Name</label>
@@ -392,6 +713,48 @@ export default function Transaction() {
         </div>
       </div>
 
+      {isQrScannerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-[560px] bg-[#1A1A1A] border border-white/20 rounded-3xl p-6 md:p-8 flex flex-col gap-5 shadow-[0_0_40px_rgba(255,85,0,0.18)]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#FF5500]/15 flex items-center justify-center">
+                  <ScanLine size={20} className="text-[#FF8A4D]" />
+                </div>
+                <div className="flex flex-col">
+                  <h3 className="text-white text-lg font-bold font-['Sora']">QR Integrity Shield</h3>
+                  <p className="text-[#8A8A8A] text-sm">Scan merchant QR and detonate metadata before transfer.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeQrScanner}
+                className="w-9 h-9 rounded-lg border border-white/10 text-[#8A8A8A] hover:text-white hover:border-white/20 flex items-center justify-center cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-[#101010] p-3">
+              <div id={scannerRegionId} className="min-h-[280px] rounded-xl overflow-hidden" />
+            </div>
+
+            {qrScanError && (
+              <div className="rounded-xl border border-[#FF3B30]/40 bg-[#FF3B30]/10 px-4 py-3 text-sm text-[#FFB4AF]">
+                {qrScanError}
+                {lastQrPreview && (
+                  <p className="mt-2 text-xs text-[#FFC9C5] break-all">Decoded preview: {lastQrPreview}</p>
+                )}
+              </div>
+            )}
+
+            <p className="text-xs text-[#8A8A8A]">
+              Scan anything: bank payment QR, e-wallet QR, or suspicious links. The shield will risk-check the decoded content.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Modals Flow Container */}
       {modalState !== 'idle' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -443,14 +806,14 @@ export default function Transaction() {
               </div>
               <h2 className="text-white text-2xl font-bold font-['Sora'] text-center">Status: Approved</h2>
               <div className="bg-[#32D74B15] px-4 py-2 rounded-full">
-                <span className="text-[#32D74B] font-semibold text-sm">Risk Score: {formatPercent(fraudResult?.risk_score)} (Low)</span>
+                <span className="text-[#32D74B] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Safe)</span>
               </div>
-              <p className="text-[#8A8A8A] text-xs text-center">Raw ML Score: {formatPercent(fraudResult?.model_score)}</p>
               {getBreakdownSummary() && (
                 <p className="text-[#8A8A8A] text-xs text-center">
                   Context uplift: +{formatPercent(getBreakdownSummary()!.uplift)} | Floor: {formatPercent(getBreakdownSummary()!.appliedFloor)} | Signals: {getBreakdownSummary()!.adjustmentCount}
                 </p>
               )}
+              {renderQrIntegritySummary()}
               <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.recommendation ?? 'Transaction verified and completed successfully.'}</p>
               <button onClick={() => setModalState('idle')} className="w-full bg-[#32D74B] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#2CBF41]">
                 Done
@@ -466,14 +829,14 @@ export default function Transaction() {
               </div>
               <h2 className="text-white text-[22px] font-bold font-['Sora'] text-center leading-tight">Status: Verification Required</h2>
               <div className="bg-[#FF9F0A15] px-4 py-2 rounded-full">
-                <span className="text-[#FF9F0A] font-semibold text-sm">Risk Score: {formatPercent(fraudResult?.risk_score)} (Medium)</span>
+                <span className="text-[#FF9F0A] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Careful)</span>
               </div>
-              <p className="text-[#8A8A8A] text-xs text-center">Raw ML Score: {formatPercent(fraudResult?.model_score)}</p>
               {getBreakdownSummary() && (
                 <p className="text-[#8A8A8A] text-xs text-center">
                   Context uplift: +{formatPercent(getBreakdownSummary()!.uplift)} | Floor: {formatPercent(getBreakdownSummary()!.appliedFloor)} | Signals: {getBreakdownSummary()!.adjustmentCount}
                 </p>
               )}
+              {renderQrIntegritySummary()}
               <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'Unusual activity detected. Please verify your identity to continue.'}</p>
               <button onClick={() => setModalState('idle')} className="w-full bg-[#FF9F0A] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E68F09]">
                 Verify Identity
@@ -489,14 +852,14 @@ export default function Transaction() {
               </div>
               <h2 className="text-white text-[22px] font-bold font-['Sora'] text-center">Status: Transaction Blocked</h2>
               <div className="bg-[#FF3B3015] px-4 py-2 rounded-full">
-                <span className="text-[#FF3B30] font-semibold text-sm">Risk Score: {formatPercent(fraudResult?.risk_score)} (High)</span>
+                <span className="text-[#FF3B30] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Danger)</span>
               </div>
-              <p className="text-[#8A8A8A] text-xs text-center">Raw ML Score: {formatPercent(fraudResult?.model_score)}</p>
               {getBreakdownSummary() && (
                 <p className="text-[#8A8A8A] text-xs text-center">
                   Context uplift: +{formatPercent(getBreakdownSummary()!.uplift)} | Floor: {formatPercent(getBreakdownSummary()!.appliedFloor)} | Signals: {getBreakdownSummary()!.adjustmentCount}
                 </p>
               )}
+              {renderQrIntegritySummary()}
               <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'This transaction has been blocked due to high fraud risk.'}</p>
               <button onClick={() => setModalState('idle')} className="w-full bg-[#FF3B30] text-white rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E6352B]">
                 Contact Support

@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import ipaddress
+from urllib.parse import urlparse
 
 app = FastAPI(title="Digital Fraud Shield API")
 
@@ -47,6 +48,23 @@ DEVICE_TRUST_SCORES = {
     "demo-new-device": 0.35,
 }
 
+MERCHANT_PROFILES = {
+    "M77889": {
+        "account_name": "Demo Merchant",
+        "provider": "Touch n Go eWallet",
+        "created_at": "2026-01-01T12:00:00Z",
+        "is_verified_merchant": True,
+        "error_balance_ratio": 0.04,
+    },
+    "M99001": {
+        "account_name": "FreshMart Pop-up",
+        "provider": "Boost",
+        "created_at": "2026-03-19T08:00:00Z",
+        "is_verified_merchant": False,
+        "error_balance_ratio": 0.31,
+    },
+}
+
 # 2. Define what a 'Transaction' looks like
 class Transaction(BaseModel):
     type: str # 'TRANSFER' or 'CASH_OUT'
@@ -67,6 +85,32 @@ class ContextRequest(BaseModel):
     sender_account: str
     recipient_account: str
     amount: float
+    device_id: str = "demo-web"
+    ip_profile: str = "auto"
+
+
+class QRPayload(BaseModel):
+    merchant_id: str | None = None
+    account_name: str | None = None
+    provider: str | None = None
+    amount: float
+    currency: str = "MYR"
+    created_at: str | None = None
+    signature: str | None = None
+    account_created_at: str | None = None
+    high_error_balance_ratio: float | None = None
+    is_verified_merchant: bool | None = None
+
+
+class QRTransferRequest(BaseModel):
+    sender_account: str
+    device_id: str = "demo-web"
+    ip_profile: str = "auto"
+    qr: QRPayload
+
+
+class QRThreatScanRequest(BaseModel):
+    raw_qr: str
     device_id: str = "demo-web"
     ip_profile: str = "auto"
 
@@ -94,54 +138,383 @@ def estimate_ip_risk_score(client_ip: str | None) -> float:
         return 0.4
 
 
-@app.post("/context")
-async def build_transaction_context(payload: ContextRequest, request: Request):
-    sender_key = payload.sender_account.strip().upper()
+def get_client_ip(request: Request) -> str | None:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    return forwarded_for.split(",")[0].strip() if forwarded_for else (request.client.host if request.client else None)
+
+
+def build_context_data(
+    sender_account: str,
+    recipient_account: str,
+    amount: float,
+    device_id: str,
+    ip_profile: str,
+    request: Request,
+):
+    sender_key = sender_account.strip().upper()
     sender = SENDER_PROFILES.get(sender_key, {
         "name": "Unknown Sender",
         "balance": 5000.0,
         "known_recipients": set(),
     })
 
-    name_dest = normalize_name_dest(payload.recipient_account)
+    name_dest = normalize_name_dest(recipient_account)
     oldbalance_org = float(sender["balance"])
-    amount = max(float(payload.amount), 0.0)
-    newbalance_orig = max(0.0, oldbalance_org - amount)
+    safe_amount = max(float(amount), 0.0)
+    newbalance_orig = max(0.0, oldbalance_org - safe_amount)
 
     recipient_profile = RECIPIENT_PROFILES.get(name_dest, {"oldbalanceDest": 0.0})
     oldbalance_dest = float(recipient_profile["oldbalanceDest"])
-    newbalance_dest = oldbalance_dest + amount
+    newbalance_dest = oldbalance_dest + safe_amount
 
     known_recipients = sender.get("known_recipients", set())
     is_new_recipient = name_dest not in known_recipients
 
-    forwarded_for = request.headers.get("x-forwarded-for")
-    client_ip = forwarded_for.split(",")[0].strip() if forwarded_for else (request.client.host if request.client else None)
+    client_ip = get_client_ip(request)
 
-    device_trust_score = DEVICE_TRUST_SCORES.get(payload.device_id, 0.55)
-    ip_profile = payload.ip_profile.strip().lower()
-    if ip_profile == "risky":
+    device_trust_score = DEVICE_TRUST_SCORES.get(device_id, 0.55)
+    resolved_ip_profile = ip_profile.strip().lower()
+    if resolved_ip_profile == "risky":
         ip_risk_score = 0.9
-    elif ip_profile == "clean":
+    elif resolved_ip_profile == "clean":
         ip_risk_score = 0.05
     else:
         ip_risk_score = estimate_ip_risk_score(client_ip)
 
     return {
-        "type": "TRANSFER",
-        "nameDest": name_dest,
-        "amount": amount,
-        "oldbalanceOrg": oldbalance_org,
-        "newbalanceOrig": newbalance_orig,
-        "oldbalanceDest": oldbalance_dest,
-        "newbalanceDest": newbalance_dest,
-        "hour_of_day": datetime.now().hour,
-        "is_new_recipient": is_new_recipient,
-        "device_trust_score": device_trust_score,
-        "ip_risk_score": ip_risk_score,
+        "context": {
+            "type": "TRANSFER",
+            "nameDest": name_dest,
+            "amount": safe_amount,
+            "oldbalanceOrg": oldbalance_org,
+            "newbalanceOrig": newbalance_orig,
+            "oldbalanceDest": oldbalance_dest,
+            "newbalanceDest": newbalance_dest,
+            "hour_of_day": datetime.now().hour,
+            "is_new_recipient": is_new_recipient,
+            "device_trust_score": device_trust_score,
+            "ip_risk_score": ip_risk_score,
+        },
         "sender_name": sender.get("name", "Unknown Sender"),
+    }
+
+
+def parse_iso_datetime(value: str | None):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def evaluate_qr_integrity(payload: QRPayload):
+    merchant_id = normalize_name_dest(payload.merchant_id or payload.account_name or "")
+    merchant_profile = MERCHANT_PROFILES.get(merchant_id, {})
+
+    is_verified_merchant = (
+        payload.is_verified_merchant
+        if payload.is_verified_merchant is not None
+        else bool(merchant_profile.get("is_verified_merchant", False))
+    )
+
+    account_created_at = payload.account_created_at or merchant_profile.get("created_at")
+    created_at_dt = parse_iso_datetime(account_created_at)
+    merchant_age_hours = 9999.0
+    if created_at_dt is not None:
+        now = datetime.now(created_at_dt.tzinfo)
+        merchant_age_hours = max((now - created_at_dt).total_seconds() / 3600, 0.0)
+
+    error_balance_ratio = (
+        payload.high_error_balance_ratio
+        if payload.high_error_balance_ratio is not None
+        else float(merchant_profile.get("error_balance_ratio", 0.0))
+    )
+
+    normalized_signature = (payload.signature or "").strip().upper()
+    signature_valid = normalized_signature in {"VALID", "SIGNED", "OK"}
+
+    warnings = []
+    if not is_verified_merchant:
+        warnings.append("Merchant is not verified yet.")
+    if merchant_age_hours < 24:
+        warnings.append("This merchant account is very new.")
+    if error_balance_ratio >= 0.2:
+        warnings.append("This merchant has unusual payment history.")
+    if not signature_valid:
+        warnings.append("This QR code could not be verified.")
+
+    return {
+        "merchant_id": merchant_id,
+        "account_name": payload.account_name or merchant_profile.get("account_name", "Unknown Merchant"),
+        "provider": payload.provider or merchant_profile.get("provider", "Unknown Provider"),
+        "is_verified_merchant": is_verified_merchant,
+        "merchant_age_hours": round(merchant_age_hours, 2),
+        "high_error_balance_ratio": round(float(error_balance_ratio), 4),
+        "signature_valid": signature_valid,
+        "warnings": warnings,
+    }
+
+
+def evaluate_generic_qr_threat(raw_qr: str, device_id: str, ip_profile: str):
+    text = (raw_qr or "").strip()
+    compact = "".join(text.split())
+
+    risk = 0.02
+    adjustments = []
+    warnings = []
+    qr_type = "unknown"
+
+    def add(delta: float, factor: str, warning: str | None = None):
+        nonlocal risk
+        risk += delta
+        adjustments.append({"factor": factor, "delta": round(delta, 4)})
+        if warning:
+            warnings.append(warning)
+
+    if compact.startswith("0002"):
+        qr_type = "emv_payment"
+    elif text.startswith("{") and text.endswith("}"):
+        qr_type = "json"
+    elif text.lower().startswith("http://") or text.lower().startswith("https://"):
+        qr_type = "url"
+
+    if qr_type == "url":
+        parsed = urlparse(text)
+        domain = (parsed.netloc or "").lower()
+        path_query = f"{parsed.path}?{parsed.query}".lower()
+
+        trusted_domains = {
+            "duitnow.my",
+            "paynet.my",
+            "tngdigital.com.my",
+            "touchngo.com.my",
+            "grab.com",
+            "shopee.com.my",
+            "boost.com.my",
+            "maybank2u.com.my",
+            "cimbclicks.com.my",
+            "rhbgroup.com",
+            "publicbank.com.my",
+        }
+
+        suspicious_tlds = (".online", ".top", ".xyz", ".click", ".shop", ".loan", ".win")
+        suspicious_words = (
+            "bantuan",
+            "claim",
+            "grant",
+            "verify",
+            "login",
+            "secure",
+            "update",
+            "wallet",
+            "inst",
+            "apk",
+            "otp",
+            "bonus",
+            "redeem",
+        )
+        shorteners = ("bit.ly", "tinyurl.com", "t.co", "rb.gy", "is.gd", "rebrand.ly")
+
+        if parsed.scheme.lower() != "https":
+            add(0.2, "non_https_link", "This QR opens an unsafe website link.")
+
+        if not domain:
+            add(0.5, "missing_domain", "This QR link looks broken or fake.")
+        else:
+            if domain.startswith("xn--"):
+                add(0.25, "punycode_domain", "This link may be pretending to be another website.")
+
+            if any(domain.endswith(tld) for tld in suspicious_tlds):
+                add(0.35, "suspicious_tld", "This QR uses a risky website address.")
+
+            if any(short in domain for short in shorteners):
+                add(0.3, "url_shortener", "This QR hides the real website address.")
+
+            if domain not in trusted_domains:
+                add(0.2, "untrusted_domain", "This website is not in trusted payment services.")
+
+        if any(keyword in f"{domain}{path_query}" for keyword in suspicious_words):
+            add(0.25, "phishing_keyword", "This link looks like a common scam message.")
+
+    elif qr_type == "emv_payment":
+        add(0.04, "emv_payment_qr", "EMV payment QR detected.")
+    elif qr_type == "json":
+        add(0.06, "json_qr", "Custom structured QR detected.")
+    else:
+        add(0.15, "unknown_qr_type", "Unknown QR format; verify before proceeding.")
+
+    device_trust_score = DEVICE_TRUST_SCORES.get(device_id, 0.55)
+    if device_trust_score < 0.5:
+        add(0.1, "untrusted_device", "Please be extra careful on this device.")
+
+    if ip_profile.strip().lower() == "risky":
+        add(0.15, "high_risk_ip", "Network looks risky right now.")
+
+    risk = min(max(risk, 0.0), 0.999)
+
+    if risk >= 0.75:
+        status = "BLOCKED"
+        color = "red"
+        reason_code = "Danger: this QR is likely a scam."
+        recommendation = "Stop now. Do not open this link or send money."
+    elif risk >= 0.4:
+        status = "FLAGGED"
+        color = "orange"
+        reason_code = "Warning: this QR looks suspicious."
+        recommendation = "Double-check with the sender before you continue."
+    else:
+        status = "APPROVED"
+        color = "green"
+        reason_code = "This QR looks safe from known scam signs."
+        recommendation = "You can continue, but still confirm recipient details."
+
+    if warnings:
+        reason_code = warnings[0]
+
+    return {
+        "risk_score": round(risk, 4),
+        "model_score": 0.0,
+        "status": status,
+        "color": color,
+        "recommendation": recommendation,
+        "reason_code": reason_code,
+        "isVerifiedMerchant": False,
+        "qr_integrity": {
+            "merchant_id": "",
+            "account_name": "",
+            "provider": "",
+            "is_verified_merchant": False,
+            "merchant_age_hours": 0.0,
+            "high_error_balance_ratio": 0.0,
+            "signature_valid": False,
+            "warnings": warnings,
+            "qr_type": qr_type,
+            "raw_preview": text[:120],
+        },
+        "score_breakdown": {
+            "raw_model_score": 0.0,
+            "adjustments": adjustments,
+            "pre_floor_score": round(risk, 4),
+            "hard_floor": 0.0,
+            "hard_floor_reason": None,
+            "status_floor": 0.0,
+            "final_score": round(risk, 4),
+        },
+    }
+
+
+@app.post("/context")
+async def build_transaction_context(payload: ContextRequest, request: Request):
+    context_data = build_context_data(
+        sender_account=payload.sender_account,
+        recipient_account=payload.recipient_account,
+        amount=payload.amount,
+        device_id=payload.device_id,
+        ip_profile=payload.ip_profile,
+        request=request,
+    )
+    return {
+        **context_data["context"],
+        "sender_name": context_data["sender_name"],
         "data_source": "mock-profile-service",
     }
+
+
+@app.post("/predict-qr")
+async def predict_qr_fraud(payload: QRTransferRequest, request: Request):
+    qr_integrity = evaluate_qr_integrity(payload.qr)
+    context_data = build_context_data(
+        sender_account=payload.sender_account,
+        recipient_account=qr_integrity["merchant_id"],
+        amount=payload.qr.amount,
+        device_id=payload.device_id,
+        ip_profile=payload.ip_profile,
+        request=request,
+    )
+
+    base_result = await predict_fraud(Transaction(**context_data["context"]))
+
+    status = base_result["status"]
+    risk_score = float(base_result["risk_score"])
+    reason_code = base_result["reason_code"]
+    recommendation = base_result["recommendation"]
+
+    adjustments = base_result.get("score_breakdown", {}).get("adjustments", [])
+
+    if not qr_integrity["is_verified_merchant"]:
+        adjustments.append({"factor": "qr_unverified_merchant", "delta": 0.1})
+        risk_score += 0.1
+        if status == "APPROVED":
+            status = "FLAGGED"
+            reason_code = "Unverified merchant QR requires additional verification."
+            recommendation = "Verify merchant details before completing payment."
+
+    if qr_integrity["merchant_age_hours"] < 24:
+        adjustments.append({"factor": "qr_new_merchant", "delta": 0.12})
+        risk_score += 0.12
+        if status == "APPROVED":
+            status = "FLAGGED"
+            reason_code = "Merchant account is newly created (<24h)."
+            recommendation = "Perform step-up authentication before payment."
+
+    if qr_integrity["high_error_balance_ratio"] >= 0.2:
+        adjustments.append({"factor": "qr_high_error_balance_history", "delta": 0.15})
+        risk_score += 0.15
+        if status == "APPROVED":
+            status = "FLAGGED"
+            reason_code = "Merchant has suspicious historical balance anomalies."
+            recommendation = "Verify merchant identity and payment request."
+
+    if not qr_integrity["signature_valid"]:
+        adjustments.append({"factor": "qr_signature_invalid", "delta": 0.35})
+        risk_score = max(risk_score + 0.35, 0.85)
+        status = "BLOCKED"
+        reason_code = "QR signature validation failed."
+        recommendation = "Do not proceed. Request a fresh verified QR from merchant."
+
+    if len(qr_integrity["warnings"]) >= 3 and status != "BLOCKED":
+        status = "BLOCKED"
+        risk_score = max(risk_score, 0.8)
+        reason_code = "Multiple QR integrity violations detected."
+        recommendation = "Transaction blocked to prevent potential quishing attack."
+
+    if status == "FLAGGED":
+        risk_score = max(risk_score, 0.45)
+        color = "orange"
+    elif status == "BLOCKED":
+        risk_score = max(risk_score, 0.75)
+        color = "red"
+    else:
+        color = "green"
+
+    risk_score = min(max(risk_score, 0.0), 0.999)
+
+    score_breakdown = base_result.get("score_breakdown", {})
+    score_breakdown["adjustments"] = adjustments
+    score_breakdown["final_score"] = round(risk_score, 4)
+
+    base_result.update({
+        "status": status,
+        "color": color,
+        "risk_score": round(risk_score, 4),
+        "reason_code": reason_code,
+        "recommendation": recommendation,
+        "isVerifiedMerchant": qr_integrity["is_verified_merchant"],
+        "qr_integrity": qr_integrity,
+        "score_breakdown": score_breakdown,
+    })
+
+    return base_result
+
+
+@app.post("/scan-qr-threat")
+async def scan_qr_threat(payload: QRThreatScanRequest):
+    return evaluate_generic_qr_threat(
+        raw_qr=payload.raw_qr,
+        device_id=payload.device_id,
+        ip_profile=payload.ip_profile,
+    )
 
 @app.post("/predict")
 async def predict_fraud(txn: Transaction):
