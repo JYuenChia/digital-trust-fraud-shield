@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X, Smartphone } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X, PhoneCall, Mic, MicOff, Lock, Smartphone } from 'lucide-react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { FRAUD_API_BASE_URL } from '@/const';
 import { useFraudEvents } from '@/contexts/FraudEventsContext';
@@ -106,12 +106,16 @@ function StyledDropdown({
 type FraudResult = {
   risk_score: number;
   model_score: number;
-  status: 'APPROVED' | 'FLAGGED' | 'BLOCKED';
+  status: 'APPROVED' | 'FLAGGED' | 'BLOCKED' | 'PENDING_GUARDIAN';
   color: string;
   recommendation: string;
   reason_code: string;
   isVerifiedMerchant?: boolean;
   notify_guardian?: boolean;
+  guardian_approval_required?: boolean;
+  guardian_approval_id?: string | null;
+  guardian_approval_expires_at?: string | null;
+  requires_user_verification?: boolean;
   qr_integrity?: {
     merchant_id: string;
     account_name: string;
@@ -171,30 +175,49 @@ type BoatProfile = {
   safePoints: number;
   damage: number;
   warningStrikes: number;
+  locked: boolean;
+};
+
+type QuizQuestion = {
+  id: string;
+  question: string;
+  options: string[];
+  correctIndex: number;
 };
 
 const BOAT_PROFILE_STORAGE_KEY = 'fraud-shield-bangka-profile-v1';
 const PROFILE_PIN_STORAGE_KEY = 'fraud-shield-profile-v1-pin-value';
 const SENIOR_ACCOUNT = 'ALEX8899';
-
-const BOAT_QUIZ = [
+const BOAT_QUIZ: QuizQuestion[] = [
   {
     id: 'q1',
-    question: 'If a QR asks for urgent payment and gives a strange website, what should you do?',
-    options: ['Pay quickly to avoid penalty', 'Stop and verify with official channel', 'Share OTP to confirm'],
-    answer: 1,
+    question: 'A caller says your account will be blocked unless you share an OTP now. What should you do?',
+    options: [
+      'Share the OTP to avoid account closure',
+      'Hang up and call the bank using the official number',
+      'Transfer money first, then verify later',
+    ],
+    correctIndex: 1,
   },
   {
     id: 'q2',
-    question: 'Which is safer before transferring money?',
-    options: ['Trust any message from unknown number', 'Verify recipient details and warning messages', 'Ignore app warnings'],
-    answer: 1,
+    question: 'What is the safest action before sending money to a new recipient?',
+    options: [
+      'Check recipient details and verify through a trusted channel',
+      'Rush the transfer if the message sounds urgent',
+      'Skip verification for small amounts',
+    ],
+    correctIndex: 0,
   },
   {
     id: 'q3',
-    question: 'When should you share TAC or OTP code?',
-    options: ['Only with trusted contacts', 'With support staff in chat', 'Never share with anyone'],
-    answer: 2,
+    question: 'If someone asks you to keep a transaction secret from family, this is usually:',
+    options: [
+      'A normal banking procedure',
+      'A potential scam pressure tactic',
+      'A reward program requirement',
+    ],
+    correctIndex: 1,
   },
 ];
 
@@ -453,9 +476,11 @@ function parseQrPayload(raw: string): QrPayload | null {
 export default function Transaction() {
   const { addEvent, updateEventStatus } = useFraudEvents();
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
-  const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked' | 'quiz' | 'face-id' | 'pin-entry'>('idle');
+  const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked' | 'quiz' | 'face-id' | 'pin-entry' | 'guardianPending'>('idle');
   const [enteredPin, setEnteredPin] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
+  const [quizError, setQuizError] = useState<string | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState('MYR');
   const [judgeDemoPreset, setJudgeDemoPreset] = useState<'real-auto' | 'new-device' | 'risky-ip' | 'max-risk'>('real-auto');
   const [selectedProvider, setSelectedProvider] = useState('Maybank');
@@ -468,10 +493,17 @@ export default function Transaction() {
   const [lastQrPreview, setLastQrPreview] = useState<string>('');
   const [scannedQrPayload, setScannedQrPayload] = useState<QrPayload | null>(null);
   const [qrScanStatus, setQrScanStatus] = useState<{ tone: 'safe' | 'warn'; message: string } | null>(null);
-  const [boatProfile, setBoatProfile] = useState<BoatProfile>({ safePoints: 0, damage: 0, warningStrikes: 0 });
-  const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
-  const [quizError, setQuizError] = useState<string | null>(null);
+  const [isCallConsentOpen, setIsCallConsentOpen] = useState(false);
+  const [isCallConsultOpen, setIsCallConsultOpen] = useState(false);
+  const [isListeningCall, setIsListeningCall] = useState(false);
+  const [callRiskScore, setCallRiskScore] = useState(0.05);
+  const [callVerdict, setCallVerdict] = useState('Tap Start Listening to check this call.');
+  const [callSignals, setCallSignals] = useState<string[]>([]);
+  const [callError, setCallError] = useState<string | null>(null);
+  const [boatProfile, setBoatProfile] = useState<BoatProfile>({ safePoints: 0, damage: 0, warningStrikes: 0, locked: false });
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const callRecognitionRef = useRef<any>(null);
+  const hasPlayedCallAlertRef = useRef(false);
   const scannerRegionId = 'qr-reader-shield';
 
   useEffect(() => {
@@ -490,6 +522,45 @@ export default function Transaction() {
   useEffect(() => {
     localStorage.setItem(BOAT_PROFILE_STORAGE_KEY, JSON.stringify(boatProfile));
   }, [boatProfile]);
+
+  const continueTransactionAfterGate = () => {
+    const pinEnabled = localStorage.getItem('fraud-shield-profile-v1-pin') !== 'false';
+    if (pinEnabled) {
+      setEnteredPin('');
+      setPinError(null);
+      setModalState('pin-entry');
+      return;
+    }
+    handleProcessTransaction();
+  };
+
+  const requiresQuizGate = boatProfile.locked || boatProfile.damage >= 60 || boatProfile.warningStrikes >= 3;
+
+  const handleQuizSubmit = () => {
+    const unanswered = BOAT_QUIZ.some((question) => quizAnswers[question.id] === undefined);
+    if (unanswered) {
+      setQuizError('Please answer all questions before submitting.');
+      return;
+    }
+
+    const score = BOAT_QUIZ.reduce((total, question) => {
+      return total + (quizAnswers[question.id] === question.correctIndex ? 1 : 0);
+    }, 0);
+
+    if (score < 2) {
+      setQuizError('Please review the safety tips and try again. You need at least 2 correct answers.');
+      return;
+    }
+
+    setQuizError(null);
+    setBoatProfile((prev) => ({
+      ...prev,
+      warningStrikes: 0,
+      damage: Math.max(0, prev.damage - 35),
+      locked: false,
+    }));
+    continueTransactionAfterGate();
+  };
 
   const activeDeviceId: 'demo-web' | 'demo-new-device' =
     judgeDemoPreset === 'new-device' || judgeDemoPreset === 'max-risk' ? 'demo-new-device' : 'demo-web';
@@ -513,6 +584,173 @@ export default function Transaction() {
       window.speechSynthesis.speak(utterance);
     }
   };
+
+  const speakCallScamWarning = () => {
+    if (!('speechSynthesis' in window)) return;
+    const utterance = new SpeechSynthesisUtterance('Warning. This caller may be a scammer and is asking for your banking details.');
+    utterance.rate = 0.92;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const getCallRiskClass = (score: number) => {
+    if (score >= 0.7) return 'bg-[#FF3B30]';
+    if (score >= 0.35) return 'bg-[#FF9F0A]';
+    return 'bg-[#32D74B]';
+  };
+
+  const evaluateCallRisk = (input: string) => {
+    const text = input.toLowerCase();
+    let risk = 0.06;
+    const matched: string[] = [];
+
+    const rules = [
+      { tag: '[AUTHORITY_CLAIM]', delta: 0.22, words: ['police', 'court', 'authority', 'government', 'bank officer'] },
+      { tag: '[URGENCY_CUE]', delta: 0.2, words: ['urgent', 'immediately', 'right now', 'last warning', 'act now'] },
+      { tag: '[FINANCIAL_ACTION]', delta: 0.22, words: ['transfer', 'send money', 'bank in', 'payment now'] },
+      { tag: '[BANKING_DETAIL_REQUEST]', delta: 0.28, words: ['otp', 'pin', 'password', 'cvv', 'banking details', 'tac'] },
+      { tag: '[ISOLATION_TACTIC]', delta: 0.2, words: ['do not tell your family', 'keep this secret', 'tell no one'] },
+      { tag: '[THREAT_LANGUAGE]', delta: 0.15, words: ['you are in trouble', 'account will be blocked', 'arrest', 'legal action'] },
+    ];
+
+    for (const rule of rules) {
+      if (rule.words.some((word) => text.includes(word))) {
+        risk += rule.delta;
+        matched.push(rule.tag);
+      }
+    }
+
+    // Keep scoring pattern-focused so personal details are never required.
+    risk += (Math.random() - 0.5) * 0.06;
+
+    risk = Math.max(0, Math.min(0.99, risk));
+    return { risk, matched };
+  };
+
+  const stopCallConsultation = () => {
+    if (callRecognitionRef.current) {
+      callRecognitionRef.current.stop();
+      callRecognitionRef.current = null;
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsListeningCall(false);
+  };
+
+  const startCallConsultation = () => {
+    const speechApi = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!speechApi) {
+      setCallError('Live listening is not supported in this browser. Please use Chrome or Edge.');
+      return;
+    }
+
+    setCallError(null);
+    setCallRiskScore(0.06);
+    setCallSignals([]);
+    setCallVerdict('Listening...');
+    hasPlayedCallAlertRef.current = false;
+
+    const recognition = new speechApi();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-MY';
+
+    recognition.onresult = (event: any) => {
+      let transcriptText = '';
+      for (let i = 0; i < event.results.length; i += 1) {
+        transcriptText += `${event.results[i][0].transcript} `;
+      }
+
+      const cleaned = transcriptText.trim();
+      const { risk, matched } = evaluateCallRisk(cleaned);
+      setCallRiskScore(risk);
+      setCallSignals(matched);
+
+      if (risk >= 0.7) {
+        setCallVerdict('High risk detected. End the call now.');
+        if (!hasPlayedCallAlertRef.current) {
+          hasPlayedCallAlertRef.current = true;
+          speakCallScamWarning();
+        }
+      } else if (risk >= 0.35) {
+        setCallVerdict('Warning signs detected. Stay careful.');
+      } else {
+        setCallVerdict('No strong scam signs yet.');
+      }
+    };
+
+    recognition.onerror = () => {
+      setCallError('Listening error occurred. You can stop and start again.');
+      setIsListeningCall(false);
+    };
+
+    recognition.onend = () => {
+      setIsListeningCall(false);
+    };
+
+    recognition.start();
+    callRecognitionRef.current = recognition;
+    setIsListeningCall(true);
+  };
+
+  useEffect(() => {
+    if (!isCallConsultOpen && isListeningCall) {
+      stopCallConsultation();
+    }
+  }, [isCallConsultOpen, isListeningCall]);
+
+  useEffect(() => {
+    return () => {
+      if (callRecognitionRef.current) {
+        callRecognitionRef.current.stop();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (modalState !== 'guardianPending') return;
+    const approvalId = fraudResult?.guardian_approval_id;
+    if (!approvalId) return;
+
+    const timer = window.setInterval(async () => {
+      try {
+        const response = await fetch(`${FRAUD_API_BASE_URL}/guardian-approval-status/${approvalId}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        const approval = data?.approval;
+        if (!approval) return;
+
+        if (approval.status === 'APPROVED') {
+          setFraudResult((prev) => prev ? {
+            ...prev,
+            status: 'FLAGGED',
+            recommendation: 'Guardian approved. Please complete your verification to continue.',
+            reason_code: 'Guardian approved. User verification still required.',
+          } : prev);
+          setModalState('verification');
+          return;
+        }
+
+        if (approval.status === 'REJECTED' || approval.status === 'EXPIRED') {
+          setFraudResult((prev) => prev ? {
+            ...prev,
+            status: 'BLOCKED',
+            reason_code: approval.status === 'EXPIRED'
+              ? 'Guardian approval timed out. Transaction canceled for safety.'
+              : 'Guardian rejected this transaction for safety.',
+            recommendation: 'Please contact your guardian before trying again.',
+          } : prev);
+          setModalState('blocked');
+        }
+      } catch {
+        // Keep polling quietly during transient network errors.
+      }
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+  }, [modalState, fraudResult?.guardian_approval_id]);
 
   const renderQrIntegritySummary = () => {
     const qr = fraudResult?.qr_integrity;
@@ -553,6 +791,7 @@ export default function Transaction() {
   const applyResultModal = (result: FraudResult) => {
     setFraudResult(result);
     if (result.status === 'APPROVED') setModalState('approved');
+    else if (result.status === 'PENDING_GUARDIAN') setModalState('guardianPending');
     else if (result.status === 'FLAGGED') setModalState('verification');
     else setModalState('blocked');
   };
@@ -581,32 +820,6 @@ export default function Transaction() {
     }
     
     return result;
-  };
-
-  const handleQuizSubmit = () => {
-    if (Object.keys(quizAnswers).length < BOAT_QUIZ.length) {
-      setQuizError('Please answer all questions.');
-      return;
-    }
-
-    let score = 0;
-    for (const q of BOAT_QUIZ) {
-      if (quizAnswers[q.id] === q.answer) score += 1;
-    }
-
-    if (score >= 2) {
-      setBoatProfile((prev) => ({
-        ...prev,
-        warningStrikes: 0,
-        damage: Math.max(0, prev.damage - 30),
-      }));
-      setQuizAnswers({});
-      setQuizError(null);
-      setModalState('idle');
-      setQrScanStatus({ tone: 'safe', message: 'Great job. Please stay alert for scams.' });
-    } else {
-      setQuizError('Almost there. Please review and try again.');
-    }
   };
 
   useEffect(() => {
@@ -736,17 +949,20 @@ export default function Transaction() {
             safePoints: prev.safePoints + pointsGain,
             damage: nextDamage,
             warningStrikes: nextStrikes,
+            locked: false,
           };
         }
 
         const damageHit = result.status === 'BLOCKED' ? 24 : 14;
         const nextDamage = Math.min(100, prev.damage + damageHit);
         const nextStrikes = prev.warningStrikes + 1;
+        const locked = nextDamage >= 60 || nextStrikes >= 3;
 
         return {
           ...prev,
           damage: nextDamage,
           warningStrikes: nextStrikes,
+          locked,
         };
       });
 
@@ -760,7 +976,7 @@ export default function Transaction() {
         recipientAccount: recipientAccount || 'N/A',
         amount: amountValue,
         currency: selectedCurrency,
-        status: result.status,
+        status: result.status === 'PENDING_GUARDIAN' ? 'FLAGGED' : result.status,
         riskScore: result.risk_score,
         modelScore: result.model_score,
         reasonCode: result.reason_code,
@@ -769,6 +985,7 @@ export default function Transaction() {
         ipProfile: activeIpProfile,
       });
       if (result.status === 'APPROVED') setModalState('approved');
+      else if (result.status === 'PENDING_GUARDIAN') setModalState('guardianPending');
       else if (result.status === 'FLAGGED') setModalState('verification');
       else setModalState('blocked');
     } catch (error) {
@@ -835,7 +1052,7 @@ export default function Transaction() {
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FF5500] px-4 py-2.5 text-sm font-bold text-[#111827] dark:text-white hover:bg-[#E04B00] transition-colors cursor-pointer"
             >
               <ScanLine size={16} />
-              Scan QR to Pay
+              Scan Any QR for Scam
             </button>
           </div>
 
@@ -989,6 +1206,15 @@ export default function Transaction() {
             </div>
           </div>
 
+          {/* Security Indicator */}
+          <div className="flex items-center gap-4 bg-[#FFFFFF05] border border-white/10 p-5 rounded-xl">
+            <ShieldCheck size={28} className="text-[#32D74B]" />
+            <div className="flex flex-col">
+              <span className="text-white font-bold">Privacy-First AI Monitor</span>
+              <span className="text-[#8A8A8A] text-sm">Device, IP, & behavioral data encrypt-assessed for real-time risk scoring.</span>
+            </div>
+          </div>
+
           {/* Button */}
           <button 
             data-tour="transaction-submit"
@@ -1036,6 +1262,154 @@ export default function Transaction() {
                 )}
               </div>
             )}
+
+            <p className="text-xs text-[#8A8A8A]">
+              Scan anything: bank payment QR, e-wallet QR, or suspicious links. The shield will risk-check the decoded content.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setIsCallConsentOpen(true)}
+        aria-label="Open call scam check"
+        className="group fixed bottom-6 right-6 z-40 inline-flex h-12 w-12 items-center justify-start gap-2 overflow-hidden rounded-full border border-[#5DA8FF66] bg-[#0D1624] px-3 text-sm font-semibold text-[#CFE7FF] shadow-[0_0_20px_rgba(93,168,255,0.25)] transition-all duration-300 hover:w-[265px] hover:bg-[#13233A] focus-visible:w-[265px]"
+      >
+        <PhoneCall size={16} className="shrink-0" />
+        <span className="whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
+          Is this call a scam? Tap to listen.
+        </span>
+      </button>
+
+      {isCallConsentOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-[560px] rounded-3xl border border-[#5DA8FF40] bg-[#121A28] p-6 md:p-8 flex flex-col gap-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-xl bg-[#5DA8FF1A] flex items-center justify-center">
+                  <Lock size={19} className="text-[#8FC7FF]" />
+                </div>
+                <div>
+                  <h3 className="text-white text-xl font-bold font-['Sora']">Before We Start</h3>
+                  <p className="text-xs text-[#A9C1DA]">Your privacy comes first.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCallConsentOpen(false)}
+                className="h-9 w-9 rounded-lg border border-white/15 text-[#8A8A8A] hover:text-white"
+              >
+                <X size={17} className="mx-auto" />
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-[#5DA8FF40] bg-[#0D1624] p-4">
+              <p className="text-sm font-semibold text-[#DDEEFF]">Call audio is not recorded.</p>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] font-semibold">
+                <div className="rounded-lg border border-[#5DA8FF33] bg-[#5DA8FF1A] px-3 py-2 text-[#CFE7FF]">No recording saved</div>
+                <div className="rounded-lg border border-[#5DA8FF33] bg-[#5DA8FF1A] px-3 py-2 text-[#CFE7FF]">Personal details hidden</div>
+                <div className="rounded-lg border border-[#5DA8FF33] bg-[#5DA8FF1A] px-3 py-2 text-[#CFE7FF]">End-to-end encrypted</div>
+              </div>
+            </div>
+
+            <p className="text-xs text-[#A7BDD3]">Do you consent to start live scam-check listening for this call?</p>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={() => setIsCallConsentOpen(false)}
+                className="flex-1 rounded-lg border border-white/20 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10"
+              >
+                Not Now
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCallConsentOpen(false);
+                  setIsCallConsultOpen(true);
+                }}
+                className="flex-1 rounded-lg bg-[#5DA8FF] px-4 py-2.5 text-sm font-semibold text-[#101418] hover:bg-[#4B97EA]"
+              >
+                I Consent, Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCallConsultOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-[760px] rounded-3xl border border-[#5DA8FF40] bg-[#131822] p-6 md:p-8 flex flex-col gap-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className={`h-11 w-11 rounded-xl ${isListeningCall ? 'bg-[#5DA8FF33] animate-pulse' : 'bg-[#5DA8FF1A]'} flex items-center justify-center`}>
+                  <ShieldCheck size={20} className="text-[#8FC7FF]" />
+                </div>
+                <div>
+                  <h3 className="text-white text-xl font-bold font-['Sora']">Call Consultation</h3>
+                  <p className="text-xs text-[#9CB3CB]">Privacy-first call shield with instant scam warning.</p>
+                  <p className="mt-1 text-[11px] text-[#8FC7FF]">Consent given • audio not recorded</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setIsCallConsultOpen(false)} className="h-9 w-9 rounded-lg border border-white/15 text-[#8A8A8A] hover:text-white">
+                <X size={17} className="mx-auto" />
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-[#0F1520] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-white">Scam Risk Right Now</p>
+                <span className="text-sm font-semibold text-[#D8E8FA]">{formatPercent(callRiskScore)}</span>
+              </div>
+              <div className="mt-2 h-3 rounded-full bg-white/10 overflow-hidden">
+                <div className={`h-full transition-all duration-300 ${getCallRiskClass(callRiskScore)}`} style={{ width: `${Math.max(4, Math.round(callRiskScore * 100))}%` }} />
+              </div>
+              <p className="mt-2 text-xs text-[#BDD3E9]">{callVerdict}</p>
+            </div>
+
+            <div className="rounded-xl border border-[#5DA8FF40] bg-[#0E1624] p-4">
+              <div className="flex items-center gap-2">
+                <Lock size={15} className="text-[#8FC7FF]" />
+                <p className="text-sm font-semibold text-white">Privacy First</p>
+              </div>
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] font-semibold">
+                <div className="rounded-lg border border-[#5DA8FF40] bg-[#5DA8FF1A] px-3 py-2 text-[#CFE7FF]">Voice stays on your phone</div>
+                <div className="rounded-lg border border-[#5DA8FF40] bg-[#5DA8FF1A] px-3 py-2 text-[#CFE7FF]">Personal details hidden</div>
+                <div className="rounded-lg border border-[#5DA8FF40] bg-[#5DA8FF1A] px-3 py-2 text-[#CFE7FF]">End-to-end encrypted</div>
+              </div>
+            </div>
+
+            {callSignals.length > 0 && (
+              <div className="rounded-xl border border-[#FFB37A44] bg-[#FFB37A12] p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-[#FFD5AF]">Possible Scam Signs</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {callSignals.map((signal) => (
+                    <span key={signal} className="rounded-full bg-[#FFFFFF18] px-2.5 py-1 text-[11px] text-[#FFE1C4]">{signal}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(callSignals.length > 0 || callRiskScore >= 0.35) && (
+              <div className="rounded-xl border border-[#FF3B3055] bg-[#FF3B3014] p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-[#FFB8B3]">Safety Alert</p>
+                <p className="mt-2 text-sm font-semibold text-[#FFD8D4]">Warning. This caller may be a scammer and is asking for your banking details.</p>
+              </div>
+            )}
+
+            {callError && <p className="text-xs text-[#FFBCB7]">{callError}</p>}
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => (isListeningCall ? stopCallConsultation() : startCallConsultation())}
+                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold ${isListeningCall ? 'bg-[#FF3B30] text-white hover:bg-[#E6352B]' : 'bg-[#5DA8FF] text-[#101418] hover:bg-[#4B97EA]'}`}
+              >
+                {isListeningCall ? <MicOff size={16} /> : <Mic size={16} />}
+                {isListeningCall ? 'Stop Listening' : 'Start Listening'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1043,7 +1417,46 @@ export default function Transaction() {
       {/* Modals Flow Container */}
       {modalState !== 'idle' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          
+          {/* 1. Confirming Modal */}
+          {modalState === 'confirming' && (
+            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col gap-6">
+              <div className="text-[#FF5500]">
+                <Play size={32} className="fill-[#FF5500] stroke-none rotate-90" />
+              </div>
+              <h2 className="text-[#111827] dark:text-white text-2xl font-bold font-['Sora']">Confirm Transaction</h2>
+              
+              <div className="bg-black/5 dark:bg-[#FFFFFF05] rounded-xl flex flex-col gap-3 p-4">
+                <div className="flex justify-between">
+                  <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Pay</span>
+                  <span className="text-[#111827] dark:text-white font-semibold">{selectedCurrency} {amount || '0.00'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">To</span>
+                  <span className="text-[#111827] dark:text-white font-semibold">{recipientName || 'Recipient'}</span>
+                </div>
+              </div>
 
+              <div className="flex gap-4">
+                <button onClick={() => setModalState('idle')} className="flex-1 bg-transparent border border-black/20 dark:border-white/20 text-[#111827] dark:text-white rounded-lg py-3 font-semibold hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer">
+                  Cancel
+                </button>
+                <button onClick={() => {
+                  if (requiresQuizGate) {
+                    setQuizAnswers({});
+                    setQuizError(null);
+                    setModalState('quiz');
+                    return;
+                  }
+                  continueTransactionAfterGate();
+                }} className="flex-1 bg-[#FF3B30] hover:bg-[#E0352B] transition-colors text-[#111827] dark:text-white rounded-lg py-3 font-semibold cursor-pointer">
+                  Confirm
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Fraud Prevention Quiz */}
           {modalState === 'quiz' && (
             <div className="w-[540px] max-w-full bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#FF9F0A55] rounded-3xl p-8 flex flex-col gap-5">
               <h2 className="text-[#111827] dark:text-white text-2xl font-bold font-['Sora']">Fraud Prevention Quiz</h2>
@@ -1073,9 +1486,7 @@ export default function Transaction() {
                 ))}
               </div>
 
-              {quizError && (
-                <p className="text-sm text-[#FFB7B3]">{quizError}</p>
-              )}
+              {quizError && <p className="text-sm text-[#FFB7B3]">{quizError}</p>}
 
               <div className="flex gap-3">
                 <button
@@ -1091,45 +1502,6 @@ export default function Transaction() {
                   className="flex-1 rounded-lg bg-[#FF9F0A] py-3 text-[#1A1A1A] font-semibold hover:bg-[#E68F09] transition-colors"
                 >
                   Submit Quiz
-                </button>
-              </div>
-            </div>
-          )}
-          
-          {/* 1. Confirming Modal */}
-          {modalState === 'confirming' && (
-            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col gap-6">
-              <div className="text-[#FF5500]">
-                <Play size={32} className="fill-[#FF5500] stroke-none rotate-90" />
-              </div>
-              <h2 className="text-[#111827] dark:text-white text-2xl font-bold font-['Sora']">Confirm Transaction</h2>
-              
-              <div className="bg-black/5 dark:bg-[#FFFFFF05] rounded-xl flex flex-col gap-3 p-4">
-                <div className="flex justify-between">
-                  <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Pay</span>
-                  <span className="text-[#111827] dark:text-white font-semibold">{selectedCurrency} {amount || '0.00'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">To</span>
-                  <span className="text-[#111827] dark:text-white font-semibold">{recipientName || 'Recipient'}</span>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <button onClick={() => setModalState('idle')} className="flex-1 bg-transparent border border-black/20 dark:border-white/20 text-[#111827] dark:text-white rounded-lg py-3 font-semibold hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer">
-                  Cancel
-                </button>
-                <button onClick={() => {
-                  const pinEnabled = localStorage.getItem('fraud-shield-profile-v1-pin') !== 'false';
-                  if (pinEnabled) {
-                    setModalState('pin-entry');
-                    setEnteredPin('');
-                    setPinError(null);
-                  } else {
-                    handleProcessTransaction();
-                  }
-                }} className="flex-1 bg-[#FF3B30] hover:bg-[#E0352B] transition-colors text-[#111827] dark:text-white rounded-lg py-3 font-semibold cursor-pointer">
-                  Confirm
                 </button>
               </div>
             </div>
@@ -1220,6 +1592,37 @@ export default function Transaction() {
             </div>
           )}
 
+          {/* 3.5 Guardian Approval Pending */}
+          {modalState === 'guardianPending' && (
+            <div className="w-[430px] bg-[#1A1A1A] border border-[#5DA8FF66] rounded-3xl p-8 flex flex-col items-center gap-5 shadow-[0_0_32px_rgba(93,168,255,0.22)]">
+              <div className="w-16 h-16 rounded-full bg-[#5DA8FF22] flex items-center justify-center">
+                <ShieldCheck size={30} className="text-[#8FC7FF]" />
+              </div>
+              <h2 className="text-white text-[22px] font-bold font-['Sora'] text-center leading-tight">Waiting for Guardian Approval</h2>
+              <div className="bg-[#5DA8FF15] px-4 py-2 rounded-full">
+                <span className="text-[#9ED1FF] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Review)</span>
+              </div>
+              <p className="text-[#9FB7CF] text-center leading-relaxed text-[14px]">
+                Identity verified. This transaction is now paused until your guardian approves or rejects it.
+              </p>
+              {fraudResult?.guardian_approval_id && (
+                <div className="w-full rounded-lg border border-white/15 bg-white/5 px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-[#8CBCE9]">Approval Reference</p>
+                  <p className="mt-1 text-sm font-semibold text-white">{fraudResult.guardian_approval_id}</p>
+                  {fraudResult.guardian_approval_expires_at && (
+                    <p className="mt-1 text-xs text-[#A7BDD3]">Expires: {new Date(fraudResult.guardian_approval_expires_at).toLocaleString()}</p>
+                  )}
+                </div>
+              )}
+              <button
+                onClick={() => setModalState('idle')}
+                className="w-full bg-[#5DA8FF] text-[#111111] rounded-lg py-3.5 font-semibold text-[14px] cursor-pointer hover:bg-[#4B97EA]"
+              >
+                I Will Wait for Guardian
+              </button>
+            </div>
+          )}
+
           {/* 4. Verification Required */}
           {modalState === 'verification' && (
             <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#FF9F0A40] rounded-3xl p-8 flex flex-col items-center gap-6">
@@ -1232,8 +1635,13 @@ export default function Transaction() {
               </div>
               <SafetyWeatherCard riskScore={fraudResult?.risk_score ?? 0.5} />
               {renderQrIntegritySummary()}
-              <p className="text-[#6B7280] dark:text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'Unusual activity detected. Please verify your identity to continue.'}</p>
-              <button onClick={() => setModalState('face-id')} className="w-full bg-[#FF9F0A] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E68F09]">
+              <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'Unusual activity detected. Please verify your identity to continue.'}</p>
+              <button
+                onClick={() => {
+                  setModalState('face-id');
+                }}
+                className="w-full bg-[#FF9F0A] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E68F09]"
+              >
                 Verify Identity
               </button>
             </div>
@@ -1260,7 +1668,23 @@ export default function Transaction() {
                   Simulate Unsuccessful
                 </button>
                 <button onClick={() => {
-                  if (currentEventId) updateEventStatus(currentEventId, 'APPROVED', 'FaceID Verification Passed');
+                  if (currentEventId) {
+                    if (fraudResult?.guardian_approval_required && fraudResult?.guardian_approval_id) {
+                      updateEventStatus(currentEventId, 'FLAGGED', 'FaceID Verification Passed - Awaiting Guardian Approval');
+                    } else {
+                      updateEventStatus(currentEventId, 'APPROVED', 'FaceID Verification Passed');
+                    }
+                  }
+                  if (fraudResult?.guardian_approval_required && fraudResult?.guardian_approval_id) {
+                    setFraudResult((prev) => prev ? {
+                      ...prev,
+                      status: 'PENDING_GUARDIAN',
+                      recommendation: 'Identity verified. Waiting for guardian approval.',
+                      reason_code: 'Identity verified. Guardian decision is now required.',
+                    } : prev);
+                    setModalState('guardianPending');
+                    return;
+                  }
                   setModalState('approved');
                 }} className="flex-1 rounded-lg bg-[#5DA8FF] py-3 text-[#1A1A1A] font-semibold hover:bg-[#468FE6] transition-colors text-sm shadow-[0_0_20px_#5DA8FF50] cursor-pointer">
                   Simulate Success

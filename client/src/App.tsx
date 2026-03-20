@@ -12,6 +12,7 @@ import Landing from "./pages/Landing";
 import Transaction from "./pages/Transaction";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
+import GuardianDemo from "./pages/GuardianDemo";
 
 
 function Router() {
@@ -21,6 +22,8 @@ function Router() {
       <Route path={"/dashboard"} component={Dashboard} />
       <Route path={"/transaction"} component={Transaction} />
       <Route path={"/profile"} component={Profile} />
+      <Route path={"/guardian-notifications"} component={GuardianDemo} />
+      <Route path={"/guardian-demo"} component={GuardianDemo} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
