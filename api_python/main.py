@@ -1072,10 +1072,15 @@ async def predict_fraud(txn: Transaction, allow_guardian_approval: bool = True):
 
     guardian_approval = None
     requires_user_verification = status == "FLAGGED"
+    guardian_trigger_threshold = GUARDIAN_APPROVAL_RISK_THRESHOLD
+    # Demo safety policy: flagged transfers with risky IP and high amount should
+    # consistently require guardian approval after identity verification.
+    if status == "FLAGGED" and high_ip_risk and high_amount:
+        guardian_trigger_threshold = min(guardian_trigger_threshold, 0.35)
     if (
         allow_guardian_approval
         and status == "FLAGGED"
-        and effective_risk >= GUARDIAN_APPROVAL_RISK_THRESHOLD
+        and effective_risk >= guardian_trigger_threshold
         and txn.sender_account in GUARDIAN_LINKS
         and GUARDIAN_LINKS[txn.sender_account].get("guardians")
     ):
