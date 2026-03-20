@@ -393,7 +393,7 @@ export default function Profile() {
           <p className="text-[#8A8A8A] text-lg">Manage account details, verification status, and linked bank cards.</p>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_1fr] gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <div className="bg-[#1A1A1A]/55 backdrop-blur-2xl border border-white/10 rounded-3xl p-7 flex flex-col gap-6">
             <div className="flex items-center justify-between">
               <h2 className="text-white text-xl font-bold font-['Sora']">Account Details</h2>
@@ -425,43 +425,13 @@ export default function Profile() {
                   <span className="text-white text-sm font-semibold">Wallet PIN Protection</span>
                   <span className={`text-xs font-bold px-2 py-1 rounded ${walletPinEnabled ? 'bg-[#32D74B30] text-[#32D74B]' : 'bg-[#FF3B3020] text-[#FF3B30]'}`}>{walletPinEnabled ? 'ON' : 'OFF'}</span>
                 </button>
-                <p className="text-[#8A8A8A] text-xs px-2">Creates an additional security layer for authorizing high-risk transactions.</p>
+                {!walletPinEnabled && (
+                  <p className="text-[#FF9F0A] text-xs px-2">When Wallet PIN is enabled, your PIN will be required to authorize every transaction.</p>
+                )}
               </div>
             </div>
 
             {saveMessage && <div className="text-[#32D74B] text-sm font-semibold">{saveMessage}</div>}
-          </div>
-
-          <div className="bg-[#1A1A1A]/55 backdrop-blur-2xl border border-white/10 rounded-3xl p-7 flex flex-col gap-5">
-            <h2 className="text-white text-xl font-bold font-['Sora']">Verification Center</h2>
-
-            <div className="flex items-center justify-between bg-[#141414] border border-white/10 p-4 rounded-xl">
-              <div className="flex items-center gap-3">
-                <ShieldCheck size={18} className="text-[#32D74B]" />
-                <span className="text-white font-semibold text-sm">eKYC Identity</span>
-              </div>
-              <span className={`text-xs font-bold px-3 py-1 rounded-full ${statusPill(verification.kyc)}`}>{verification.kyc.toUpperCase()}</span>
-            </div>
-
-            <div className="flex items-center justify-between bg-[#141414] border border-white/10 p-4 rounded-xl">
-              <div className="flex items-center gap-3">
-                <Smartphone size={18} className="text-[#FF9F0A]" />
-                <span className="text-white font-semibold text-sm">Device & Face Match</span>
-              </div>
-              <span className={`text-xs font-bold px-3 py-1 rounded-full ${statusPill(verification.face)}`}>{verification.face.toUpperCase()}</span>
-            </div>
-
-            <div className="flex items-center justify-between bg-[#141414] border border-white/10 p-4 rounded-xl">
-              <div className="flex items-center gap-3">
-                <Landmark size={18} className="text-[#FF3B30]" />
-                <span className="text-white font-semibold text-sm">Linked Payment Method</span>
-              </div>
-              <span className={`text-xs font-bold px-3 py-1 rounded-full ${statusPill(verification.payment)}`}>{verification.payment.toUpperCase()}</span>
-            </div>
-
-            <div className="bg-[#FFFFFF08] border border-white/10 rounded-xl p-4 text-sm text-[#8A8A8A]">
-              Security checks run in real time for card linking, OTP challenge, and transaction authorization.
-            </div>
           </div>
         </div>
 

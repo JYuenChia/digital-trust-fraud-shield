@@ -132,7 +132,7 @@ export default function Landing() {
                   Explore Dashboard
                 </button>
               </Link>
-              <button className="bg-[#1A1A1A]/80 backdrop-blur-2xl border border-white/20 text-white px-8 py-4 rounded-lg font-['Inter'] font-semibold text-[15px] cursor-pointer hover:bg-white/10 transition-colors">
+              <button onClick={() => window.open('https://github.com/JYuenChia/digital-trust-fraud-shield.git', '_blank')} className="bg-[#1A1A1A]/80 backdrop-blur-2xl border border-white/20 text-white px-8 py-4 rounded-lg font-['Inter'] font-semibold text-[15px] cursor-pointer hover:bg-white/10 transition-colors">
                 View Documentation
               </button>
             </div>

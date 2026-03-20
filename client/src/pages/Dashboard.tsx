@@ -234,37 +234,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Bottom Row */}
-        <div className="w-full bg-[#1A1A1A]/50 backdrop-blur-2xl border border-white/10 rounded-xl p-6 flex flex-col gap-6 mb-12">
-          <span className="text-white font-['Sora'] font-semibold tracking-wider">FRAUD PATTERN ANALYSIS</span>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-[#141414] p-4 flex flex-col gap-4 rounded-lg border border-white/5">
-              <span className="text-[#8A8A8A] text-xs font-semibold tracking-wider">BY LOCATION</span>
-              <div className="w-full h-32 flex flex-col items-center justify-center gap-2 opacity-50">
-                <Map size={32} className="text-[#525252]" />
-                <span className="text-[#525252] text-xs">[ Map Visualization ]</span>
-              </div>
-            </div>
-            
-            <div className="bg-[#141414] p-4 flex flex-col gap-4 rounded-lg border border-white/5">
-              <span className="text-[#8A8A8A] text-xs font-semibold tracking-wider">BY TIME</span>
-              <div className="w-full h-32 flex flex-col items-center justify-center gap-2 opacity-50">
-                <Activity size={32} className="text-[#525252]" />
-                <span className="text-[#525252] text-xs">[ Time Series Line Chart ]</span>
-              </div>
-            </div>
-
-            <div className="bg-[#141414] p-4 flex flex-col gap-4 rounded-lg border border-white/5">
-              <span className="text-[#8A8A8A] text-xs font-semibold tracking-wider">BY PURPOSE</span>
-              <div className="w-full h-32 flex flex-col items-center justify-center gap-2 opacity-50">
-                <PieChart size={32} className="text-[#525252]" />
-                <span className="text-[#525252] text-xs">[ Category Breakdown ]</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
       </div>
     </div>
   );

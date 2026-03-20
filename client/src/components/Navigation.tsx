@@ -68,7 +68,7 @@ export const Navigation: React.FC = () => {
             </button>
             <Link href="/profile">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-['Inter'] font-semibold text-sm cursor-pointer transition-all ${isProfilePage ? 'bg-[#FF3B30] shadow-[0_0_16px_rgba(255,59,48,0.45)]' : 'bg-[#FF5500] shadow-[0_0_15px_rgba(255,85,0,0.3)] hover:bg-[#FF6A1A]'}`}>
-                AM
+                AT
               </div>
             </Link>
           </div>

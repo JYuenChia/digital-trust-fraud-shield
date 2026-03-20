@@ -450,7 +450,8 @@ function parseQrPayload(raw: string): QrPayload | null {
 }
 
 export default function Transaction() {
-  const { addEvent } = useFraudEvents();
+  const { addEvent, updateEventStatus } = useFraudEvents();
+  const [currentEventId, setCurrentEventId] = useState<string | null>(null);
   const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked' | 'quiz' | 'face-id'>('idle');
   const [selectedCurrency, setSelectedCurrency] = useState('MYR');
   const [judgeDemoPreset, setJudgeDemoPreset] = useState<'real-auto' | 'new-device' | 'risky-ip' | 'max-risk'>('real-auto');
@@ -746,8 +747,10 @@ export default function Transaction() {
         };
       });
 
+      const newEventId = `txn-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+      setCurrentEventId(newEventId);
       addEvent({
-        id: `txn-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+        id: newEventId,
         timestamp: new Date().toISOString(),
         user: 'Alex Tan',
         recipientName: recipientName || 'Recipient',
@@ -1154,10 +1157,17 @@ export default function Transaction() {
               </div>
 
               <div className="flex w-full gap-3 mt-4">
-                <button onClick={() => setModalState('blocked')} className="flex-1 rounded-lg border border-white/20 py-3 text-[#FF3B30] font-semibold hover:bg-white/10 transition-colors text-sm cursor-pointer">
+                <button onClick={() => {
+                  if (currentEventId) updateEventStatus(currentEventId, 'BLOCKED', 'FaceID Verification Failed');
+                  setFraudResult(prev => prev ? { ...prev, reason_code: `${prev.reason_code} - FaceID Verification Failed` } : null);
+                  setModalState('blocked');
+                }} className="flex-1 rounded-lg border border-white/20 py-3 text-[#FF3B30] font-semibold hover:bg-white/10 transition-colors text-sm cursor-pointer">
                   Simulate Unsuccessful
                 </button>
-                <button onClick={() => setModalState('approved')} className="flex-1 rounded-lg bg-[#5DA8FF] py-3 text-[#1A1A1A] font-semibold hover:bg-[#468FE6] transition-colors text-sm shadow-[0_0_20px_#5DA8FF50] cursor-pointer">
+                <button onClick={() => {
+                  if (currentEventId) updateEventStatus(currentEventId, 'APPROVED', 'FaceID Verification Passed');
+                  setModalState('approved');
+                }} className="flex-1 rounded-lg bg-[#5DA8FF] py-3 text-[#1A1A1A] font-semibold hover:bg-[#468FE6] transition-colors text-sm shadow-[0_0_20px_#5DA8FF50] cursor-pointer">
                   Simulate Success
                 </button>
               </div>

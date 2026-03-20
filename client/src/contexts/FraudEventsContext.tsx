@@ -22,6 +22,7 @@ export type FraudEvent = {
 type FraudEventsContextType = {
   events: FraudEvent[];
   addEvent: (event: FraudEvent) => void;
+  updateEventStatus: (id: string, status: FraudEventStatus, appendedReason?: string) => void;
   clearEvents: () => void;
 };
 
@@ -58,6 +59,15 @@ export function FraudEventsProvider({ children }: { children: React.ReactNode })
       events,
       addEvent: (event) => {
         setEvents((prev) => [event, ...prev].slice(0, 200));
+      },
+      updateEventStatus: (id, status, appendedReason) => {
+        setEvents((prev) => 
+          prev.map((e) => 
+            e.id === id 
+              ? { ...e, status, reasonCode: appendedReason ? `${e.reasonCode} - ${appendedReason}` : e.reasonCode } 
+              : e
+          )
+        );
       },
       clearEvents: () => {
         setEvents([]);
