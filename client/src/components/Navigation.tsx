@@ -13,14 +13,14 @@ export const Navigation: React.FC = () => {
   ];
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0C0C0C]/80 backdrop-blur-md border-b border-[#2A2A2A]">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#F3F4F6]/80 dark:bg-[#0C0C0C]/80 backdrop-blur-md border-b border-[#D1D5DB] dark:border-[#2A2A2A]">
       <div className="max-w-[1547px] mx-auto px-10 h-16 flex items-center justify-between relative">
         
         {/* Brand */}
         <Link href="/">
           <div className="flex items-center gap-3 cursor-pointer">
             <ShieldAlert size={28} className="text-[#FF3B30]" />
-            <span className="text-white font-['Inter'] font-bold text-[13px] tracking-[1px]">
+            <span className="text-[#111827] dark:text-white font-['Inter'] font-bold text-[13px] tracking-[1px]">
               DIGITAL TRUST
             </span>
           </div>
@@ -35,7 +35,7 @@ export const Navigation: React.FC = () => {
                 <div className="relative h-full flex flex-col justify-center cursor-pointer group px-1">
                   <span
                     className={`font-['Inter'] text-[13px] font-bold tracking-[1px] transition-colors mt-auto mb-5 ${
-                      isActive ? 'text-white' : 'text-[#8A8A8A] group-hover:text-white'
+                      isActive ? 'text-[#111827] dark:text-white' : 'text-[#6B7280] dark:text-[#8A8A8A] group-hover:text-[#111827] dark:hover:text-white'
                     }`}
                   >
                     {item.label}
@@ -52,22 +52,22 @@ export const Navigation: React.FC = () => {
         {/* Header Actions */}
         <div className="hidden md:flex items-center gap-6">
           {/* Search Box */}
-          <div className="flex items-center gap-3 bg-[#1A1A1A] rounded-lg px-4 py-2.5">
-            <Search size={18} className="text-[#8A8A8A]" />
+          <div className="flex items-center gap-3 bg-[#FFFFFF] dark:bg-[#1A1A1A] rounded-lg px-4 py-2.5">
+            <Search size={18} className="text-[#6B7280] dark:text-[#8A8A8A]" />
             <input 
               type="text" 
               placeholder="Search here..." 
-              className="bg-transparent border-none outline-none text-[#8A8A8A] text-sm font-['Inter'] w-48 placeholder:text-[#8A8A8A]"
+              className="bg-transparent border-none outline-none text-[#6B7280] dark:text-[#8A8A8A] text-sm font-['Inter'] w-48 placeholder:text-[#6B7280] dark:placeholder:text-[#8A8A8A]"
             />
           </div>
           
           {/* Profile Box */}
           <div className="flex items-center gap-6">
-            <button className="text-white hover:text-[#FF3B30] transition-colors border-none bg-transparent cursor-pointer">
+            <button className="text-[#111827] dark:text-white hover:text-[#FF3B30] transition-colors border-none bg-transparent cursor-pointer">
               <Bell size={20} />
             </button>
             <Link href="/profile">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-['Inter'] font-semibold text-sm cursor-pointer transition-all ${isProfilePage ? 'bg-[#FF3B30] shadow-[0_0_16px_rgba(255,59,48,0.45)]' : 'bg-[#FF5500] shadow-[0_0_15px_rgba(255,85,0,0.3)] hover:bg-[#FF6A1A]'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[#111827] dark:text-white font-['Inter'] font-semibold text-sm cursor-pointer transition-all ${isProfilePage ? 'bg-[#FF3B30] shadow-[0_0_16px_rgba(255,59,48,0.45)]' : 'bg-[#FF5500] shadow-[0_0_15px_rgba(255,85,0,0.3)] hover:bg-[#FF6A1A]'}`}>
                 AT
               </div>
             </Link>

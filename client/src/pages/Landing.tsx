@@ -94,7 +94,7 @@ export default function Landing() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#0C0C0C] font-['Inter'] flex flex-col items-center overflow-x-hidden pt-16 relative">
+    <div className="min-h-screen bg-[#F3F4F6] dark:bg-[#0C0C0C] font-['Inter'] flex flex-col items-center overflow-x-hidden pt-16 relative">
       
       {/* Background Gradients (Bottom Only) */}
       {/* Ambient Glossy Background */}
@@ -117,22 +117,22 @@ export default function Landing() {
           
           <div className="flex flex-col items-center gap-8 w-full max-w-4xl text-center">
             
-            <h1 className="text-white font-['Sora'] text-[64px] font-[800] leading-[1.1] tracking-[-2px]">
+            <h1 className="text-[#111827] dark:text-white font-['Sora'] text-[64px] font-[800] leading-[1.1] tracking-[-2px]">
               <span className="text-[#FF5500]">Safeguard</span> Every Transaction
             </h1>
             
-            <p className="text-[#8A8A8A] font-['Inter'] text-[18px] leading-[1.6] max-w-3xl">
+            <p className="text-[#6B7280] dark:text-[#8A8A8A] font-['Inter'] text-[18px] leading-[1.6] max-w-3xl">
               Our intelligent engine analyzes millions of data points in milliseconds,<br />
               providing your team with actionable insights to protect users from digital payment fraud.
             </p>
 
             <div className="flex items-center gap-6 mt-4">
               <Link href="/dashboard">
-                <button className="bg-[#FF3B30] border border-[#FF5500] text-white px-8 py-4 rounded-lg font-['Inter'] font-semibold text-[15px] cursor-pointer hover:bg-[#E0352B] transition-colors">
+                <button className="bg-[#FF3B30] border border-[#FF5500] text-[#111827] dark:text-white px-8 py-4 rounded-lg font-['Inter'] font-semibold text-[15px] cursor-pointer hover:bg-[#E0352B] transition-colors">
                   Explore Dashboard
                 </button>
               </Link>
-              <button onClick={() => window.open('https://github.com/JYuenChia/digital-trust-fraud-shield.git', '_blank')} className="bg-[#1A1A1A]/80 backdrop-blur-2xl border border-white/20 text-white px-8 py-4 rounded-lg font-['Inter'] font-semibold text-[15px] cursor-pointer hover:bg-white/10 transition-colors">
+              <button onClick={() => window.open('https://github.com/JYuenChia/digital-trust-fraud-shield.git', '_blank')} className="bg-[#FFFFFF]/80 dark:bg-[#1A1A1A]/80 backdrop-blur-2xl border border-black/20 dark:border-white/20 text-[#111827] dark:text-white px-8 py-4 rounded-lg font-['Inter'] font-semibold text-[15px] cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
                 View Documentation
               </button>
             </div>
@@ -144,12 +144,12 @@ export default function Landing() {
           {/* Feature Header */}
           <div className="flex justify-between items-end w-full">
             <div className="flex flex-col gap-2">
-              <h2 className="text-white font-['Sora'] text-[40px] font-bold leading-tight">
+              <h2 className="text-[#111827] dark:text-white font-['Sora'] text-[40px] font-bold leading-tight">
                 Your trusted partner for<br />
                 <span className="text-[#FF5500]">fraud prevention.</span>
               </h2>
             </div>
-            <p className="text-[#8A8A8A] font-['Inter'] text-[16px] leading-[1.6] max-w-[400px] text-right">
+            <p className="text-[#6B7280] dark:text-[#8A8A8A] font-['Inter'] text-[16px] leading-[1.6] max-w-[400px] text-right">
               Our system unites and secures a growing<br />
               ecosystem of specialized financial data to eliminate threats.
             </p>
@@ -160,15 +160,15 @@ export default function Landing() {
             {features.map((feat, i) => (
               <div 
                 key={i} 
-                className="group p-10 rounded-2xl flex flex-col gap-4 aspect-square justify-center transition-all duration-300 bg-[#1A1A1A]/80 border border-white/10 hover:bg-[#FF5500] hover:shadow-[0_0_40px_rgba(255,85,0,0.3)] hover:scale-[1.02]"
+                className="group p-10 rounded-2xl flex flex-col gap-4 aspect-square justify-center transition-all duration-300 bg-[#FFFFFF]/80 dark:bg-[#1A1A1A]/80 border border-black/10 dark:border-white/10 hover:bg-[#FF5500] hover:shadow-[0_0_40px_rgba(255,85,0,0.3)] hover:scale-[1.02]"
               >
                 <div className="font-['Sora'] text-2xl font-bold text-[#FF5500] group-hover:text-[#1A1A1A]">
                   {feat.num}
                 </div>
-                <h3 className="font-['Sora'] text-xl font-bold mt-4 text-white group-hover:text-[#111111]">
+                <h3 className="font-['Sora'] text-xl font-bold mt-4 text-[#111827] dark:text-white group-hover:text-[#111111]">
                   {feat.title}
                 </h3>
-                <p className="font-['Inter'] text-sm leading-[1.6] text-[#8A8A8A] group-hover:text-[#333333] group-hover:font-medium">
+                <p className="font-['Inter'] text-sm leading-[1.6] text-[#6B7280] dark:text-[#8A8A8A] group-hover:text-[#333333] group-hover:font-medium">
                   {feat.desc}
                 </p>
               </div>
@@ -178,7 +178,7 @@ export default function Landing() {
 
         {/* How It Works Section */}
         <ScrollReveal className="flex flex-col gap-[60px] py-[80px] w-full">
-          <h2 className="text-white font-['Sora'] text-[40px] font-bold">
+          <h2 className="text-[#111827] dark:text-white font-['Sora'] text-[40px] font-bold">
             How It Works
           </h2>
           
@@ -193,10 +193,10 @@ export default function Landing() {
                   <div className="absolute right-[-6px] top-9 w-3 h-3 rounded-full bg-[#FF5500] shadow-[0_0_10px_#FF5500]" />
                 </div>
                 <div className="pt-6 pb-12 pl-12 flex flex-col gap-3">
-                  <h3 className="text-white font-['Sora'] text-2xl font-bold">
+                  <h3 className="text-[#111827] dark:text-white font-['Sora'] text-2xl font-bold">
                     {step.title}
                   </h3>
-                  <p className="text-[#8A8A8A] font-['Inter'] text-[16px]">
+                  <p className="text-[#6B7280] dark:text-[#8A8A8A] font-['Inter'] text-[16px]">
                     {step.desc}
                   </p>
                 </div>

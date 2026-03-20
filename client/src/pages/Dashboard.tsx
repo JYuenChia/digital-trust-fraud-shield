@@ -51,7 +51,7 @@ export default function Dashboard() {
   const alerts = events.filter((e) => e.status !== 'APPROVED').slice(0, 3);
 
   return (
-    <div className="min-h-screen bg-[#0C0C0C] font-['Inter'] flex flex-col items-center pt-16">
+    <div className="min-h-screen bg-[#F3F4F6] dark:bg-[#0C0C0C] font-['Inter'] flex flex-col items-center pt-16">
       
       {/* Background Gradients (Glossy Bloom) */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden flex justify-center">
@@ -65,12 +65,12 @@ export default function Dashboard() {
         {/* Top Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 w-full">
           {/* Stat Card 1 */}
-          <div className="bg-[#1A1A1A]/50 backdrop-blur-2xl border border-white/10 rounded-xl p-6 flex flex-col gap-4">
+          <div className="bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-4">
             <div className="flex justify-between items-center">
-              <span className="text-[#8A8A8A] text-sm font-semibold tracking-wider">TOTAL TRANSACTIONS</span>
-              <CreditCard size={20} className="text-[#525252]" />
+              <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm font-semibold tracking-wider">TOTAL TRANSACTIONS</span>
+              <CreditCard size={20} className="text-[#9CA3AF] dark:text-[#525252]" />
             </div>
-            <div className="text-white font-['Sora'] text-4xl font-bold">{totalTransactions}</div>
+            <div className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">{totalTransactions}</div>
             <div className="flex items-center gap-2">
               <TrendingUp size={16} className="text-[#FF5500]" />
               <span className="text-[#FF5500] text-sm font-semibold">Live from transaction simulator</span>
@@ -78,12 +78,12 @@ export default function Dashboard() {
           </div>
 
           {/* Stat Card 2 */}
-          <div className="bg-[#1A1A1A]/50 backdrop-blur-2xl border border-white/10 rounded-xl p-6 flex flex-col gap-4">
+          <div className="bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-4">
             <div className="flex justify-between items-center">
-              <span className="text-[#8A8A8A] text-sm font-semibold tracking-wider">BLOCKED FRAUD</span>
-              <ShieldAlert size={20} className="text-[#525252]" />
+              <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm font-semibold tracking-wider">BLOCKED FRAUD</span>
+              <ShieldAlert size={20} className="text-[#9CA3AF] dark:text-[#525252]" />
             </div>
-            <div className="text-white font-['Sora'] text-4xl font-bold">{blockedCount}</div>
+            <div className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">{blockedCount}</div>
             <div className="flex items-center gap-2">
               <TrendingDown size={16} className="text-[#FF3B30]" />
               <span className="text-[#FF3B30] text-sm font-semibold">{flaggedCount} flagged pending review</span>
@@ -91,12 +91,12 @@ export default function Dashboard() {
           </div>
 
           {/* Stat Card 3 */}
-          <div className="bg-[#1A1A1A]/50 backdrop-blur-2xl border border-white/10 rounded-xl p-6 flex flex-col gap-4">
+          <div className="bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-4">
             <div className="flex justify-between items-center">
-              <span className="text-[#8A8A8A] text-sm font-semibold tracking-wider">FRAUD RATE</span>
-              <BarChart3 size={20} className="text-[#525252]" />
+              <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm font-semibold tracking-wider">FRAUD RATE</span>
+              <BarChart3 size={20} className="text-[#9CA3AF] dark:text-[#525252]" />
             </div>
-            <div className="text-white font-['Sora'] text-4xl font-bold">{fraudRate.toFixed(1)}%</div>
+            <div className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">{fraudRate.toFixed(1)}%</div>
             <div className="flex items-center gap-2">
               <TrendingUp size={16} className="text-[#FF3B30]" />
               <span className="text-[#FF3B30] text-sm font-semibold">Flagged + blocked / total</span>
@@ -104,12 +104,12 @@ export default function Dashboard() {
           </div>
 
           {/* Stat Card 4 */}
-          <div className="bg-[#1A1A1A]/50 backdrop-blur-2xl border border-white/10 rounded-xl p-6 flex flex-col gap-4">
+          <div className="bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-4">
             <div className="flex justify-between items-center">
-              <span className="text-[#8A8A8A] text-sm font-semibold tracking-wider">AVG REVIEW TIME</span>
-              <Clock size={20} className="text-[#525252]" />
+              <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm font-semibold tracking-wider">AVG REVIEW TIME</span>
+              <Clock size={20} className="text-[#9CA3AF] dark:text-[#525252]" />
             </div>
-            <div className="text-white font-['Sora'] text-4xl font-bold">{Math.round(avgRisk * 100)}%</div>
+            <div className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">{Math.round(avgRisk * 100)}%</div>
             <div className="flex items-center gap-2">
               <TrendingDown size={16} className="text-[#FF5500]" />
               <span className="text-[#FF5500] text-sm font-semibold">Average final risk score</span>
@@ -120,53 +120,53 @@ export default function Dashboard() {
         {/* Mid Row: Charts & Alerts */}
         <div className="flex flex-col lg:flex-row gap-6 w-full">
           {/* Chart Card */}
-          <div className="flex-[2] bg-[#1A1A1A]/50 backdrop-blur-2xl border border-white/10 rounded-xl p-6 flex flex-col gap-6">
+          <div className="flex-[2] bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-6">
             <div className="flex justify-between items-center">
-              <span className="text-white font-['Sora'] font-semibold tracking-wider">RISK SCORE DISTRIBUTION</span>
-              <ArrowUpRight size={20} className="text-[#8A8A8A]" />
+              <span className="text-[#111827] dark:text-white font-['Sora'] font-semibold tracking-wider">RISK SCORE DISTRIBUTION</span>
+              <ArrowUpRight size={20} className="text-[#6B7280] dark:text-[#8A8A8A]" />
             </div>
-            <div className="w-full h-64 bg-[#141414] rounded-lg border border-white/5 p-6 flex items-end justify-between gap-4">
+            <div className="w-full h-64 bg-[#F8FAFC] dark:bg-[#141414] rounded-lg border border-black/5 dark:border-white/5 p-6 flex items-end justify-between gap-4">
               {[
                 { key: 'Low', value: lowRiskCount, color: 'bg-[#32D74B]' },
                 { key: 'Medium', value: mediumRiskCount, color: 'bg-[#FF9F0A]' },
                 { key: 'High', value: highRiskCount, color: 'bg-[#FF3B30]' },
               ].map((bucket) => (
                 <div key={bucket.key} className="flex-1 flex flex-col items-center gap-3">
-                  <div className="text-[#8A8A8A] text-xs">{bucket.value}</div>
+                  <div className="text-[#6B7280] dark:text-[#8A8A8A] text-xs">{bucket.value}</div>
                   <div className="h-40 w-full flex items-end">
                     <div
                       className={`${bucket.color} w-full rounded-md`}
                       style={{ height: `${(bucket.value / maxBucket) * 100}%` }}
                     />
                   </div>
-                  <div className="text-white text-xs font-semibold">{bucket.key}</div>
+                  <div className="text-[#111827] dark:text-white text-xs font-semibold">{bucket.key}</div>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Alerts Card */}
-          <div className="flex-[1] bg-[#1A1A1A]/50 backdrop-blur-2xl border border-white/10 rounded-xl p-6 flex flex-col gap-6">
+          <div className="flex-[1] bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-6">
             <div className="flex justify-between items-center">
-              <span className="text-white font-['Sora'] font-semibold tracking-wider">REAL-TIME ALERTS</span>
+              <span className="text-[#111827] dark:text-white font-['Sora'] font-semibold tracking-wider">REAL-TIME ALERTS</span>
               <div className="bg-[#FF3B30]/20 px-3 py-1 rounded-full text-[#FF3B30] text-xs font-bold w-fit">{alerts.length} NEW</div>
             </div>
             
             <div className="flex flex-col gap-4">
               {alerts.length === 0 && (
-                <div className="text-[#8A8A8A] text-sm">No alerts yet. Run a flagged or blocked transaction to populate this panel.</div>
+                <div className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">No alerts yet. Run a flagged or blocked transaction to populate this panel.</div>
               )}
               {alerts.map((alert) => (
-                <div key={alert.id} className="flex gap-4 items-start bg-[#141414] p-4 rounded-lg border border-white/5">
+                <div key={alert.id} className="flex gap-4 items-start bg-[#F8FAFC] dark:bg-[#141414] p-4 rounded-lg border border-black/5 dark:border-white/5">
                   <div className={`${alert.status === 'BLOCKED' ? 'bg-[#FF3B30]/10' : 'bg-[#FF9F0A]/10'} p-2 rounded-lg`}>
                     <AlertTriangle size={20} className={alert.status === 'BLOCKED' ? 'text-[#FF3B30]' : 'text-[#FF9F0A]'} />
                   </div>
                   <div className="flex flex-col gap-1 w-full">
                     <div className="flex justify-between items-center w-full">
-                      <span className="text-white font-semibold text-sm font-['Sora']">{alert.status} ({Math.round(alert.riskScore * 100)}%)</span>
-                      <span className="text-[#8A8A8A] text-xs">{formatRelativeTime(alert.timestamp)}</span>
+                      <span className="text-[#111827] dark:text-white font-semibold text-sm font-['Sora']">{alert.status} ({Math.round(alert.riskScore * 100)}%)</span>
+                      <span className="text-[#6B7280] dark:text-[#8A8A8A] text-xs">{formatRelativeTime(alert.timestamp)}</span>
                     </div>
-                    <span className="text-[#8A8A8A] text-xs leading-relaxed">{alert.reasonCode}</span>
+                    <span className="text-[#6B7280] dark:text-[#8A8A8A] text-xs leading-relaxed">{alert.reasonCode}</span>
                   </div>
                 </div>
               ))}
@@ -175,9 +175,9 @@ export default function Dashboard() {
         </div>
 
         {/* Table Card */}
-        <div className="w-full bg-[#1A1A1A]/50 backdrop-blur-2xl border border-white/10 rounded-xl p-6 flex flex-col gap-6">
+        <div className="w-full bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-6">
           <div className="flex justify-between items-center">
-            <span className="text-white font-['Sora'] font-semibold tracking-wider">RECENT TRANSACTIONS</span>
+            <span className="text-[#111827] dark:text-white font-['Sora'] font-semibold tracking-wider">RECENT TRANSACTIONS</span>
             <button onClick={clearEvents} className="text-[#FF5500] text-sm font-semibold border border-[#FF5500]/30 px-4 py-2 rounded-lg hover:bg-[#FF5500]/10 transition-colors">
               Clear Demo Data
             </button>
@@ -186,7 +186,7 @@ export default function Dashboard() {
           <div className="w-full overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-white/10 text-[#8A8A8A] text-xs uppercase tracking-wider font-semibold">
+                <tr className="border-b border-black/10 dark:border-white/10 text-[#6B7280] dark:text-[#8A8A8A] text-xs uppercase tracking-wider font-semibold">
                   <th className="pb-4 px-4 font-normal">Transaction ID</th>
                   <th className="pb-4 px-4 font-normal">User</th>
                   <th className="pb-4 px-4 font-normal">Amount</th>
@@ -197,11 +197,11 @@ export default function Dashboard() {
               </thead>
               <tbody className="text-sm">
                 {events.slice(0, 6).map((evt, idx) => (
-                  <tr key={evt.id} className={`${idx < events.slice(0, 6).length - 1 ? 'border-b' : ''} border-white/5 hover:bg-white/5 transition-colors`}>
-                    <td className="py-4 px-4 text-white font-mono">{evt.id.slice(-10).toUpperCase()}</td>
-                    <td className="py-4 px-4 text-white font-semibold">{evt.user}</td>
-                    <td className="py-4 px-4 text-white font-['Sora'] font-semibold">{formatCurrency(evt.amount, evt.currency)}</td>
-                    <td className="py-4 px-4 text-[#8A8A8A]">{new Date(evt.timestamp).toLocaleString()}</td>
+                  <tr key={evt.id} className={`${idx < events.slice(0, 6).length - 1 ? 'border-b' : ''} border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors`}>
+                    <td className="py-4 px-4 text-[#111827] dark:text-white font-mono">{evt.id.slice(-10).toUpperCase()}</td>
+                    <td className="py-4 px-4 text-[#111827] dark:text-white font-semibold">{evt.user}</td>
+                    <td className="py-4 px-4 text-[#111827] dark:text-white font-['Sora'] font-semibold">{formatCurrency(evt.amount, evt.currency)}</td>
+                    <td className="py-4 px-4 text-[#6B7280] dark:text-[#8A8A8A]">{new Date(evt.timestamp).toLocaleString()}</td>
                     <td className="py-4 px-4">
                       <span className={`${evt.status === 'BLOCKED' ? 'bg-[#FF3B30]/10 text-[#FF3B30]' : evt.status === 'FLAGGED' ? 'bg-[#FF9F0A]/10 text-[#FF9F0A]' : 'bg-[#32D74B]/10 text-[#32D74B]'} px-2 py-1 rounded font-bold`}>{Math.round(evt.riskScore * 100)} ({riskLabel(evt.riskScore)})</span>
                     </td>
@@ -226,7 +226,7 @@ export default function Dashboard() {
                 ))}
                 {events.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-8 px-4 text-[#8A8A8A] text-center">No transactions yet. Submit a transaction from the Transaction page to populate this dashboard.</td>
+                    <td colSpan={6} className="py-8 px-4 text-[#6B7280] dark:text-[#8A8A8A] text-center">No transactions yet. Submit a transaction from the Transaction page to populate this dashboard.</td>
                   </tr>
                 )}
               </tbody>

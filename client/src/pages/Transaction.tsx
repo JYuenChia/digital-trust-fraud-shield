@@ -70,15 +70,15 @@ function StyledDropdown({
     .find((option) => option.value === value);
 
   return (
-    <div ref={dropdownRef} className={`relative flex flex-col gap-2 bg-[#141414] border transition-all p-4 rounded-xl ${isOpen ? 'border-[#FF5500] shadow-[0_0_20px_rgba(255,85,0,0.2)]' : 'border-white/5'}`}>
-      <label className={`text-sm cursor-default transition-colors ${isOpen ? 'text-[#FF5500]' : 'text-[#8A8A8A]'}`}>{label}</label>
+    <div ref={dropdownRef} className={`relative flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border transition-all p-4 rounded-xl ${isOpen ? 'border-[#FF5500] shadow-[0_0_20px_rgba(255,85,0,0.2)]' : 'border-black/5 dark:border-white/5'}`}>
+      <label className={`text-sm cursor-default transition-colors ${isOpen ? 'text-[#FF5500]' : 'text-[#6B7280] dark:text-[#8A8A8A]'}`}>{label}</label>
       <div className="flex items-center justify-between cursor-pointer w-full" onClick={() => setIsOpen((prev) => !prev)}>
-        <span className="bg-transparent text-white font-semibold outline-none">{selectedOption?.label ?? value}</span>
-        <ChevronDown size={20} className={`text-[#8A8A8A] transition-transform ${isOpen ? 'rotate-180 text-[#FF5500]' : ''}`} />
+        <span className="bg-transparent text-[#111827] dark:text-white font-semibold outline-none">{selectedOption?.label ?? value}</span>
+        <ChevronDown size={20} className={`text-[#6B7280] dark:text-[#8A8A8A] transition-transform ${isOpen ? 'rotate-180 text-[#FF5500]' : ''}`} />
       </div>
 
       {isOpen && (
-        <div className="hide-scrollbar absolute top-[calc(100%+8px)] left-0 w-full min-w-full max-h-72 overflow-y-auto bg-[#1A1A1A] border border-white/20 rounded-lg p-2 shadow-2xl z-50">
+        <div className="hide-scrollbar absolute top-[calc(100%+8px)] left-0 w-full min-w-full max-h-72 overflow-y-auto bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-lg p-2 shadow-2xl z-50">
           {groups.map((group, groupIndex) => (
             <div key={`${label}-${group.label ?? groupIndex}`} className="flex flex-col gap-1.5">
               {group.label && <div className="px-3 pt-2 pb-2 text-[11px] uppercase tracking-[0.22em] text-[#6F6F6F]">{group.label}</div>}
@@ -89,7 +89,7 @@ function StyledDropdown({
                     onChange(option.value);
                     setIsOpen(false);
                   }}
-                  className={`px-3 py-2.5 rounded-md cursor-pointer transition-colors text-sm leading-snug whitespace-normal break-words ${value === option.value ? 'bg-[#FF5500]/20 text-[#FF5500] font-semibold' : 'text-[#E0E0E0] hover:bg-white/5'}`}
+                  className={`px-3 py-2.5 rounded-md cursor-pointer transition-colors text-sm leading-snug whitespace-normal break-words ${value === option.value ? 'bg-[#FF5500]/20 text-[#FF5500] font-semibold' : 'text-slate-600 dark:text-[#E0E0E0] hover:bg-black/5 dark:hover:bg-white/5'}`}
                 >
                   {option.label}
                 </div>
@@ -202,15 +202,15 @@ function SafetyBoatCard({ profile }: { profile: BoatProfile }) {
   const warningStrikes = profile.warningStrikes;
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0F141A] p-4 flex flex-col gap-3">
+    <div className="rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#0F141A] p-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-[0.16em] text-[#8A8A8A]">Safety Tracker</span>
-        <span className="text-xs font-semibold text-[#72E18B]">
+        <span className="text-xs uppercase tracking-[0.16em] text-[#6B7280] dark:text-[#8A8A8A]">Safety Tracker</span>
+        <span className="text-xs font-semibold text-emerald-700 dark:text-[#72E18B]">
           MONITORING
         </span>
       </div>
 
-      <div className="relative h-24 rounded-lg border border-white/10 overflow-hidden bg-[#0C1C2B]">
+      <div className="relative h-24 rounded-lg border border-black/10 dark:border-white/10 overflow-hidden bg-blue-100 dark:bg-[#0C1C2B]">
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(140,210,255,0.32)_0%,rgba(53,123,185,0.52)_45%,rgba(12,49,84,0.95)_100%)]" />
         <svg viewBox="0 0 180 100" className="absolute left-3 bottom-1 h-20 w-40" aria-hidden="true">
           <path d="M20 62h120l-10 18c-2 4-6 6-11 6H42c-5 0-9-2-11-6L20 62z" fill="#D89A61" />
@@ -226,21 +226,21 @@ function SafetyBoatCard({ profile }: { profile: BoatProfile }) {
       </div>
 
       <div className="grid grid-cols-3 gap-2 text-xs">
-        <div className="rounded-md bg-white/5 px-2 py-2">
-          <p className="text-[#8A8A8A]">Safe Points</p>
-          <p className="text-white font-semibold">{profile.safePoints}</p>
+        <div className="rounded-md bg-black/5 dark:bg-white/5 px-2 py-2">
+          <p className="text-[#6B7280] dark:text-[#8A8A8A]">Safe Points</p>
+          <p className="text-[#111827] dark:text-white font-semibold">{profile.safePoints}</p>
         </div>
-        <div className="rounded-md bg-white/5 px-2 py-2">
-          <p className="text-[#8A8A8A]">Damage</p>
-          <p className={`font-semibold ${damage >= 60 ? 'text-[#FF6B6B]' : 'text-white'}`}>{damage}%</p>
+        <div className="rounded-md bg-black/5 dark:bg-white/5 px-2 py-2">
+          <p className="text-[#6B7280] dark:text-[#8A8A8A]">Damage</p>
+          <p className={`font-semibold ${damage >= 60 ? 'text-[#FF6B6B]' : 'text-[#111827] dark:text-white'}`}>{damage}%</p>
         </div>
-        <div className="rounded-md bg-white/5 px-2 py-2">
-          <p className="text-[#8A8A8A]">Warning Alerts</p>
-          <p className={`font-semibold ${warningStrikes >= 2 ? 'text-[#FF9F0A]' : 'text-white'}`}>{warningStrikes}</p>
+        <div className="rounded-md bg-black/5 dark:bg-white/5 px-2 py-2">
+          <p className="text-[#6B7280] dark:text-[#8A8A8A]">Warning Alerts</p>
+          <p className={`font-semibold ${warningStrikes >= 2 ? 'text-[#FF9F0A]' : 'text-[#111827] dark:text-white'}`}>{warningStrikes}</p>
         </div>
       </div>
 
-      <p className="text-[11px] text-[#9CA8B5]">
+      <p className="text-[11px] text-slate-600 dark:text-[#9CA8B5]">
         More safe transfers raise points. Repeated risky behavior increases damage and warnings.
       </p>
     </div>
@@ -283,8 +283,8 @@ function SafetyWeatherCard({ riskScore }: { riskScore: number }) {
   }[state];
 
   return (
-    <div className={`w-full rounded-2xl border bg-[#101318] p-4 ${frameClass}`}>
-      <div className={`relative h-28 overflow-hidden rounded-xl border border-white/10 bg-[#0B1118] ${visualClass}`}>
+    <div className={`w-full rounded-2xl border bg-white dark:bg-[#101318] p-4 ${frameClass}`}>
+      <div className={`relative h-28 overflow-hidden rounded-xl border border-black/10 dark:border-white/10 bg-slate-100 dark:bg-[#0B1118] ${visualClass}`}>
         <div className={`absolute inset-0 ${config.seaClass}`} />
 
         {state === 'calm' && (
@@ -334,7 +334,7 @@ function SafetyWeatherCard({ riskScore }: { riskScore: number }) {
       </div>
 
       <div className="mt-3">
-        <p className="text-sm font-semibold text-white">{config.subtitle}</p>
+        <p className="text-sm font-semibold text-[#111827] dark:text-white">{config.subtitle}</p>
       </div>
     </div>
   );
@@ -516,13 +516,13 @@ export default function Transaction() {
     if (!qr) return null;
 
     return (
-      <div className="w-full rounded-lg border border-white/10 bg-[#FFFFFF05] px-4 py-3 text-left">
-        <p className="text-xs uppercase tracking-[0.16em] text-[#8A8A8A]">QR Integrity Shield</p>
+      <div className="w-full rounded-lg border border-black/10 dark:border-white/10 bg-black/5 dark:bg-[#FFFFFF05] px-4 py-3 text-left">
+        <p className="text-xs uppercase tracking-[0.16em] text-[#6B7280] dark:text-[#8A8A8A]">QR Integrity Shield</p>
         <p className={`mt-1 text-sm font-semibold ${qr.is_verified_merchant ? 'text-[#32D74B]' : 'text-[#FF9F0A]'}`}>
           Merchant Verification: {qr.is_verified_merchant ? 'Verified' : 'Unverified'}
         </p>
         {qr.pattern_match_message && (
-          <p className="mt-2 text-xs text-[#C9D3DF]">
+          <p className="mt-2 text-xs text-slate-600 dark:text-[#C9D3DF]">
             {qr.pattern_match_message}
           </p>
         )}
@@ -776,7 +776,7 @@ export default function Transaction() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0C0C0C] font-['Inter'] flex flex-col items-center pt-16">
+    <div className="min-h-screen bg-[#F3F4F6] dark:bg-[#0C0C0C] font-['Inter'] flex flex-col items-center pt-16">
       
       {/* Background Gradients (Glossy Bloom, Bottom) */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden flex justify-center">
@@ -788,23 +788,23 @@ export default function Transaction() {
       <div className="w-full max-w-[1510px] relative z-10 px-[40px] py-[40px] pb-[80px] flex justify-center">
         
         {/* Form Container */}
-        <div className="w-full max-w-[1315px] bg-[#1A1A1A]/50 backdrop-blur-2xl border border-white/10 rounded-3xl p-12 flex flex-col gap-10">
+        <div className="w-full max-w-[1315px] bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-3xl p-12 flex flex-col gap-10">
           
           {/* Title Area */}
           <div className="flex flex-col gap-2">
-            <h1 className="text-white font-['Sora'] text-4xl font-bold">Make a Secure Transaction</h1>
-            <p className="text-[#8A8A8A] text-lg">Transfer funds safely with AI-powered fraud monitoring.</p>
+            <h1 className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">Make a Secure Transaction</h1>
+            <p className="text-[#6B7280] dark:text-[#8A8A8A] text-lg">Transfer funds safely with AI-powered fraud monitoring.</p>
           </div>
 
           <div className="rounded-2xl border border-[#FF5500]/30 bg-[#FF5500]/10 px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex flex-col">
-              <span className="text-xs uppercase tracking-[0.18em] text-[#FF8A4D]">Quick Payment</span>
-              <span className="text-sm text-white">Scan a merchant or DuitNow QR code to automatically fill in payment details.</span>
+              <span className="text-xs uppercase tracking-[0.18em] text-orange-700 dark:text-[#FF8A4D]">Quick Payment</span>
+              <span className="text-sm text-[#111827] dark:text-white">Scan a merchant or DuitNow QR code to automatically fill in payment details.</span>
             </div>
             <button
               type="button"
               onClick={() => setIsQrScannerOpen(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FF5500] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#E04B00] transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FF5500] px-4 py-2.5 text-sm font-bold text-[#111827] dark:text-white hover:bg-[#E04B00] transition-colors cursor-pointer"
             >
               <ScanLine size={16} />
               Scan QR to Pay
@@ -819,23 +819,23 @@ export default function Transaction() {
 
           {/* Sender Information */}
           <div className="flex flex-col gap-6">
-            <h2 className="text-white text-lg font-semibold border-b border-white/10 pb-4">Sender Information</h2>
+            <h2 className="text-[#111827] dark:text-white text-lg font-semibold border-b border-black/10 dark:border-white/10 pb-4">Sender Information</h2>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 p-4 rounded-xl">
-                <span className="text-[#8A8A8A] text-sm">Sender Name</span>
-                <span className="text-white font-semibold">Alex Tan</span>
+              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
+                <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Sender Name</span>
+                <span className="text-[#111827] dark:text-white font-semibold">Alex Tan</span>
               </div>
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 p-4 rounded-xl">
-                <span className="text-[#8A8A8A] text-sm">Account Number</span>
-                <span className="text-white font-mono text-sm tracking-widest text-[#FF5500]">**** **** 8899</span>
+              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
+                <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Account Number</span>
+                <span className="text-[#111827] dark:text-white font-mono text-sm tracking-widest text-[#FF5500]">**** **** 8899</span>
               </div>
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 p-4 rounded-xl">
-                <span className="text-[#8A8A8A] text-sm">Available Balance</span>
-                <span className="text-white font-semibold font-['Sora']">RM 12,450</span>
+              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
+                <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Available Balance</span>
+                <span className="text-[#111827] dark:text-white font-semibold font-['Sora']">RM 12,450</span>
               </div>
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 p-4 rounded-xl">
-                <span className="text-[#8A8A8A] text-sm">Wallet</span>
-                <span className="text-white font-semibold">DemoPay Wallet</span>
+              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
+                <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Wallet</span>
+                <span className="text-[#111827] dark:text-white font-semibold">DemoPay Wallet</span>
               </div>
             </div>
             <SafetyBoatCard profile={boatProfile} />
@@ -843,12 +843,12 @@ export default function Transaction() {
 
           {/* Recipient Information */}
           <div className="flex flex-col gap-6">
-            <h2 className="text-white text-lg font-semibold border-b border-white/10 pb-4">Recipient Information</h2>
+            <h2 className="text-[#111827] dark:text-white text-lg font-semibold border-b border-black/10 dark:border-white/10 pb-4">Recipient Information</h2>
             {scannedQrPayload && (
               <div className="flex items-center justify-between rounded-xl border border-[#FF5500]/30 bg-[#FF5500]/8 px-4 py-3">
                 <div className="flex flex-col">
-                  <span className="text-xs uppercase tracking-[0.18em] text-[#FF8A4D]">QR Integrity Shield</span>
-                  <span className="text-sm text-white">Recipient details loaded from QR.</span>
+                  <span className="text-xs uppercase tracking-[0.18em] text-orange-700 dark:text-[#FF8A4D]">QR Integrity Shield</span>
+                  <span className="text-sm text-[#111827] dark:text-white">Recipient details loaded from QR.</span>
                 </div>
                 <button
                   type="button"
@@ -856,31 +856,31 @@ export default function Transaction() {
                     setScannedQrPayload(null);
                     setQrScanStatus(null);
                   }}
-                  className="text-xs font-semibold text-[#FF8A4D] hover:text-[#FFAA78] cursor-pointer"
+                  className="text-xs font-semibold text-orange-700 dark:text-[#FF8A4D] hover:text-[#FFAA78] cursor-pointer"
                 >
                   Clear QR
                 </button>
               </div>
             )}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
-                <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Recipient Name</label>
+              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
+                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Recipient Name</label>
                 <input 
                   type="text" 
                   value={recipientName}
                   onChange={(e) => setRecipientName(e.target.value)}
                   placeholder="Enter recipient name"
-                  className="bg-transparent text-white font-semibold outline-none w-full placeholder:text-[#525252]"
+                  className="bg-transparent text-[#111827] dark:text-white font-semibold outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
                 />
               </div>
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
-                <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Account Number</label>
+              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
+                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Account Number</label>
                 <input 
                   type="text" 
                   value={recipientAccount}
                   onChange={(e) => setRecipientAccount(e.target.value)}
                   placeholder="Enter account number"
-                  className="bg-transparent text-white font-mono text-sm tracking-widest text-[#FF5500] outline-none w-full placeholder:text-[#525252]"
+                  className="bg-transparent text-[#111827] dark:text-white font-mono text-sm tracking-widest text-[#FF5500] outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
                 />
               </div>
               <StyledDropdown
@@ -903,16 +903,16 @@ export default function Transaction() {
 
           {/* Transaction Details */}
           <div className="flex flex-col gap-6">
-            <h2 className="text-white text-lg font-semibold border-b border-white/10 pb-4">Transaction Details</h2>
+            <h2 className="text-[#111827] dark:text-white text-lg font-semibold border-b border-black/10 dark:border-white/10 pb-4">Transaction Details</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
-                <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Amount</label>
+              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
+                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Amount</label>
                 <input 
                   type="text" 
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
-                  className="bg-transparent text-white font-bold font-['Sora'] text-2xl outline-none w-full placeholder:text-[#525252]"
+                  className="bg-transparent text-[#111827] dark:text-white font-bold font-['Sora'] text-2xl outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
                 />
               </div>
               <StyledDropdown
@@ -925,23 +925,23 @@ export default function Transaction() {
                   },
                 ]}
               />
-              <div className="flex flex-col gap-2 bg-[#141414] border border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
-                <label className="text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Note (Optional)</label>
+              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
+                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Note (Optional)</label>
                 <input 
                   type="text" 
                   defaultValue="" 
                   placeholder="Enter transfer note"
-                  className="bg-transparent text-white font-semibold italic opacity-80 outline-none w-full placeholder:text-[#525252]"
+                  className="bg-transparent text-[#111827] dark:text-white font-semibold italic opacity-80 outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
                 />
               </div>
             </div>
 
-            <div className="rounded-xl border border-[#5DA8FF44] bg-[#5DA8FF12] px-4 py-3">
-              <p className="text-sm font-semibold text-[#D4E9FF]">Context Detection is Automatic</p>
-              <p className="mt-1 text-xs text-[#B7D7FA]">Device fingerprint and IP reputation are auto-detected by the backend, just like real production flow.</p>
+            <div className="rounded-xl border border-blue-200 dark:border-[#5DA8FF44] bg-blue-50 dark:bg-[#5DA8FF12] px-4 py-3">
+              <p className="text-sm font-semibold text-blue-900 dark:text-[#D4E9FF]">Context Detection is Automatic</p>
+              <p className="mt-1 text-xs text-blue-800 dark:text-[#B7D7FA]">Device fingerprint and IP reputation are auto-detected by the backend, just like real production flow.</p>
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="text-[11px] uppercase tracking-[0.14em] text-[#89BDEB]">Judge Demo Preset</span>
+                <span className="text-[11px] uppercase tracking-[0.14em] text-blue-700 dark:text-[#89BDEB]">Judge Demo Preset</span>
                 {[
                   { key: 'real-auto', label: 'Real Auto' },
                   { key: 'new-device', label: 'New Device' },
@@ -952,7 +952,7 @@ export default function Transaction() {
                     key={preset.key}
                     type="button"
                     onClick={() => setJudgeDemoPreset(preset.key as 'real-auto' | 'new-device' | 'risky-ip' | 'max-risk')}
-                    className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${judgeDemoPreset === preset.key ? 'bg-[#5DA8FF] text-[#0F1722]' : 'bg-[#FFFFFF10] text-[#D2E6FA] hover:bg-[#FFFFFF1A]'}`}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${judgeDemoPreset === preset.key ? 'bg-blue-500 dark:bg-[#5DA8FF] text-white dark:text-[#0F1722]' : 'bg-black/5 dark:bg-[#FFFFFF10] text-blue-800 dark:text-[#D2E6FA] hover:bg-black/10 dark:hover:bg-black/5 dark:bg-[#FFFFFF1A]'}`}
                   >
                     {preset.label}
                   </button>
@@ -966,7 +966,7 @@ export default function Transaction() {
             onClick={() => {
               setModalState('confirming');
             }}
-            className="w-full bg-[#FF5500] hover:bg-[#E04B00] transition-colors py-5 rounded-xl text-white font-['Sora'] font-bold text-lg mt-4 cursor-pointer"
+            className="w-full bg-[#FF5500] hover:bg-[#E04B00] transition-colors py-5 rounded-xl text-[#111827] dark:text-white font-['Sora'] font-bold text-lg mt-4 cursor-pointer"
           >
             Transfer Now
           </button>
@@ -975,27 +975,27 @@ export default function Transaction() {
 
       {isQrScannerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-[560px] bg-[#1A1A1A] border border-white/20 rounded-3xl p-6 md:p-8 flex flex-col gap-5 shadow-[0_0_40px_rgba(255,85,0,0.18)]">
+          <div className="w-full max-w-[560px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-6 md:p-8 flex flex-col gap-5 shadow-[0_0_40px_rgba(255,85,0,0.18)]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-[#FF5500]/15 flex items-center justify-center">
-                  <ScanLine size={20} className="text-[#FF8A4D]" />
+                  <ScanLine size={20} className="text-orange-700 dark:text-[#FF8A4D]" />
                 </div>
                 <div className="flex flex-col">
-                  <h3 className="text-white text-lg font-bold font-['Sora']">Scan Payment QR</h3>
-                  <p className="text-[#8A8A8A] text-sm">Align the QR code within the frame to pay.</p>
+                  <h3 className="text-[#111827] dark:text-white text-lg font-bold font-['Sora']">Scan Payment QR</h3>
+                  <p className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Align the QR code within the frame to pay.</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={closeQrScanner}
-                className="w-9 h-9 rounded-lg border border-white/10 text-[#8A8A8A] hover:text-white hover:border-white/20 flex items-center justify-center cursor-pointer"
+                className="w-9 h-9 rounded-lg border border-black/10 dark:border-white/10 text-[#6B7280] dark:text-[#8A8A8A] hover:text-[#111827] dark:hover:text-white hover:border-black/20 dark:hover:border-white/20 flex items-center justify-center cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-[#101010] p-3">
+            <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-slate-50 dark:bg-[#101010] p-3">
               <div id={scannerRegionId} className="min-h-[280px] rounded-xl overflow-hidden" />
             </div>
 
@@ -1016,17 +1016,17 @@ export default function Transaction() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
 
           {modalState === 'quiz' && (
-            <div className="w-[540px] max-w-full bg-[#1A1A1A] border border-[#FF9F0A55] rounded-3xl p-8 flex flex-col gap-5">
-              <h2 className="text-white text-2xl font-bold font-['Sora']">Fraud Prevention Quiz</h2>
+            <div className="w-[540px] max-w-full bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#FF9F0A55] rounded-3xl p-8 flex flex-col gap-5">
+              <h2 className="text-[#111827] dark:text-white text-2xl font-bold font-['Sora']">Fraud Prevention Quiz</h2>
               <p className="text-[#B8C1CC] text-sm">Answer this short quiz to unlock transfers safely.</p>
 
               <div className="flex flex-col gap-4">
                 {BOAT_QUIZ.map((q, idx) => (
-                  <div key={q.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-white text-sm font-semibold">{idx + 1}. {q.question}</p>
+                  <div key={q.id} className="rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-4">
+                    <p className="text-[#111827] dark:text-white text-sm font-semibold">{idx + 1}. {q.question}</p>
                     <div className="mt-3 flex flex-col gap-2">
                       {q.options.map((option, optionIdx) => (
-                        <label key={`${q.id}-${optionIdx}`} className="flex items-center gap-2 text-sm text-[#D2D8E0]">
+                        <label key={`${q.id}-${optionIdx}`} className="flex items-center gap-2 text-sm text-slate-600 dark:text-[#D2D8E0]">
                           <input
                             type="radio"
                             name={q.id}
@@ -1052,7 +1052,7 @@ export default function Transaction() {
                 <button
                   type="button"
                   onClick={() => setModalState('idle')}
-                  className="flex-1 rounded-lg border border-white/20 py-3 text-white font-semibold hover:bg-white/10 transition-colors"
+                  className="flex-1 rounded-lg border border-black/20 dark:border-white/20 py-3 text-[#111827] dark:text-white font-semibold hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
                 >
                   Later
                 </button>
@@ -1069,28 +1069,28 @@ export default function Transaction() {
           
           {/* 1. Confirming Modal */}
           {modalState === 'confirming' && (
-            <div className="w-[400px] bg-[#1A1A1A] border border-white/20 rounded-3xl p-8 flex flex-col gap-6">
+            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col gap-6">
               <div className="text-[#FF5500]">
                 <Play size={32} className="fill-[#FF5500] stroke-none rotate-90" />
               </div>
-              <h2 className="text-white text-2xl font-bold font-['Sora']">Confirm Transaction</h2>
+              <h2 className="text-[#111827] dark:text-white text-2xl font-bold font-['Sora']">Confirm Transaction</h2>
               
-              <div className="bg-[#FFFFFF05] rounded-xl flex flex-col gap-3 p-4">
+              <div className="bg-black/5 dark:bg-[#FFFFFF05] rounded-xl flex flex-col gap-3 p-4">
                 <div className="flex justify-between">
-                  <span className="text-[#8A8A8A] text-sm">Pay</span>
-                  <span className="text-white font-semibold">{selectedCurrency} {amount || '0.00'}</span>
+                  <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Pay</span>
+                  <span className="text-[#111827] dark:text-white font-semibold">{selectedCurrency} {amount || '0.00'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#8A8A8A] text-sm">To</span>
-                  <span className="text-white font-semibold">{recipientName || 'Recipient'}</span>
+                  <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">To</span>
+                  <span className="text-[#111827] dark:text-white font-semibold">{recipientName || 'Recipient'}</span>
                 </div>
               </div>
 
               <div className="flex gap-4">
-                <button onClick={() => setModalState('idle')} className="flex-1 bg-transparent border border-white/20 text-white rounded-lg py-3 font-semibold hover:bg-white/10 transition-colors cursor-pointer">
+                <button onClick={() => setModalState('idle')} className="flex-1 bg-transparent border border-black/20 dark:border-white/20 text-[#111827] dark:text-white rounded-lg py-3 font-semibold hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer">
                   Cancel
                 </button>
-                <button onClick={handleProcessTransaction} className="flex-1 bg-[#FF3B30] hover:bg-[#E0352B] transition-colors text-white rounded-lg py-3 font-semibold cursor-pointer">
+                <button onClick={handleProcessTransaction} className="flex-1 bg-[#FF3B30] hover:bg-[#E0352B] transition-colors text-[#111827] dark:text-white rounded-lg py-3 font-semibold cursor-pointer">
                   Confirm
                 </button>
               </div>
@@ -1099,26 +1099,26 @@ export default function Transaction() {
 
           {/* 2. Processing Modal */}
           {modalState === 'processing' && (
-            <div className="w-[400px] bg-[#1A1A1A] border border-white/20 rounded-3xl pt-12 pb-12 px-8 flex flex-col items-center gap-6">
+            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl pt-12 pb-12 px-8 flex flex-col items-center gap-6">
               <Loader size={48} className="text-[#FF5500] animate-spin" />
-              <h2 className="text-white text-xl font-bold font-['Sora'] text-center">Analyzing transaction risk...</h2>
-              <p className="text-[#8A8A8A] text-sm text-center">Running real-time anomaly scoring...</p>
+              <h2 className="text-[#111827] dark:text-white text-xl font-bold font-['Sora'] text-center">Analyzing transaction risk...</h2>
+              <p className="text-[#6B7280] dark:text-[#8A8A8A] text-sm text-center">Running real-time anomaly scoring...</p>
             </div>
           )}
 
           {/* 3. Approved Modal */}
           {modalState === 'approved' && (
-            <div className="w-[400px] bg-[#1A1A1A] border border-[#32D74B40] rounded-3xl p-8 flex flex-col items-center gap-6">
+            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#32D74B40] rounded-3xl p-8 flex flex-col items-center gap-6">
               <div className="w-16 h-16 rounded-full bg-[#32D74B20] flex items-center justify-center">
                 <CheckCircle size={32} className="text-[#32D74B]" />
               </div>
-              <h2 className="text-white text-2xl font-bold font-['Sora'] text-center">Status: Approved</h2>
+              <h2 className="text-[#111827] dark:text-white text-2xl font-bold font-['Sora'] text-center">Status: Approved</h2>
               <div className="bg-[#32D74B15] px-4 py-2 rounded-full">
                 <span className="text-[#32D74B] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Safe)</span>
               </div>
               <SafetyWeatherCard riskScore={fraudResult?.risk_score ?? 0.1} />
               {renderQrIntegritySummary()}
-              <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.recommendation ?? 'Transaction verified and completed successfully.'}</p>
+              <p className="text-[#6B7280] dark:text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.recommendation ?? 'Transaction verified and completed successfully.'}</p>
               <button onClick={() => setModalState('idle')} className="w-full bg-[#32D74B] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#2CBF41]">
                 Done
               </button>
@@ -1127,17 +1127,17 @@ export default function Transaction() {
 
           {/* 4. Verification Required */}
           {modalState === 'verification' && (
-            <div className="w-[400px] bg-[#1A1A1A] border border-[#FF9F0A40] rounded-3xl p-8 flex flex-col items-center gap-6">
+            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#FF9F0A40] rounded-3xl p-8 flex flex-col items-center gap-6">
               <div className="w-16 h-16 rounded-full bg-[#FF9F0A20] flex items-center justify-center">
                 <AlertTriangle size={32} className="text-[#FF9F0A]" />
               </div>
-              <h2 className="text-white text-[22px] font-bold font-['Sora'] text-center leading-tight">Status: Verification Required</h2>
+              <h2 className="text-[#111827] dark:text-white text-[22px] font-bold font-['Sora'] text-center leading-tight">Status: Verification Required</h2>
               <div className="bg-[#FF9F0A15] px-4 py-2 rounded-full">
                 <span className="text-[#FF9F0A] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Careful)</span>
               </div>
               <SafetyWeatherCard riskScore={fraudResult?.risk_score ?? 0.5} />
               {renderQrIntegritySummary()}
-              <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'Unusual activity detected. Please verify your identity to continue.'}</p>
+              <p className="text-[#6B7280] dark:text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'Unusual activity detected. Please verify your identity to continue.'}</p>
               <button onClick={() => setModalState('face-id')} className="w-full bg-[#FF9F0A] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E68F09]">
                 Verify Identity
               </button>
@@ -1146,9 +1146,9 @@ export default function Transaction() {
 
           {/* 4.5. FaceID Prototype Modal */}
           {modalState === 'face-id' && (
-            <div className="w-[400px] bg-[#1A1A1A] border border-[#5DA8FF50] rounded-3xl p-8 flex flex-col items-center gap-6 shadow-[0_0_40px_rgba(93,168,255,0.15)]">
-              <h2 className="text-white text-[22px] font-bold font-['Sora'] text-center leading-tight">FaceID Verification</h2>
-              <div className="text-[#8A8A8A] text-sm text-center">Please position your face within the frame.</div>
+            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#5DA8FF50] rounded-3xl p-8 flex flex-col items-center gap-6 shadow-[0_0_40px_rgba(93,168,255,0.15)]">
+              <h2 className="text-[#111827] dark:text-white text-[22px] font-bold font-['Sora'] text-center leading-tight">FaceID Verification</h2>
+              <div className="text-[#6B7280] dark:text-[#8A8A8A] text-sm text-center">Please position your face within the frame.</div>
               
               <div className="relative w-48 h-48 rounded-full border-4 border-dashed border-[#5DA8FF] flex items-center justify-center overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-b from-[#5DA8FF20] to-transparent"></div>
@@ -1161,7 +1161,7 @@ export default function Transaction() {
                   if (currentEventId) updateEventStatus(currentEventId, 'BLOCKED', 'FaceID Verification Failed');
                   setFraudResult(prev => prev ? { ...prev, reason_code: `${prev.reason_code} - FaceID Verification Failed` } : null);
                   setModalState('blocked');
-                }} className="flex-1 rounded-lg border border-white/20 py-3 text-[#FF3B30] font-semibold hover:bg-white/10 transition-colors text-sm cursor-pointer">
+                }} className="flex-1 rounded-lg border border-black/20 dark:border-white/20 py-3 text-[#FF3B30] font-semibold hover:bg-black/10 dark:hover:bg-white/10 transition-colors text-sm cursor-pointer">
                   Simulate Unsuccessful
                 </button>
                 <button onClick={() => {
@@ -1176,11 +1176,11 @@ export default function Transaction() {
 
           {/* 5. Transaction Blocked */}
           {modalState === 'blocked' && (
-            <div className="w-[400px] bg-[#1A1A1A] border border-[#FF3B30] rounded-3xl p-8 flex flex-col items-center gap-6 shadow-[0_0_40px_rgba(255,59,48,0.25)]">
+            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#FF3B30] rounded-3xl p-8 flex flex-col items-center gap-6 shadow-[0_0_40px_rgba(255,59,48,0.25)]">
               <div className="w-16 h-16 rounded-full bg-[#FF3B3020] flex items-center justify-center">
                 <ShieldAlert size={32} className="text-[#FF3B30]" />
               </div>
-              <h2 className="text-white text-[22px] font-bold font-['Sora'] text-center">Status: Transaction Blocked</h2>
+              <h2 className="text-[#111827] dark:text-white text-[22px] font-bold font-['Sora'] text-center">Status: Transaction Blocked</h2>
               <div className="bg-[#FF3B3015] px-4 py-2 rounded-full">
                 <span className="text-[#FF3B30] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Danger)</span>
               </div>
@@ -1194,7 +1194,7 @@ export default function Transaction() {
               )}
               <SafetyWeatherCard riskScore={fraudResult?.risk_score ?? 0.9} />
               {renderQrIntegritySummary()}
-              <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'This transaction has been blocked due to high fraud risk.'}</p>
+              <p className="text-[#6B7280] dark:text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'This transaction has been blocked due to high fraud risk.'}</p>
               <button 
                 onClick={() => {
                   const subject = encodeURIComponent('Inquiry: Blocked Transaction (High Risk)');
@@ -1202,7 +1202,7 @@ export default function Transaction() {
                   window.location.href = `mailto:fraud-support@securebank.com?subject=${subject}&body=${body}`;
                   setModalState('idle');
                 }} 
-                className="w-full bg-[#FF3B30] text-white rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E6352B]"
+                className="w-full bg-[#FF3B30] text-[#111827] dark:text-white rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E6352B]"
               >
                 Contact Support
               </button>
