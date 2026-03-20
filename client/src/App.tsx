@@ -4,8 +4,10 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Navigation from "./components/Navigation";
+import TourOverlay from "./components/TourOverlay";
 import { FraudEventsProvider } from "./contexts/FraudEventsContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { TourProvider } from "./contexts/TourContext";
 import Landing from "./pages/Landing";
 import Transaction from "./pages/Transaction";
 import Dashboard from "./pages/Dashboard";
@@ -39,13 +41,16 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider
         defaultTheme="dark"
-        // switchable
+        switchable
       >
         <TooltipProvider>
           <FraudEventsProvider>
-            <Navigation />
-            <Toaster />
-            <Router />
+            <TourProvider>
+              <Navigation />
+              <Toaster />
+              <Router />
+              <TourOverlay />
+            </TourProvider>
           </FraudEventsProvider>
         </TooltipProvider>
       </ThemeProvider>
