@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ShieldCheck, ShieldAlert, Plus, CreditCard, CheckCircle2, Landmark, Smartphone, Sun, Moon } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Plus, CreditCard, CheckCircle2, Landmark, Smartphone, Sun, Moon, X } from 'lucide-react';
 import { FRAUD_API_BASE_URL } from '@/const';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -96,6 +96,8 @@ export default function Profile() {
   const [nationality, setNationality] = useState(() => localStorage.getItem(`${PROFILE_STORAGE_KEY}-nationality`) ?? 'Malaysia');
   const [walletPinEnabled, setWalletPinEnabled] = useState(() => localStorage.getItem(`${PROFILE_STORAGE_KEY}-pin`) !== 'false');
   const [biometricEnabled, setBiometricEnabled] = useState(() => localStorage.getItem(`${PROFILE_STORAGE_KEY}-biometric`) === 'true');
+  const [showPinSetupModal, setShowPinSetupModal] = useState(false);
+  const [newPin, setNewPin] = useState('');
   const [saveMessage, setSaveMessage] = useState('');
 
   const [cards, setCards] = useState<LinkedCard[]>(() => {
@@ -435,7 +437,16 @@ export default function Profile() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2">                <button onClick={() => setWalletPinEnabled((v) => !v)} className={`flex items-center justify-between border rounded-xl p-4 transition-colors ${walletPinEnabled ? 'border-[#32D74B55] bg-[#32D74B10]' : 'border-black/10 dark:border-white/10 bg-[#F8FAFC] dark:bg-[#141414]'}`}>
+                <div className="flex flex-col gap-2">                <button onClick={() => {
+                  if (walletPinEnabled) {
+                    setWalletPinEnabled(false);
+                    localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin`, 'false');
+                    localStorage.removeItem(`${PROFILE_STORAGE_KEY}-pin-value`);
+                  } else {
+                    setShowPinSetupModal(true);
+                    setNewPin('');
+                  }
+                }} className={`flex items-center justify-between border rounded-xl p-4 transition-colors ${walletPinEnabled ? 'border-[#32D74B55] bg-[#32D74B10]' : 'border-black/10 dark:border-white/10 bg-[#F8FAFC] dark:bg-[#141414]'}`}>
                   <span className="text-[#111827] dark:text-white text-sm font-semibold">Wallet PIN Protection</span>
                   <span className={`text-xs font-bold px-2 py-1 rounded ${walletPinEnabled ? 'bg-[#32D74B30] text-[#32D74B]' : 'bg-[#FF3B3020] text-[#FF3B30]'}`}>{walletPinEnabled ? 'ON' : 'OFF'}</span>
                 </button>
@@ -734,6 +745,85 @@ export default function Profile() {
           <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Profile and card changes are simulated locally for demo mode (no external banking API call).</span>
         </div>
       </div>
+
+      {/* PIN Setup Modal */}
+      {showPinSetupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col items-center gap-6">
+            <h2 className="text-[#111827] dark:text-white text-2xl font-bold font-['Sora'] text-center">Set Wallet PIN</h2>
+            <p className="text-[#6B7280] dark:text-[#8A8A8A] text-sm text-center">Create a 6-digit PIN to authorize future transfers.</p>
+            
+            <div className="flex justify-center gap-4 py-4">
+              {[...Array(6)].map((_, i) => (
+                <div 
+                  key={i} 
+                  className={`w-4 h-4 rounded-full transition-colors ${i < newPin.length ? 'bg-[#FF5500]' : 'bg-black/10 dark:bg-white/10'}`} 
+                />
+              ))}
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 w-full">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                <button
+                  key={num}
+                  onClick={() => {
+                    if (newPin.length < 6) {
+                      const updated = newPin + num;
+                      setNewPin(updated);
+                      if (updated.length === 6) {
+                        setTimeout(() => {
+                           localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin-value`, updated);
+                           localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin`, 'true');
+                           setWalletPinEnabled(true);
+                           setShowPinSetupModal(false);
+                           setSaveMessage('Wallet PIN secure code enabled.');
+                           setTimeout(() => setSaveMessage(''), 2500);
+                        }, 300);
+                      }
+                    }
+                  }}
+                  className="h-14 rounded-2xl bg-[#F8FAFC] dark:bg-[#141414] hover:bg-black/5 dark:hover:bg-white/5 border border-black/5 dark:border-white/5 text-[#111827] dark:text-white font-bold text-xl transition-all flex items-center justify-center cursor-pointer shadow-sm active:scale-95"
+                >
+                  {num}
+                </button>
+              ))}
+              <button 
+                onClick={() => setShowPinSetupModal(false)}
+                className="h-14 rounded-2xl bg-transparent text-[#6B7280] dark:text-[#8A8A8A] font-semibold text-sm transition-all flex items-center justify-center cursor-pointer hover:text-[#111827] dark:hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (newPin.length < 6) {
+                    const updated = newPin + '0';
+                    setNewPin(updated);
+                    if (updated.length === 6) {
+                      setTimeout(() => {
+                         localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin-value`, updated);
+                         localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin`, 'true');
+                         setWalletPinEnabled(true);
+                         setShowPinSetupModal(false);
+                         setSaveMessage('Wallet PIN secure code enabled.');
+                         setTimeout(() => setSaveMessage(''), 2500);
+                      }, 300);
+                    }
+                  }
+                }}
+                className="h-14 rounded-2xl bg-[#F8FAFC] dark:bg-[#141414] hover:bg-black/5 dark:hover:bg-white/5 border border-black/5 dark:border-white/5 text-[#111827] dark:text-white font-bold text-xl transition-all flex items-center justify-center cursor-pointer shadow-sm active:scale-95"
+              >
+                0
+              </button>
+              <button 
+                onClick={() => setNewPin(prev => prev.slice(0, -1))}
+                className="h-14 rounded-2xl bg-transparent text-[#6B7280] dark:text-[#8A8A8A] hover:text-[#111827] dark:hover:text-white transition-all flex items-center justify-center cursor-pointer active:scale-95"
+              >
+                <X size={24} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

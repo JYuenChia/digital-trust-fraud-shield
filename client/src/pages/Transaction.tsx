@@ -174,6 +174,7 @@ type BoatProfile = {
 };
 
 const BOAT_PROFILE_STORAGE_KEY = 'fraud-shield-bangka-profile-v1';
+const PROFILE_PIN_STORAGE_KEY = 'fraud-shield-profile-v1-pin-value';
 const SENIOR_ACCOUNT = 'ALEX8899';
 
 const BOAT_QUIZ = [
@@ -452,7 +453,9 @@ function parseQrPayload(raw: string): QrPayload | null {
 export default function Transaction() {
   const { addEvent, updateEventStatus } = useFraudEvents();
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
-  const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked' | 'quiz' | 'face-id'>('idle');
+  const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked' | 'quiz' | 'face-id' | 'pin-entry'>('idle');
+  const [enteredPin, setEnteredPin] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState('MYR');
   const [judgeDemoPreset, setJudgeDemoPreset] = useState<'real-auto' | 'new-device' | 'risky-ip' | 'max-risk'>('real-auto');
   const [selectedProvider, setSelectedProvider] = useState('Maybank');
@@ -775,6 +778,31 @@ export default function Transaction() {
     }
   };
 
+  const verifyPinAndProcess = (pinAttempt: string) => {
+    const savedPin = localStorage.getItem(PROFILE_PIN_STORAGE_KEY) ?? '';
+
+    if (!savedPin || pinAttempt !== savedPin) {
+      setPinError('Incorrect PIN. Please try again.');
+      setEnteredPin('');
+      return;
+    }
+
+    setPinError(null);
+    handleProcessTransaction();
+  };
+
+  const handlePinInput = (digit: string) => {
+    if (enteredPin.length >= 6) return;
+
+    const nextPin = `${enteredPin}${digit}`;
+    setEnteredPin(nextPin);
+    setPinError(null);
+
+    if (nextPin.length === 6) {
+      setTimeout(() => verifyPinAndProcess(nextPin), 300);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F3F4F6] dark:bg-[#0C0C0C] font-['Inter'] flex flex-col items-center pt-16">
       
@@ -1090,8 +1118,74 @@ export default function Transaction() {
                 <button onClick={() => setModalState('idle')} className="flex-1 bg-transparent border border-black/20 dark:border-white/20 text-[#111827] dark:text-white rounded-lg py-3 font-semibold hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer">
                   Cancel
                 </button>
-                <button onClick={handleProcessTransaction} className="flex-1 bg-[#FF3B30] hover:bg-[#E0352B] transition-colors text-[#111827] dark:text-white rounded-lg py-3 font-semibold cursor-pointer">
+                <button onClick={() => {
+                  const pinEnabled = localStorage.getItem('fraud-shield-profile-v1-pin') !== 'false';
+                  if (pinEnabled) {
+                    setModalState('pin-entry');
+                    setEnteredPin('');
+                    setPinError(null);
+                  } else {
+                    handleProcessTransaction();
+                  }
+                }} className="flex-1 bg-[#FF3B30] hover:bg-[#E0352B] transition-colors text-[#111827] dark:text-white rounded-lg py-3 font-semibold cursor-pointer">
                   Confirm
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* PIN Entry Modal */}
+          {modalState === 'pin-entry' && (
+            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col items-center gap-6">
+              <h2 className="text-[#111827] dark:text-white text-2xl font-bold font-['Sora'] text-center">Wallet PIN</h2>
+              <p className="text-[#6B7280] dark:text-[#8A8A8A] text-sm text-center">Enter your 6-digit PIN to authorize this transfer.</p>
+              
+              <div className="flex justify-center gap-4 py-4">
+                {[...Array(6)].map((_, i) => (
+                  <div 
+                    key={i} 
+                    className={`w-4 h-4 rounded-full transition-colors ${i < enteredPin.length ? 'bg-[#FF5500]' : 'bg-black/10 dark:bg-white/10'}`} 
+                  />
+                ))}
+              </div>
+
+              {pinError && (
+                <p className="text-sm text-[#FF3B30] text-center -mt-2">{pinError}</p>
+              )}
+
+              <div className="grid grid-cols-3 gap-3 w-full">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                  <button
+                    key={num}
+                    onClick={() => handlePinInput(String(num))}
+                    className="h-14 rounded-2xl bg-[#F8FAFC] dark:bg-[#141414] hover:bg-black/5 dark:hover:bg-white/5 border border-black/5 dark:border-white/5 text-[#111827] dark:text-white font-bold text-xl transition-all flex items-center justify-center cursor-pointer shadow-sm active:scale-95"
+                  >
+                    {num}
+                  </button>
+                ))}
+                <button 
+                  onClick={() => {
+                    setModalState('idle');
+                    setPinError(null);
+                  }}
+                  className="h-14 rounded-2xl bg-transparent text-[#6B7280] dark:text-[#8A8A8A] font-semibold text-sm transition-all flex items-center justify-center cursor-pointer hover:text-[#111827] dark:hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handlePinInput('0')}
+                  className="h-14 rounded-2xl bg-[#F8FAFC] dark:bg-[#141414] hover:bg-black/5 dark:hover:bg-white/5 border border-black/5 dark:border-white/5 text-[#111827] dark:text-white font-bold text-xl transition-all flex items-center justify-center cursor-pointer shadow-sm active:scale-95"
+                >
+                  0
+                </button>
+                <button 
+                  onClick={() => {
+                    setEnteredPin((prev) => prev.slice(0, -1));
+                    setPinError(null);
+                  }}
+                  className="h-14 rounded-2xl bg-transparent text-[#6B7280] dark:text-[#8A8A8A] hover:text-[#111827] dark:hover:text-white transition-all flex items-center justify-center cursor-pointer active:scale-95"
+                >
+                  <X size={24} />
                 </button>
               </div>
             </div>
