@@ -1,10 +1,12 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
 import { ShieldAlert, Search, Bell , Menu } from 'lucide-react';
+import { useTour } from '@/contexts/TourContext';
 
 export const Navigation: React.FC = () => {
   const [location] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const { startTour } = useTour();
   const isProfilePage = location === '/profile';
 
   const navItems = [
@@ -104,6 +106,16 @@ export const Navigation: React.FC = () => {
             );
           })}
           <div className="h-px bg-black/10 dark:bg-white/10 my-2"></div>
+          <button
+            type="button"
+            onClick={() => {
+              startTour();
+              setIsMobileMenuOpen(false);
+            }}
+            className="py-3 px-4 rounded-lg cursor-pointer text-[#FF5500] border border-[#FF5500]/30 hover:bg-[#FF5500]/10 text-left"
+          >
+            <span className="font-['Inter'] font-bold text-sm tracking-widest">START TOUR</span>
+          </button>
           <Link href="/profile">
             <div 
               className="py-3 px-4 rounded-lg cursor-pointer text-[#111827] dark:text-white flex items-center justify-between"

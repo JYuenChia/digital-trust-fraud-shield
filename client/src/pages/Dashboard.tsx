@@ -63,7 +63,7 @@ export default function Dashboard() {
       <div className="w-full max-w-[1444px] relative z-10 px-10 py-10 flex flex-col gap-10">
         
         {/* Top Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 w-full">
+        <div data-tour="dashboard-stats" className="grid grid-cols-1 md:grid-cols-4 gap-6 w-full">
           {/* Stat Card 1 */}
           <div className="bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-4">
             <div className="flex justify-between items-center">
@@ -146,7 +146,7 @@ export default function Dashboard() {
           </div>
 
           {/* Alerts Card */}
-          <div className="flex-[1] bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-6">
+          <div data-tour="dashboard-alerts" className="flex-[1] bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-6">
             <div className="flex justify-between items-center">
               <span className="text-[#111827] dark:text-white font-['Sora'] font-semibold tracking-wider">REAL-TIME ALERTS</span>
               <div className="bg-[#FF3B30]/20 px-3 py-1 rounded-full text-[#FF3B30] text-xs font-bold w-fit">{alerts.length} NEW</div>

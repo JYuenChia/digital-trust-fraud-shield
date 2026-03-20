@@ -816,7 +816,7 @@ export default function Transaction() {
       <div className="w-full max-w-[1510px] relative z-10 px-[40px] py-[40px] pb-[80px] flex justify-center">
         
         {/* Form Container */}
-        <div className="w-full max-w-[1315px] bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-3xl p-12 flex flex-col gap-10">
+        <div data-tour="transaction-form" className="w-full max-w-[1315px] bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-3xl p-12 flex flex-col gap-10">
           
           {/* Title Area */}
           <div className="flex flex-col gap-2">
@@ -991,6 +991,7 @@ export default function Transaction() {
 
           {/* Button */}
           <button 
+            data-tour="transaction-submit"
             onClick={() => {
               setModalState('confirming');
             }}

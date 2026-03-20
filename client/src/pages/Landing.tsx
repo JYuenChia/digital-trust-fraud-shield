@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Link } from 'wouter';
+import { useTour } from '@/contexts/TourContext';
 
 // Helper component for scroll animations
 const ScrollReveal: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => {
@@ -38,6 +39,8 @@ const ScrollReveal: React.FC<{ children: React.ReactNode; className?: string }> 
 };
 
 export default function Landing() {
+  const { startTour } = useTour();
+
   const features = [
     {
       num: '01.',
@@ -127,11 +130,14 @@ export default function Landing() {
             </p>
 
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 mt-4 w-full sm:w-auto px-4 sm:px-0">
-              <Link href="/dashboard" className="w-full sm:w-auto">
-                <button className="w-full sm:w-auto bg-[#FF3B30] border border-[#FF5500] text-[#111827] dark:text-white px-8 py-4 rounded-lg font-['Inter'] font-semibold text-[15px] cursor-pointer hover:bg-[#E0352B] transition-colors">
-                  Explore Dashboard
-                </button>
-              </Link>
+              <button
+                type="button"
+                data-tour="landing-cta"
+                onClick={startTour}
+                className="w-full sm:w-auto bg-[#FF3B30] border border-[#FF5500] text-[#111827] dark:text-white px-8 py-4 rounded-lg font-['Inter'] font-semibold text-[15px] cursor-pointer hover:bg-[#E0352B] transition-colors"
+              >
+                Start Guided Tour
+              </button>
               <button onClick={() => window.open('https://github.com/JYuenChia/digital-trust-fraud-shield.git', '_blank')} className="w-full sm:w-auto bg-[#FFFFFF]/80 dark:bg-[#1A1A1A]/80 backdrop-blur-2xl border border-black/20 dark:border-white/20 text-[#111827] dark:text-white px-8 py-4 rounded-lg font-['Inter'] font-semibold text-[15px] cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
                 View Documentation
               </button>
@@ -156,7 +162,7 @@ export default function Landing() {
           </div>
 
           {/* Carousel */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 w-full">
+          <div data-tour="landing-features" className="grid grid-cols-1 md:grid-cols-4 gap-8 w-full">
             {features.map((feat, i) => (
               <div 
                 key={i} 

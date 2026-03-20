@@ -392,13 +392,13 @@ export default function Profile() {
       </div>
 
       <div className="w-full max-w-[1480px] relative z-10 px-10 py-10 pb-16 flex flex-col gap-8">
-        <div className="flex flex-col gap-2">
+        <div data-tour="profile-header" className="flex flex-col gap-2">
           <h1 className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">Profile & Payment Security</h1>
           <p className="text-[#6B7280] dark:text-[#8A8A8A] text-lg">Manage account details, verification status, and linked bank cards.</p>
         </div>
 
         <div className="grid grid-cols-1 gap-6">
-          <div className="bg-[#FFFFFF]/55 dark:bg-[#1A1A1A]/55 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-3xl p-7 flex flex-col gap-6">
+          <div data-tour="profile-security" className="bg-[#FFFFFF]/55 dark:bg-[#1A1A1A]/55 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-3xl p-7 flex flex-col gap-6">
             <div className="flex items-center justify-between">
               <h2 className="text-[#111827] dark:text-white text-xl font-bold font-['Sora']">Account Details</h2>
               <button onClick={persistProfile} className="bg-[#FF5500] hover:bg-[#E04B00] transition-colors px-5 py-2 rounded-lg text-[#111827] dark:text-white font-semibold text-sm">Save Changes</button>
@@ -437,7 +437,7 @@ export default function Profile() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2">                <button onClick={() => {
+                <div data-tour="profile-wallet-pin" className="flex flex-col gap-2">                <button onClick={() => {
                   if (walletPinEnabled) {
                     setWalletPinEnabled(false);
                     localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin`, 'false');
