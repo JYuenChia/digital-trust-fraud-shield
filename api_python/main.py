@@ -5,7 +5,7 @@ from pydantic import BaseModel
 import joblib
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 import ipaddress
 from urllib.parse import urlparse
 import smtplib
@@ -13,6 +13,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 import json
+from uuid import uuid4
 
 app = FastAPI(title="Digital Fraud Shield API")
 
@@ -21,6 +22,7 @@ APPROVE_PROB_THRESHOLD = 0.15
 FLAG_PROB_THRESHOLD = 0.45
 FLAG_AMOUNT_THRESHOLD = 10000
 BLOCK_AMOUNT_THRESHOLD = 50000
+GUARDIAN_APPROVAL_RISK_THRESHOLD = 0.45
 
 app.add_middleware(
     CORSMiddleware,
@@ -89,6 +91,9 @@ GUARDIAN_LINKS = {
 
 # In-memory alert history for guardian dashboard (no database required).
 GUARDIAN_ALERT_LOGS = []
+
+# In-memory pending guardian approvals for flagged transactions.
+GUARDIAN_PENDING_APPROVALS = {}
 
 # 2. Define what a 'Transaction' looks like
 class Transaction(BaseModel):
@@ -167,6 +172,12 @@ class RecoveryReportRequest(BaseModel):
     transaction_date: str
 
 
+class GuardianApprovalDecision(BaseModel):
+    guardian_account: str
+    decision: str  # APPROVE or REJECT
+    note: str | None = None
+
+
 def normalize_name_dest(recipient_account: str) -> str:
     raw = (recipient_account or "").strip().upper()
     if raw.startswith("M"):
@@ -193,6 +204,76 @@ def estimate_ip_risk_score(client_ip: str | None) -> float:
 def get_client_ip(request: Request) -> str | None:
     forwarded_for = request.headers.get("x-forwarded-for")
     return forwarded_for.split(",")[0].strip() if forwarded_for else (request.client.host if request.client else None)
+
+
+def create_guardian_approval_request(
+    sender_account: str,
+    sender_name: str,
+    risk_score: float,
+    reason: str,
+    transaction_summary: dict,
+    source: str,
+):
+    """Create a pending guardian approval request for FLAGGED transactions."""
+    guardian_data = GUARDIAN_LINKS.get(sender_account, {})
+    guardians = guardian_data.get("guardians", [])
+    if not guardians:
+        return None
+
+    approval_id = f"APR-{uuid4().hex[:10].upper()}"
+    created_at = datetime.now()
+    expires_at = created_at + timedelta(minutes=10)
+
+    record = {
+        "approval_id": approval_id,
+        "sender_account": sender_account,
+        "sender_name": sender_name,
+        "guardians": [g.get("guardian_account", "") for g in guardians],
+        "risk_score": round(risk_score, 4),
+        "reason": reason,
+        "source": source,
+        "transaction_summary": transaction_summary,
+        "status": "PENDING",
+        "created_at": created_at.isoformat() + "Z",
+        "expires_at": expires_at.isoformat() + "Z",
+        "resolved_at": None,
+        "resolved_by": None,
+        "resolution_note": None,
+    }
+    GUARDIAN_PENDING_APPROVALS[approval_id] = record
+
+    for guardian in guardians:
+        GUARDIAN_ALERT_LOGS.append({
+            "sender_account": sender_account,
+            "sender_name": sender_name,
+            "guardian_account": guardian.get("guardian_account", ""),
+            "guardian_name": guardian.get("guardian_name", "Guardian"),
+            "type": "GUARDIAN_APPROVAL_REQUIRED",
+            "risk_score": round(risk_score, 4),
+            "risk_reason": reason,
+            "timestamp": datetime.now().isoformat() + "Z",
+            "approval_id": approval_id,
+            "approval_status": "PENDING",
+            "expires_at": record["expires_at"],
+            "source": source,
+        })
+
+    return record
+
+
+def resolve_expired_guardian_approvals():
+    """Auto-expire old pending guardian approvals."""
+    now = datetime.now()
+    for approval in GUARDIAN_PENDING_APPROVALS.values():
+        if approval.get("status") != "PENDING":
+            continue
+        expires_at_raw = approval.get("expires_at")
+        if not expires_at_raw:
+            continue
+        expires_at = parse_iso_datetime(expires_at_raw)
+        if expires_at and now >= expires_at.replace(tzinfo=None):
+            approval["status"] = "EXPIRED"
+            approval["resolved_at"] = datetime.now().isoformat() + "Z"
 
 
 def send_guardian_notification(sender_account: str, sender_name: str, risk_score: float, reason: str):
@@ -665,7 +746,7 @@ async def predict_qr_fraud(payload: QRTransferRequest, request: Request):
         request=request,
     )
 
-    base_result = await predict_fraud(Transaction(**context_data["context"]))
+    base_result = await predict_fraud(Transaction(**context_data["context"]), allow_guardian_approval=False)
 
     status = base_result["status"]
     risk_score = float(base_result["risk_score"])
@@ -726,6 +807,33 @@ async def predict_qr_fraud(payload: QRTransferRequest, request: Request):
     score_breakdown["adjustments"] = adjustments
     score_breakdown["final_score"] = round(risk_score, 4)
 
+    guardian_approval = None
+    requires_user_verification = status == "FLAGGED"
+    if (
+        status == "FLAGGED"
+        and risk_score >= GUARDIAN_APPROVAL_RISK_THRESHOLD
+        and payload.sender_account in GUARDIAN_LINKS
+        and GUARDIAN_LINKS[payload.sender_account].get("guardians")
+    ):
+        senior_name = GUARDIAN_LINKS[payload.sender_account].get("senior_name", payload.sender_account)
+        guardian_approval = create_guardian_approval_request(
+            sender_account=payload.sender_account,
+            sender_name=senior_name,
+            risk_score=risk_score,
+            reason=reason_code,
+            transaction_summary={
+                "amount": payload.qr.amount,
+                "currency": payload.qr.currency,
+                "recipient": qr_integrity.get("account_name") or qr_integrity.get("merchant_id") or "Unknown",
+                "provider": payload.qr.provider or qr_integrity.get("provider") or "Unknown",
+                "merchant_id": qr_integrity.get("merchant_id") or "",
+            },
+            source="QR_PAYMENT",
+        )
+        if guardian_approval:
+            recommendation = "Identity verification required. Guardian approval will be required after verification."
+            requires_user_verification = True
+
     base_result.update({
         "status": status,
         "color": color,
@@ -733,6 +841,10 @@ async def predict_qr_fraud(payload: QRTransferRequest, request: Request):
         "reason_code": reason_code,
         "recommendation": recommendation,
         "isVerifiedMerchant": qr_integrity["is_verified_merchant"],
+        "guardian_approval_required": guardian_approval is not None,
+        "guardian_approval_id": guardian_approval.get("approval_id") if guardian_approval else None,
+        "guardian_approval_expires_at": guardian_approval.get("expires_at") if guardian_approval else None,
+        "requires_user_verification": requires_user_verification,
         "qr_integrity": qr_integrity,
         "score_breakdown": score_breakdown,
     })
@@ -750,7 +862,7 @@ async def scan_qr_threat(payload: QRThreatScanRequest):
     )
 
 @app.post("/predict")
-async def predict_fraud(txn: Transaction):
+async def predict_fraud(txn: Transaction, allow_guardian_approval: bool = True):
     # Prepare the data exactly like the training step
     amount_to_old_balance_ratio = (txn.amount / txn.oldbalanceOrg) if txn.oldbalanceOrg > 0 else 0.0
 
@@ -958,6 +1070,34 @@ async def predict_fraud(txn: Transaction):
                 reason=reason
             )
 
+    guardian_approval = None
+    requires_user_verification = status == "FLAGGED"
+    if (
+        allow_guardian_approval
+        and status == "FLAGGED"
+        and effective_risk >= GUARDIAN_APPROVAL_RISK_THRESHOLD
+        and txn.sender_account in GUARDIAN_LINKS
+        and GUARDIAN_LINKS[txn.sender_account].get("guardians")
+    ):
+        senior_name = GUARDIAN_LINKS[txn.sender_account].get("senior_name", txn.sender_account)
+        guardian_approval = create_guardian_approval_request(
+            sender_account=txn.sender_account,
+            sender_name=senior_name,
+            risk_score=effective_risk,
+            reason=reason,
+            transaction_summary={
+                "amount": txn.amount,
+                "currency": "MYR",
+                "recipient": txn.nameDest,
+                "provider": "Bank Transfer",
+                "merchant_id": txn.nameDest if txn.nameDest.startswith("M") else "",
+            },
+            source="TRANSFER",
+        )
+        if guardian_approval:
+            recommendation = "Identity verification required. Guardian approval will be required after verification."
+            requires_user_verification = True
+
     return {
         "risk_score": round(effective_risk, 4),
         "model_score": round(float(prob), 4),
@@ -966,6 +1106,10 @@ async def predict_fraud(txn: Transaction):
         "recommendation": recommendation,
         "reason_code": reason,
         "notify_guardian": notify_guardian,
+        "guardian_approval_required": guardian_approval is not None,
+        "guardian_approval_id": guardian_approval.get("approval_id") if guardian_approval else None,
+        "guardian_approval_expires_at": guardian_approval.get("expires_at") if guardian_approval else None,
+        "requires_user_verification": requires_user_verification,
         "score_breakdown": {
             "raw_model_score": round(float(prob), 4),
             "adjustments": score_adjustments,
@@ -1070,6 +1214,94 @@ async def get_guardian_notifications(guardian_account: str):
         "guardian_account": guardian_account,
         "notification_count": len(notifications),
         "notifications": notifications,
+    }
+
+
+@app.get("/guardian-pending-approvals/{guardian_account}")
+async def get_guardian_pending_approvals(guardian_account: str):
+    """List pending/active guardian approvals for a guardian account."""
+    resolve_expired_guardian_approvals()
+    approvals = []
+    for approval in GUARDIAN_PENDING_APPROVALS.values():
+        if guardian_account not in approval.get("guardians", []):
+            continue
+        approvals.append(approval)
+
+    approvals.sort(key=lambda item: item.get("created_at", ""), reverse=True)
+    return {
+        "guardian_account": guardian_account,
+        "count": len(approvals),
+        "approvals": approvals,
+    }
+
+
+@app.get("/guardian-approval-status/{approval_id}")
+async def get_guardian_approval_status(approval_id: str):
+    """Poll the latest status of a guardian approval request."""
+    resolve_expired_guardian_approvals()
+    approval = GUARDIAN_PENDING_APPROVALS.get(approval_id)
+    if not approval:
+        return {
+            "success": False,
+            "message": "Approval request not found.",
+        }
+    return {
+        "success": True,
+        "approval": approval,
+    }
+
+
+@app.post("/guardian-pending-approvals/{approval_id}/decision")
+async def decide_guardian_approval(approval_id: str, payload: GuardianApprovalDecision):
+    """Guardian approves or rejects a pending transfer request."""
+    resolve_expired_guardian_approvals()
+    approval = GUARDIAN_PENDING_APPROVALS.get(approval_id)
+    if not approval:
+        return {"success": False, "message": "Approval request not found."}
+
+    if payload.guardian_account not in approval.get("guardians", []):
+        return {"success": False, "message": "Guardian is not authorized for this request."}
+
+    if approval.get("status") != "PENDING":
+        return {
+            "success": False,
+            "message": f"This request is already {approval.get('status', 'resolved').lower()}.",
+            "approval": approval,
+        }
+
+    decision = (payload.decision or "").strip().upper()
+    if decision not in {"APPROVE", "REJECT"}:
+        return {"success": False, "message": "Decision must be APPROVE or REJECT."}
+
+    approval["status"] = "APPROVED" if decision == "APPROVE" else "REJECTED"
+    approval["resolved_by"] = payload.guardian_account
+    approval["resolved_at"] = datetime.now().isoformat() + "Z"
+    approval["resolution_note"] = (payload.note or "").strip() or None
+
+    guardian_name = payload.guardian_account
+    for g in GUARDIAN_LINKS.get(approval.get("sender_account", ""), {}).get("guardians", []):
+        if g.get("guardian_account") == payload.guardian_account:
+            guardian_name = g.get("guardian_name", guardian_name)
+            break
+
+    GUARDIAN_ALERT_LOGS.append({
+        "sender_account": approval.get("sender_account", ""),
+        "sender_name": approval.get("sender_name", "Senior"),
+        "guardian_account": payload.guardian_account,
+        "guardian_name": guardian_name,
+        "type": "GUARDIAN_DECISION",
+        "risk_score": approval.get("risk_score", 0),
+        "risk_reason": f"Guardian {decision.lower()}d this transaction.",
+        "timestamp": datetime.now().isoformat() + "Z",
+        "approval_id": approval_id,
+        "approval_status": approval.get("status"),
+        "source": approval.get("source"),
+    })
+
+    return {
+        "success": True,
+        "message": "Decision recorded.",
+        "approval": approval,
     }
 
 

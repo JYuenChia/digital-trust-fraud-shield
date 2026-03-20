@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ShieldCheck, ShieldAlert, Plus, CreditCard, CheckCircle2, Landmark, Smartphone } from 'lucide-react';
 import { FRAUD_API_BASE_URL } from '@/const';
+import { Link } from 'wouter';
 
 type VerificationState = 'verified' | 'pending' | 'action_required';
 
@@ -589,13 +590,23 @@ export default function Profile() {
                 <span className="text-xs uppercase tracking-[0.18em] text-[#FFB37A]">Guardian Dashboard</span>
                 <span className="text-sm text-white">Review high-risk alerts and generate recovery evidence.</span>
               </div>
-              <button
-                type="button"
-                onClick={() => loadGuardianAlerts(selectedGuardianAccount)}
-                className="rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10"
-              >
-                Refresh Alerts
-              </button>
+              <div className="flex items-center gap-2">
+                <Link href="/guardian-notifications">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-[#7EC8FF66] px-3 py-1.5 text-xs font-semibold text-[#CBE8FF] hover:bg-[#7EC8FF1A]"
+                  >
+                    Open Guardian Notifications
+                  </button>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => loadGuardianAlerts(selectedGuardianAccount)}
+                  className="rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10"
+                >
+                  Refresh Alerts
+                </button>
+              </div>
             </div>
 
             <select
