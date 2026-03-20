@@ -70,6 +70,13 @@ const TOUR_STEPS: TourStep[] = [
     description: 'Use this panel to inspect flagged and blocked transactions quickly.',
   },
   {
+    id: 'landing-lesson-game',
+    route: '/',
+    selector: '[data-tour="landing-lesson-game"]',
+    title: 'Play The Scam Safety Game',
+    description: 'Use this mini game to learn scam warning signs with quick rounds and instant feedback.',
+  },
+  {
     id: 'tour-done',
     route: '/',
     selector: '[data-tour="landing-cta"]',

@@ -276,7 +276,7 @@ export default function Landing() {
 
         {/* Fraud 101 Lesson (Landing Only) */}
         <ScrollReveal className="flex flex-col gap-6 py-2 w-full">
-          <div className="rounded-2xl border border-[#FF5500]/35 bg-[#FFFFFF]/75 dark:bg-[#1A1A1A]/80 backdrop-blur-xl p-6 md:p-8 flex flex-col gap-5">
+          <div data-tour="landing-lesson-game" className="rounded-2xl border border-[#FF5500]/35 bg-[#FFFFFF]/75 dark:bg-[#1A1A1A]/80 backdrop-blur-xl p-6 md:p-8 flex flex-col gap-5">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.16em] text-[#FF5500] font-bold">Fraud 101</p>
