@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X, PhoneCall, Mic, MicOff, Lock, Smartphone } from 'lucide-react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeScanner } from 'html5-qrcode';
 import { FRAUD_API_BASE_URL } from '@/const';
 import { useFraudEvents } from '@/contexts/FraudEventsContext';
 
@@ -178,48 +178,9 @@ type BoatProfile = {
   locked: boolean;
 };
 
-type QuizQuestion = {
-  id: string;
-  question: string;
-  options: string[];
-  correctIndex: number;
-};
-
 const BOAT_PROFILE_STORAGE_KEY = 'fraud-shield-bangka-profile-v1';
 const PROFILE_PIN_STORAGE_KEY = 'fraud-shield-profile-v1-pin-value';
 const SENIOR_ACCOUNT = 'ALEX8899';
-const BOAT_QUIZ: QuizQuestion[] = [
-  {
-    id: 'q1',
-    question: 'A caller says your account will be blocked unless you share an OTP now. What should you do?',
-    options: [
-      'Share the OTP to avoid account closure',
-      'Hang up and call the bank using the official number',
-      'Transfer money first, then verify later',
-    ],
-    correctIndex: 1,
-  },
-  {
-    id: 'q2',
-    question: 'What is the safest action before sending money to a new recipient?',
-    options: [
-      'Check recipient details and verify through a trusted channel',
-      'Rush the transfer if the message sounds urgent',
-      'Skip verification for small amounts',
-    ],
-    correctIndex: 0,
-  },
-  {
-    id: 'q3',
-    question: 'If someone asks you to keep a transaction secret from family, this is usually:',
-    options: [
-      'A normal banking procedure',
-      'A potential scam pressure tactic',
-      'A reward program requirement',
-    ],
-    correctIndex: 1,
-  },
-];
 
 function SafetyBoatCard({ profile }: { profile: BoatProfile }) {
   const damage = profile.damage;
@@ -476,11 +437,9 @@ function parseQrPayload(raw: string): QrPayload | null {
 export default function Transaction() {
   const { addEvent, updateEventStatus } = useFraudEvents();
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
-  const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked' | 'quiz' | 'face-id' | 'pin-entry' | 'guardianPending'>('idle');
+  const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked' | 'face-id' | 'pin-entry' | 'guardianPending'>('idle');
   const [enteredPin, setEnteredPin] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
-  const [quizAnswers, setQuizAnswers] = useState<Record<string, number>>({});
-  const [quizError, setQuizError] = useState<string | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState('MYR');
   const [judgeDemoPreset, setJudgeDemoPreset] = useState<'real-auto' | 'new-device' | 'risky-ip' | 'max-risk'>('real-auto');
   const [selectedProvider, setSelectedProvider] = useState('Maybank');
@@ -491,6 +450,7 @@ export default function Transaction() {
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [qrScanError, setQrScanError] = useState<string | null>(null);
   const [lastQrPreview, setLastQrPreview] = useState<string>('');
+  const [isQrImageDecoding, setIsQrImageDecoding] = useState(false);
   const [scannedQrPayload, setScannedQrPayload] = useState<QrPayload | null>(null);
   const [qrScanStatus, setQrScanStatus] = useState<{ tone: 'safe' | 'warn'; message: string } | null>(null);
   const [isCallConsentOpen, setIsCallConsentOpen] = useState(false);
@@ -534,33 +494,7 @@ export default function Transaction() {
     handleProcessTransaction();
   };
 
-  const requiresQuizGate = boatProfile.locked || boatProfile.damage >= 60 || boatProfile.warningStrikes >= 3;
 
-  const handleQuizSubmit = () => {
-    const unanswered = BOAT_QUIZ.some((question) => quizAnswers[question.id] === undefined);
-    if (unanswered) {
-      setQuizError('Please answer all questions before submitting.');
-      return;
-    }
-
-    const score = BOAT_QUIZ.reduce((total, question) => {
-      return total + (quizAnswers[question.id] === question.correctIndex ? 1 : 0);
-    }, 0);
-
-    if (score < 2) {
-      setQuizError('Please review the safety tips and try again. You need at least 2 correct answers.');
-      return;
-    }
-
-    setQuizError(null);
-    setBoatProfile((prev) => ({
-      ...prev,
-      warningStrikes: 0,
-      damage: Math.max(0, prev.damage - 35),
-      locked: false,
-    }));
-    continueTransactionAfterGate();
-  };
 
   const activeDeviceId: 'demo-web' | 'demo-new-device' =
     judgeDemoPreset === 'new-device' || judgeDemoPreset === 'max-risk' ? 'demo-new-device' : 'demo-web';
@@ -822,6 +756,56 @@ export default function Transaction() {
     return result;
   };
 
+  const handleDecodedQrText = async (decodedText: string) => {
+    setLastQrPreview(decodedText.slice(0, 120));
+    const threatResult = await scanQrThreat(decodedText);
+
+    const parsed = parseQrPayload(decodedText);
+    if (parsed && (parsed.merchant_id || parsed.account_name)) {
+      setScannedQrPayload(parsed);
+      setRecipientAccount(parsed.merchant_id || parsed.account_name || '');
+      setRecipientName(parsed.account_name || recipientName);
+      if (typeof parsed.amount === 'number' && parsed.amount > 0) {
+        setAmount(String(parsed.amount));
+      }
+      if (parsed.provider) {
+        setSelectedProvider(parsed.provider);
+      }
+    } else {
+      setScannedQrPayload(null);
+    }
+
+    closeQrScanner();
+
+    if (parsed && threatResult.status === 'APPROVED') {
+      setFraudResult(threatResult);
+      setQrScanStatus({ tone: 'safe', message: 'QR checked. Recipient details are filled in for you.' });
+    } else {
+      setQrScanStatus({ tone: 'warn', message: threatResult.reason_code || 'This QR needs caution.' });
+      applyResultModal(threatResult);
+    }
+  };
+
+  const handleQrImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setIsQrImageDecoding(true);
+    setQrScanError(null);
+
+    try {
+      const html5Qr = new Html5Qrcode(scannerRegionId);
+      const decodedText = await html5Qr.scanFile(file, true);
+      await handleDecodedQrText(decodedText);
+    } catch (error) {
+      console.error('QR image decode error:', error);
+      setQrScanError('Could not read QR from this image. Try a clearer photo or use live scan.');
+    } finally {
+      setIsQrImageDecoding(false);
+    }
+  };
+
   useEffect(() => {
     if (!isQrScannerOpen) return;
 
@@ -839,34 +823,8 @@ export default function Transaction() {
     scannerRef.current = scanner;
     scanner.render(
       async (decodedText) => {
-        setLastQrPreview(decodedText.slice(0, 120));
         try {
-          const threatResult = await scanQrThreat(decodedText);
-
-          const parsed = parseQrPayload(decodedText);
-          if (parsed && (parsed.merchant_id || parsed.account_name)) {
-            setScannedQrPayload(parsed);
-            setRecipientAccount(parsed.merchant_id || parsed.account_name || '');
-            setRecipientName(parsed.account_name || recipientName);
-            if (typeof parsed.amount === 'number' && parsed.amount > 0) {
-              setAmount(String(parsed.amount));
-            }
-            if (parsed.provider) {
-              setSelectedProvider(parsed.provider);
-            }
-          } else {
-            setScannedQrPayload(null);
-          }
-
-          closeQrScanner();
-
-          if (parsed && threatResult.status === 'APPROVED') {
-            setFraudResult(threatResult);
-            setQrScanStatus({ tone: 'safe', message: 'QR checked. Recipient details are filled in for you.' });
-          } else {
-            setQrScanStatus({ tone: 'warn', message: threatResult.reason_code || 'This QR needs caution.' });
-            applyResultModal(threatResult);
-          }
+          await handleDecodedQrText(decodedText);
         } catch (error) {
           console.error('QR threat scan error:', error);
           setQrScanError('Unable to scan QR risk right now. Please try again.');
@@ -892,45 +850,26 @@ export default function Transaction() {
       }
 
       let response: Response;
-      if (scannedQrPayload) {
-        response = await fetch(`${FRAUD_API_BASE_URL}/predict-qr`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sender_account: SENIOR_ACCOUNT,
-            device_id: activeDeviceId,
-            ip_profile: activeIpProfile,
-            qr: {
-              ...scannedQrPayload,
-              amount: amountValue,
-              merchant_id: recipientAccount || scannedQrPayload.merchant_id,
-              account_name: recipientName || scannedQrPayload.account_name,
-              provider: selectedProvider,
-            },
-          }),
-        });
-      } else {
-        const contextResponse = await fetch(`${FRAUD_API_BASE_URL}/context`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sender_account: SENIOR_ACCOUNT,
-            recipient_account: recipientAccount,
-            amount: amountValue,
-            device_id: activeDeviceId,
-            ip_profile: activeIpProfile,
-          }),
-        });
+      const contextResponse = await fetch(`${FRAUD_API_BASE_URL}/context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender_account: SENIOR_ACCOUNT,
+          recipient_account: recipientAccount,
+          amount: amountValue,
+          device_id: activeDeviceId,
+          ip_profile: activeIpProfile,
+        }),
+      });
 
-        if (!contextResponse.ok) throw new Error(`Context API error: ${contextResponse.status}`);
-        const transactionData: ContextResult = await contextResponse.json();
+      if (!contextResponse.ok) throw new Error(`Context API error: ${contextResponse.status}`);
+      const transactionData: ContextResult = await contextResponse.json();
 
-        response = await fetch(`${FRAUD_API_BASE_URL}/predict`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...transactionData, sender_account: SENIOR_ACCOUNT }),
-        });
-      }
+      response = await fetch(`${FRAUD_API_BASE_URL}/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...transactionData, sender_account: SENIOR_ACCOUNT }),
+      });
 
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const result: FraudResult = await response.json();
@@ -1252,6 +1191,21 @@ export default function Transaction() {
 
             <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-slate-50 dark:bg-[#101010] p-3">
               <div id={scannerRegionId} className="min-h-[280px] rounded-xl overflow-hidden" />
+              <div className="mt-3 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#151515] p-3">
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-[#6B7280] dark:text-[#9EA8B5]">
+                  Upload QR Image
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleQrImageUpload}
+                  disabled={isQrImageDecoding}
+                  className="block w-full text-sm text-[#111827] dark:text-white file:mr-3 file:rounded-md file:border-0 file:bg-[#FF5500] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[#111827] dark:file:text-white hover:file:bg-[#E04B00]"
+                />
+                <p className="mt-2 text-xs text-[#6B7280] dark:text-[#A0A0A0]">
+                  {isQrImageDecoding ? 'Reading image...' : 'Use this if camera scan is unavailable.'}
+                </p>
+              </div>
             </div>
 
             {qrScanError && (
@@ -1420,7 +1374,15 @@ export default function Transaction() {
           
           {/* 1. Confirming Modal */}
           {modalState === 'confirming' && (
-            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col gap-6">
+            <div className="relative w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col gap-6">
+              <button
+                type="button"
+                onClick={() => setModalState('idle')}
+                className="absolute top-5 right-5 text-gray-400 hover:text-black dark:text-gray-500 dark:hover:text-white transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
               <div className="text-[#FF5500]">
                 <Play size={32} className="fill-[#FF5500] stroke-none rotate-90" />
               </div>
@@ -1441,75 +1403,26 @@ export default function Transaction() {
                 <button onClick={() => setModalState('idle')} className="flex-1 bg-transparent border border-black/20 dark:border-white/20 text-[#111827] dark:text-white rounded-lg py-3 font-semibold hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer">
                   Cancel
                 </button>
-                <button onClick={() => {
-                  if (requiresQuizGate) {
-                    setQuizAnswers({});
-                    setQuizError(null);
-                    setModalState('quiz');
-                    return;
-                  }
-                  continueTransactionAfterGate();
-                }} className="flex-1 bg-[#FF3B30] hover:bg-[#E0352B] transition-colors text-[#111827] dark:text-white rounded-lg py-3 font-semibold cursor-pointer">
+                <button onClick={() => continueTransactionAfterGate()} className="flex-1 bg-[#FF3B30] hover:bg-[#E0352B] transition-colors text-[#111827] dark:text-white rounded-lg py-3 font-semibold cursor-pointer">
                   Confirm
                 </button>
               </div>
             </div>
           )}
 
-          {/* Fraud Prevention Quiz */}
-          {modalState === 'quiz' && (
-            <div className="w-[540px] max-w-full bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#FF9F0A55] rounded-3xl p-8 flex flex-col gap-5">
-              <h2 className="text-[#111827] dark:text-white text-2xl font-bold font-['Sora']">Fraud Prevention Quiz</h2>
-              <p className="text-[#B8C1CC] text-sm">Answer this short quiz to unlock transfers safely.</p>
 
-              <div className="flex flex-col gap-4">
-                {BOAT_QUIZ.map((q, idx) => (
-                  <div key={q.id} className="rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-4">
-                    <p className="text-[#111827] dark:text-white text-sm font-semibold">{idx + 1}. {q.question}</p>
-                    <div className="mt-3 flex flex-col gap-2">
-                      {q.options.map((option, optionIdx) => (
-                        <label key={`${q.id}-${optionIdx}`} className="flex items-center gap-2 text-sm text-slate-600 dark:text-[#D2D8E0]">
-                          <input
-                            type="radio"
-                            name={q.id}
-                            checked={quizAnswers[q.id] === optionIdx}
-                            onChange={() => {
-                              setQuizAnswers((prev) => ({ ...prev, [q.id]: optionIdx }));
-                              setQuizError(null);
-                            }}
-                          />
-                          {option}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {quizError && <p className="text-sm text-[#FFB7B3]">{quizError}</p>}
-
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setModalState('idle')}
-                  className="flex-1 rounded-lg border border-black/20 dark:border-white/20 py-3 text-[#111827] dark:text-white font-semibold hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-                >
-                  Later
-                </button>
-                <button
-                  type="button"
-                  onClick={handleQuizSubmit}
-                  className="flex-1 rounded-lg bg-[#FF9F0A] py-3 text-[#1A1A1A] font-semibold hover:bg-[#E68F09] transition-colors"
-                >
-                  Submit Quiz
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* PIN Entry Modal */}
           {modalState === 'pin-entry' && (
-            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col items-center gap-6">
+            <div className="relative w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col items-center gap-6">
+              <button
+                type="button"
+                onClick={() => setModalState('idle')}
+                className="absolute top-5 right-5 text-gray-400 hover:text-black dark:text-gray-500 dark:hover:text-white transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
               <h2 className="text-[#111827] dark:text-white text-2xl font-bold font-['Sora'] text-center">Wallet PIN</h2>
               <p className="text-[#6B7280] dark:text-[#8A8A8A] text-sm text-center">Enter your 6-digit PIN to authorize this transfer.</p>
               
@@ -1566,7 +1479,15 @@ export default function Transaction() {
 
           {/* 2. Processing Modal */}
           {modalState === 'processing' && (
-            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl pt-12 pb-12 px-8 flex flex-col items-center gap-6">
+            <div className="relative w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl pt-12 pb-12 px-8 flex flex-col items-center gap-6">
+              <button
+                type="button"
+                onClick={() => setModalState('idle')}
+                className="absolute top-5 right-5 text-gray-400 hover:text-black dark:text-gray-500 dark:hover:text-white transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
               <Loader size={48} className="text-[#FF5500] animate-spin" />
               <h2 className="text-[#111827] dark:text-white text-xl font-bold font-['Sora'] text-center">Analyzing transaction risk...</h2>
               <p className="text-[#6B7280] dark:text-[#8A8A8A] text-sm text-center">Running real-time anomaly scoring...</p>
@@ -1575,7 +1496,15 @@ export default function Transaction() {
 
           {/* 3. Approved Modal */}
           {modalState === 'approved' && (
-            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#32D74B40] rounded-3xl p-8 flex flex-col items-center gap-6">
+            <div className="relative w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#32D74B40] rounded-3xl p-8 flex flex-col items-center gap-6">
+              <button
+                type="button"
+                onClick={() => setModalState('idle')}
+                className="absolute top-5 right-5 text-gray-400 hover:text-black dark:text-gray-500 dark:hover:text-white transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
               <div className="w-16 h-16 rounded-full bg-[#32D74B20] flex items-center justify-center">
                 <CheckCircle size={32} className="text-[#32D74B]" />
               </div>
@@ -1594,7 +1523,15 @@ export default function Transaction() {
 
           {/* 3.5 Guardian Approval Pending */}
           {modalState === 'guardianPending' && (
-            <div className="w-[430px] bg-[#1A1A1A] border border-[#5DA8FF66] rounded-3xl p-8 flex flex-col items-center gap-5 shadow-[0_0_32px_rgba(93,168,255,0.22)]">
+            <div className="relative w-[430px] bg-[#1A1A1A] border border-[#5DA8FF66] rounded-3xl p-8 flex flex-col items-center gap-5 shadow-[0_0_32px_rgba(93,168,255,0.22)]">
+              <button
+                type="button"
+                onClick={() => setModalState('idle')}
+                className="absolute top-5 right-5 text-gray-400 hover:text-black dark:text-gray-500 dark:hover:text-white transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
               <div className="w-16 h-16 rounded-full bg-[#5DA8FF22] flex items-center justify-center">
                 <ShieldCheck size={30} className="text-[#8FC7FF]" />
               </div>
@@ -1625,7 +1562,15 @@ export default function Transaction() {
 
           {/* 4. Verification Required */}
           {modalState === 'verification' && (
-            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#FF9F0A40] rounded-3xl p-8 flex flex-col items-center gap-6">
+            <div className="relative w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#FF9F0A40] rounded-3xl p-8 flex flex-col items-center gap-6">
+              <button
+                type="button"
+                onClick={() => setModalState('idle')}
+                className="absolute top-5 right-5 text-gray-400 hover:text-black dark:text-gray-500 dark:hover:text-white transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
               <div className="w-16 h-16 rounded-full bg-[#FF9F0A20] flex items-center justify-center">
                 <AlertTriangle size={32} className="text-[#FF9F0A]" />
               </div>
@@ -1649,7 +1594,15 @@ export default function Transaction() {
 
           {/* 4.5. FaceID Prototype Modal */}
           {modalState === 'face-id' && (
-            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#5DA8FF50] rounded-3xl p-8 flex flex-col items-center gap-6 shadow-[0_0_40px_rgba(93,168,255,0.15)]">
+            <div className="relative w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#5DA8FF50] rounded-3xl p-8 flex flex-col items-center gap-6 shadow-[0_0_40px_rgba(93,168,255,0.15)]">
+              <button
+                type="button"
+                onClick={() => setModalState('idle')}
+                className="absolute top-5 right-5 text-gray-400 hover:text-black dark:text-gray-500 dark:hover:text-white transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
               <h2 className="text-[#111827] dark:text-white text-[22px] font-bold font-['Sora'] text-center leading-tight">FaceID Verification</h2>
               <div className="text-[#6B7280] dark:text-[#8A8A8A] text-sm text-center">Please position your face within the frame.</div>
               
@@ -1695,7 +1648,15 @@ export default function Transaction() {
 
           {/* 5. Transaction Blocked */}
           {modalState === 'blocked' && (
-            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#FF3B30] rounded-3xl p-8 flex flex-col items-center gap-6 shadow-[0_0_40px_rgba(255,59,48,0.25)]">
+            <div className="relative w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#FF3B30] rounded-3xl p-8 flex flex-col items-center gap-6 shadow-[0_0_40px_rgba(255,59,48,0.25)]">
+              <button
+                type="button"
+                onClick={() => setModalState('idle')}
+                className="absolute top-5 right-5 text-gray-400 hover:text-black dark:text-gray-500 dark:hover:text-white transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
               <div className="w-16 h-16 rounded-full bg-[#FF3B3020] flex items-center justify-center">
                 <ShieldAlert size={32} className="text-[#FF3B30]" />
               </div>
