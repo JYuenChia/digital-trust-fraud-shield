@@ -1,9 +1,10 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
-import { ShieldAlert, Search, Bell } from 'lucide-react';
+import { ShieldAlert, Search, Bell , Menu } from 'lucide-react';
 
 export const Navigation: React.FC = () => {
   const [location] = useLocation();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const isProfilePage = location === '/profile';
 
   const navItems = [
@@ -19,7 +20,7 @@ export const Navigation: React.FC = () => {
         {/* Brand */}
         <Link href="/">
           <div className="flex items-center gap-3 cursor-pointer">
-            <ShieldAlert size={28} className="text-[#FF3B30]" />
+            <ShieldAlert size={24} className="text-[#FF3B30]" />
             <span className="text-[#111827] dark:text-white font-['Inter'] font-bold text-[13px] tracking-[1px]">
               DIGITAL TRUST
             </span>
@@ -49,7 +50,17 @@ export const Navigation: React.FC = () => {
           })}
         </div>
 
-        {/* Header Actions */}
+        {/* Mobile Menu Toggle */}
+        <div className="flex md:hidden items-center">
+          <button 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="text-[#111827] dark:text-white hover:text-[#FF3B30] p-2"
+          >
+            <Menu size={24} />
+          </button>
+        </div>
+
+        {/* Header Actions (Desktop) */}
         <div className="hidden md:flex items-center gap-6">
           {/* Search Box */}
           <div className="flex items-center gap-3 bg-[#FFFFFF] dark:bg-[#1A1A1A] rounded-lg px-4 py-2.5">
@@ -75,6 +86,35 @@ export const Navigation: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Mobile Menu Dropdown */}
+      {isMobileMenuOpen && (
+        <div className="md:hidden absolute top-16 left-0 right-0 bg-[#FFFFFF] dark:bg-[#1A1A1A] border-b border-[#D1D5DB] dark:border-[#2A2A2A] shadow-xl flex flex-col p-4">
+          {navItems.map((item) => {
+            const isActive = location === item.href;
+            return (
+              <Link key={item.href} href={item.href}>
+                <div 
+                  className={`py-3 px-4 rounded-lg cursor-pointer ${isActive ? 'bg-[#FF3B30]/10 text-[#FF3B30]' : 'text-[#6B7280] dark:text-[#8A8A8A]'}`}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <span className="font-['Inter'] font-bold text-sm tracking-widest">{item.label}</span>
+                </div>
+              </Link>
+            );
+          })}
+          <div className="h-px bg-black/10 dark:bg-white/10 my-2"></div>
+          <Link href="/profile">
+            <div 
+              className="py-3 px-4 rounded-lg cursor-pointer text-[#111827] dark:text-white flex items-center justify-between"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <span className="font-['Inter'] font-bold text-sm tracking-widest">PROFILE / SETTINGS</span>
+              <div className="w-8 h-8 rounded-full bg-[#FF5500] text-white flex items-center justify-center text-xs font-semibold">AT</div>
+            </div>
+          </Link>
+        </div>
+      )}
     </nav>
   );
 };
