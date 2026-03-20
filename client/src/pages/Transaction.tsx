@@ -795,8 +795,8 @@ export default function Transaction() {
 
           <div className="rounded-2xl border border-[#FF5500]/30 bg-[#FF5500]/10 px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex flex-col">
-              <span className="text-xs uppercase tracking-[0.18em] text-[#FF8A4D]">Anti-Scam QR Checker</span>
-              <span className="text-sm text-white">Scan any QR to detect phishing or quishing links before you click or pay.</span>
+              <span className="text-xs uppercase tracking-[0.18em] text-[#FF8A4D]">Quick Payment</span>
+              <span className="text-sm text-white">Scan a merchant or DuitNow QR code to automatically fill in payment details.</span>
             </div>
             <button
               type="button"
@@ -804,7 +804,7 @@ export default function Transaction() {
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FF5500] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#E04B00] transition-colors cursor-pointer"
             >
               <ScanLine size={16} />
-              Scan Any QR for Scam
+              Scan QR to Pay
             </button>
           </div>
 
@@ -958,15 +958,6 @@ export default function Transaction() {
             </div>
           </div>
 
-          {/* Security Indicator */}
-          <div className="flex items-center gap-4 bg-[#FFFFFF05] border border-white/10 p-5 rounded-xl">
-            <ShieldCheck size={28} className="text-[#32D74B]" />
-            <div className="flex flex-col">
-              <span className="text-white font-bold">Privacy-First AI Monitor</span>
-              <span className="text-[#8A8A8A] text-sm">Device, IP, & behavioral data encrypt-assessed for real-time risk scoring.</span>
-            </div>
-          </div>
-
           {/* Button */}
           <button 
             onClick={() => {
@@ -988,8 +979,8 @@ export default function Transaction() {
                   <ScanLine size={20} className="text-[#FF8A4D]" />
                 </div>
                 <div className="flex flex-col">
-                  <h3 className="text-white text-lg font-bold font-['Sora']">QR Integrity Shield</h3>
-                  <p className="text-[#8A8A8A] text-sm">Scan merchant QR and detonate metadata before transfer.</p>
+                  <h3 className="text-white text-lg font-bold font-['Sora']">Scan Payment QR</h3>
+                  <p className="text-[#8A8A8A] text-sm">Align the QR code within the frame to pay.</p>
                 </div>
               </div>
               <button
@@ -1013,10 +1004,6 @@ export default function Transaction() {
                 )}
               </div>
             )}
-
-            <p className="text-xs text-[#8A8A8A]">
-              Scan anything: bank payment QR, e-wallet QR, or suspicious links. The shield will risk-check the decoded content.
-            </p>
           </div>
         </div>
       )}
