@@ -419,15 +419,14 @@ export default function Profile() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button onClick={() => setWalletPinEnabled((v) => !v)} className={`flex items-center justify-between border rounded-xl p-4 transition-colors ${walletPinEnabled ? 'border-[#32D74B55] bg-[#32D74B10]' : 'border-white/10 bg-[#141414]'}`}>
-                <span className="text-white text-sm font-semibold">Wallet PIN Protection</span>
-                <span className={`text-xs font-bold px-2 py-1 rounded ${walletPinEnabled ? 'bg-[#32D74B30] text-[#32D74B]' : 'bg-[#FF3B3020] text-[#FF3B30]'}`}>{walletPinEnabled ? 'ON' : 'OFF'}</span>
-              </button>
-              <button onClick={() => setBiometricEnabled((v) => !v)} className={`flex items-center justify-between border rounded-xl p-4 transition-colors ${biometricEnabled ? 'border-[#32D74B55] bg-[#32D74B10]' : 'border-white/10 bg-[#141414]'}`}>
-                <span className="text-white text-sm font-semibold">Biometric Login</span>
-                <span className={`text-xs font-bold px-2 py-1 rounded ${biometricEnabled ? 'bg-[#32D74B30] text-[#32D74B]' : 'bg-[#FF3B3020] text-[#FF3B30]'}`}>{biometricEnabled ? 'ON' : 'OFF'}</span>
-              </button>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <button onClick={() => setWalletPinEnabled((v) => !v)} className={`flex items-center justify-between border rounded-xl p-4 transition-colors ${walletPinEnabled ? 'border-[#32D74B55] bg-[#32D74B10]' : 'border-white/10 bg-[#141414]'}`}>
+                  <span className="text-white text-sm font-semibold">Wallet PIN Protection</span>
+                  <span className={`text-xs font-bold px-2 py-1 rounded ${walletPinEnabled ? 'bg-[#32D74B30] text-[#32D74B]' : 'bg-[#FF3B3020] text-[#FF3B30]'}`}>{walletPinEnabled ? 'ON' : 'OFF'}</span>
+                </button>
+                <p className="text-[#8A8A8A] text-xs px-2">Creates an additional security layer for authorizing high-risk transactions.</p>
+              </div>
             </div>
 
             {saveMessage && <div className="text-[#32D74B] text-sm font-semibold">{saveMessage}</div>}
