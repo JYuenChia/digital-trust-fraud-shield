@@ -10,6 +10,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { TourProvider } from "./contexts/TourContext";
 import Landing from "./pages/Landing";
 import Transaction from "./pages/Transaction";
+import SwipeShield from "./pages/SwipeShield";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import GuardianDemo from "./pages/GuardianDemo";
@@ -21,6 +22,7 @@ function Router() {
       <Route path={"/"} component={Landing} />
       <Route path={"/dashboard"} component={Dashboard} />
       <Route path={"/transaction"} component={Transaction} />
+      <Route path={"/swipe-shield"} component={SwipeShield} />
       <Route path={"/profile"} component={Profile} />
       <Route path={"/guardian-notifications"} component={GuardianDemo} />
       <Route path={"/guardian-demo"} component={GuardianDemo} />

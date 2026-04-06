@@ -267,6 +267,11 @@ export default function Landing() {
               >
                 Start Guided Tour
               </button>
+              <Link href="/swipe-shield">
+                <div className="w-full sm:w-auto bg-[#FFFFFF]/80 dark:bg-[#1A1A1A]/80 backdrop-blur-2xl border border-black/20 dark:border-white/20 text-[#111827] dark:text-white px-8 py-4 rounded-lg font-['Inter'] font-semibold text-[15px] cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 transition-colors text-center">
+                  Play SwipeShield
+                </div>
+              </Link>
               <button onClick={() => window.open('https://github.com/JYuenChia/digital-trust-fraud-shield.git', '_blank')} className="w-full sm:w-auto bg-[#FFFFFF]/80 dark:bg-[#1A1A1A]/80 backdrop-blur-2xl border border-black/20 dark:border-white/20 text-[#111827] dark:text-white px-8 py-4 rounded-lg font-['Inter'] font-semibold text-[15px] cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
                 View Documentation
               </button>

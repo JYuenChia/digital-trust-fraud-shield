@@ -172,10 +172,57 @@ class RecoveryReportRequest(BaseModel):
     transaction_date: str
 
 
+class OnboardingScoreRequest(BaseModel):
+    score: int
+    total: int = 5
+    scenario_set: str = "asean-swipe-shield"
+
+
 class GuardianApprovalDecision(BaseModel):
     guardian_account: str
     decision: str  # APPROVE or REJECT
     note: str | None = None
+
+
+def build_onboarding_friction_profile(score: int, total: int) -> dict:
+    safe_total = max(int(total), 1)
+    safe_score = max(0, min(int(score), safe_total))
+    accuracy = safe_score / safe_total
+
+    if accuracy < 0.4:
+        return {
+            "friction_tier": "strict",
+            "guardian_protocol": {
+                "mode": "strict",
+                "pin_required": True,
+                "face_id_for_flagged": True,
+                "guardian_review_threshold": 0.35,
+                "default_note": "Low score detected. Keep Guardian Protocol strict and require extra checks earlier.",
+            },
+        }
+
+    if accuracy < 0.8:
+        return {
+            "friction_tier": "balanced",
+            "guardian_protocol": {
+                "mode": "balanced",
+                "pin_required": True,
+                "face_id_for_flagged": True,
+                "guardian_review_threshold": 0.45,
+                "default_note": "Moderate score detected. Use adaptive Guardian Protocol defaults.",
+            },
+        }
+
+    return {
+        "friction_tier": "light",
+        "guardian_protocol": {
+            "mode": "light",
+            "pin_required": True,
+            "face_id_for_flagged": False,
+            "guardian_review_threshold": 0.55,
+            "default_note": "High score detected. Use lighter friction, while still keeping risk checks active.",
+        },
+    }
 
 
 def normalize_name_dest(recipient_account: str) -> str:
@@ -1373,6 +1420,24 @@ async def generate_recovery_report(payload: RecoveryReportRequest):
         "recovery_recommendations": recovery_steps,
         "next_steps": "Submit this report to your bank and law enforcement authorities",
         "generated_at": datetime.now().isoformat() + "Z"
+    }
+
+
+@app.post("/api/v1/onboarding/score")
+async def submit_onboarding_score(payload: OnboardingScoreRequest):
+    profile = build_onboarding_friction_profile(payload.score, payload.total)
+    safe_total = max(int(payload.total), 1)
+    safe_score = max(0, min(int(payload.score), safe_total))
+    accuracy = round(safe_score / safe_total, 4)
+
+    return {
+        "scenario_set": payload.scenario_set,
+        "score": safe_score,
+        "total": safe_total,
+        "accuracy": accuracy,
+        "friction_tier": profile["friction_tier"],
+        "guardian_protocol": profile["guardian_protocol"],
+        "next_step": "SwipeShield completed. Use this score to tune onboarding defaults.",
     }
 
 
