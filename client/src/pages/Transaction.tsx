@@ -1,3 +1,103 @@
+// --- Invisible Shield: Trusted Contacts ---
+const TRUSTED_CONTACTS = [
+  '+6012-111-2222',
+  '+6019-888-9999',
+  '+603-1234-5678',
+];
+
+// --- Invisible Shield: Mock Background Listener ---
+useEffect(() => {
+  const onIncomingCall = (e: CustomEvent<{ number: string }>) => {
+    const { number } = e.detail;
+    console.log('Incoming call detected:', number);
+    if (!TRUSTED_CONTACTS.includes(number)) {
+      setIsCallConsultOpen(true);
+      setIsListeningCall(true);
+      console.log('Call Consultation modal opened in Listening state');
+    }
+  };
+
+  window.addEventListener('incoming-call', onIncomingCall);
+  return () => window.removeEventListener('incoming-call', onIncomingCall);
+}, []);
+
+// --- Invisible Shield: Demo Trigger ---
+useEffect(() => {
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key.toLowerCase() === 's') {
+      console.log('Simulating incoming call...');
+      const mockCallEvent = new CustomEvent('incoming-call', {
+        detail: { number: '+6012-345-6789' },
+      });
+      window.dispatchEvent(mockCallEvent);
+    }
+  };
+
+  document.addEventListener('keydown', handleKeyDown);
+  return () => document.removeEventListener('keydown', handleKeyDown);
+}, []);
+
+// --- Traffic Light Status Config ---
+const statusConfig = [
+  {
+    min: 0,
+    max: 0.15,
+    bg: '#10B981',
+    text: 'Human Voice Verified. Safe to talk.',
+    label: 'Safe',
+    emoji: '🟢',
+  },
+  {
+    min: 0.5,
+    max: 0.75,
+    bg: '#F59E0B',
+    text: '⚠️ Warning: Unusual Voice Patterns. Be careful.',
+    label: 'Warning',
+    emoji: '🟡',
+  },
+  {
+    min: 0.75,
+    max: 1.01,
+    bg: '#EF4444',
+    text: '🛑 STOP: AI CLONE DETECTED. Hang up immediately!',
+    label: 'AI Clone',
+    emoji: '🔴',
+  },
+];
+
+  // --- Invisible Shield: Listen for incoming-call event ---
+  useEffect(() => {
+    function handleIncomingCall(e: CustomEvent<{ number: string }>) {
+      const number = e.detail?.number;
+      console.log('Incoming call event received:', number); // Debugging log
+      if (!number) return;
+      if (!TRUSTED_CONTACTS.includes(number)) {
+        setIsCallConsultOpen(true);
+        console.log('Call Consultation modal opened'); // Debugging log
+        setIsListeningCall(true);
+        console.log('Listening started'); // Debugging log
+      }
+    }
+    window.addEventListener('incoming-call', handleIncomingCall);
+    return () => window.removeEventListener('incoming-call', handleIncomingCall);
+  }, []);
+
+  // --- Invisible Shield: Demo trigger (press S) ---
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'S' || e.key === 's') {
+        console.log('Demo trigger: Dispatching incoming-call event'); // Debugging log
+        window.dispatchEvent(new CustomEvent('incoming-call', { detail: { number: '+6012-345-6789' } }));
+      }
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
+
+  useEffect(() => {
+    console.log("Transaction component mounted");
+  }, []);
+
 import React, { useState, useRef, useEffect } from 'react';
 import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X, PhoneCall, Mic, MicOff, Lock, Smartphone, Send, Globe } from 'lucide-react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
@@ -489,6 +589,26 @@ function parseQrPayload(raw: string): QrPayload | null {
   }
 }
 
+// Trusted contacts for mock call simulation
+const trusted_contacts = [
+  '+60123456789', // Example trusted number
+  '+60111222333',
+];
+
+// Simulate incoming call event (for demo)
+function useMockIncomingCall({ onUnknownCall }: { onUnknownCall: (number: string) => void }) {
+  useEffect(() => {
+    // Simulate a call after 7 seconds (for demo)
+    const timer = setTimeout(() => {
+      const incomingNumber = '+60199887766'; // Not in trusted_contacts
+      if (!trusted_contacts.includes(incomingNumber)) {
+        onUnknownCall(incomingNumber);
+      }
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [onUnknownCall]);
+}
+
 export default function Transaction() {
   const { addEvent, updateEventStatus } = useFraudEvents();
   const { t } = useLanguage();
@@ -533,6 +653,8 @@ export default function Transaction() {
     reasons: [],
     confidence: 'low',
   });
+  const [callBackendVoiceAssessment, setCallBackendVoiceAssessment] = useState<AIVoiceAssessment | null>(null);
+  const [callVoiceAuditMessage, setCallVoiceAuditMessage] = useState<string>('');
   const [callError, setCallError] = useState<string | null>(null);
   const [boatProfile, setBoatProfile] = useState<BoatProfile>({ safePoints: 0, damage: 0, warningStrikes: 0, locked: false });
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
@@ -547,7 +669,13 @@ export default function Transaction() {
   const callHighBandRatiosRef = useRef<number[]>([]);
   const callFlatnessHistoryRef = useRef<number[]>([]);
   const callLastAnalysisTsRef = useRef(0);
+  const callBackendVoiceAssessmentRef = useRef<AIVoiceAssessment | null>(null);
+  const callVoiceAuditSessionRef = useRef(0);
   const scannerRegionId = 'qr-reader-shield';
+
+  useEffect(() => {
+    callBackendVoiceAssessmentRef.current = callBackendVoiceAssessment;
+  }, [callBackendVoiceAssessment]);
 
   useEffect(() => {
     try {
@@ -772,12 +900,170 @@ export default function Transaction() {
     return Math.sqrt(variance);
   };
 
+  const mergeVoiceAssessments = (
+    browserAssessment: AIVoiceAssessment,
+    serverAssessment: AIVoiceAssessment | null,
+  ): AIVoiceAssessment => {
+    if (!serverAssessment) {
+      return browserAssessment;
+    }
+
+    const score = clamp01((browserAssessment.score * 0.55) + (serverAssessment.score * 0.45));
+    const reasons = Array.from(new Set([
+      ...browserAssessment.reasons,
+      ...serverAssessment.reasons,
+    ])).slice(0, 5);
+    const suspected = browserAssessment.suspected || serverAssessment.suspected || score >= 0.45;
+    const confidence: 'low' | 'medium' | 'high' = score >= 0.72 ? 'high' : score >= 0.45 ? 'medium' : 'low';
+
+    return {
+      suspected,
+      score,
+      reasons,
+      confidence,
+    };
+  };
+
+  const encodeWavBlob = (samples: Float32Array[], sampleRate: number) => {
+    const sampleCount = samples.reduce((total, chunk) => total + chunk.length, 0);
+    const buffer = new ArrayBuffer(44 + sampleCount * 2);
+    const view = new DataView(buffer);
+
+    const writeString = (offset: number, text: string) => {
+      for (let i = 0; i < text.length; i += 1) {
+        view.setUint8(offset + i, text.charCodeAt(i));
+      }
+    };
+
+    let offset = 0;
+    let position = 0;
+    const writeUint16 = (value: number) => {
+      view.setUint16(offset, value, true);
+      offset += 2;
+    };
+    const writeUint32 = (value: number) => {
+      view.setUint32(offset, value, true);
+      offset += 4;
+    };
+
+    writeString(offset, 'RIFF');
+    offset += 4;
+    writeUint32(36 + sampleCount * 2);
+    writeString(offset, 'WAVE');
+    offset += 4;
+    writeString(offset, 'fmt ');
+    offset += 4;
+    writeUint32(16);
+    writeUint16(1);
+    writeUint16(1);
+    writeUint32(sampleRate);
+    writeUint32(sampleRate * 2);
+    writeUint16(2);
+    writeUint16(16);
+    writeString(offset, 'data');
+    offset += 4;
+    writeUint32(sampleCount * 2);
+
+    for (const chunk of samples) {
+      for (let i = 0; i < chunk.length; i += 1) {
+        const clipped = Math.max(-1, Math.min(1, chunk[i]));
+        view.setInt16(44 + (position * 2), clipped < 0 ? clipped * 0x8000 : clipped * 0x7FFF, true);
+        position += 1;
+      }
+    }
+
+    return new Blob([buffer], { type: 'audio/wav' });
+  };
+
+  const recordCallSample = async (stream: MediaStream, durationMs = 4500): Promise<Blob | null> => {
+    const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) {
+      return null;
+    }
+
+    const context = new AudioCtx();
+    await context.resume();
+    const source = context.createMediaStreamSource(stream);
+    const processor = context.createScriptProcessor(4096, 1, 1);
+    const collected: Float32Array[] = [];
+
+    processor.onaudioprocess = (event) => {
+      const input = event.inputBuffer.getChannelData(0);
+      collected.push(new Float32Array(input));
+      event.outputBuffer.getChannelData(0).fill(0);
+    };
+
+    source.connect(processor);
+    processor.connect(context.destination);
+
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, durationMs);
+    });
+
+    source.disconnect();
+    processor.disconnect();
+    await context.close();
+
+    if (!collected.length) {
+      return null;
+    }
+
+    return encodeWavBlob(collected, context.sampleRate);
+  };
+
+  const sampleAndScoreCallAudio = async (stream: MediaStream, sessionId: number) => {
+    try {
+      setCallVoiceAuditMessage('Running server-side librosa analysis on a short call sample...');
+      const wavBlob = await recordCallSample(stream);
+      if (!wavBlob || callVoiceAuditSessionRef.current !== sessionId) {
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('audio_file', wavBlob, 'call-sample.wav');
+
+      const response = await fetch(`${FRAUD_API_BASE_URL}/voice-authenticity`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Voice authenticity check failed.');
+      }
+
+      const result = await response.json();
+      const backendAssessment: AIVoiceAssessment = {
+        suspected: Boolean(result.suspected),
+        score: typeof result.score === 'number' ? result.score : 0,
+        reasons: Array.isArray(result.reasons) ? result.reasons : [],
+        confidence: result.confidence === 'high' || result.confidence === 'medium' ? result.confidence : 'low',
+      };
+
+      if (callVoiceAuditSessionRef.current !== sessionId) {
+        return;
+      }
+
+      callBackendVoiceAssessmentRef.current = backendAssessment;
+      setCallBackendVoiceAssessment(backendAssessment);
+      setCallVoiceAuditMessage('Server-side voice analysis completed.');
+      const browserAssessment = evaluateAIVoiceSuspicion();
+      setAiVoiceAssessment(mergeVoiceAssessments(browserAssessment, backendAssessment));
+    } catch {
+      if (callVoiceAuditSessionRef.current === sessionId) {
+        setCallVoiceAuditMessage('Server voice analysis unavailable. Using local heuristics only.');
+      }
+    }
+  };
+
   const resetCallAudioHeuristics = () => {
     callEnergyHistoryRef.current = [];
     callCentroidHistoryRef.current = [];
     callHighBandRatiosRef.current = [];
     callFlatnessHistoryRef.current = [];
     callLastAnalysisTsRef.current = 0;
+    callBackendVoiceAssessmentRef.current = null;
+    setCallBackendVoiceAssessment(null);
+    setCallVoiceAuditMessage('');
   };
 
   const stopCallAudioSampling = () => {
@@ -800,7 +1086,7 @@ export default function Transaction() {
     resetCallAudioHeuristics();
   };
 
-  const startCallAudioSampling = async () => {
+  const startCallAudioSampling = async (): Promise<MediaStream | null> => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -817,6 +1103,7 @@ export default function Transaction() {
       }
 
       const context = new AudioCtx();
+      await context.resume();
       const analyser = context.createAnalyser();
       analyser.fftSize = 2048;
       analyser.smoothingTimeConstant = 0.2;
@@ -888,8 +1175,10 @@ export default function Transaction() {
       };
 
       callAudioRafRef.current = requestAnimationFrame(run);
+      return stream;
     } catch {
       setCallError('Microphone access is needed for AI-voice suspicion checks.');
+      return null;
     }
   };
 
@@ -950,11 +1239,14 @@ export default function Transaction() {
   };
 
   const stopCallConsultation = () => {
+    callVoiceAuditSessionRef.current += 1;
     if (callRecognitionRef.current) {
       callRecognitionRef.current.stop();
       callRecognitionRef.current = null;
     }
     stopCallAudioSampling();
+    setCallBackendVoiceAssessment(null);
+    setCallVoiceAuditMessage('');
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
@@ -978,9 +1270,12 @@ export default function Transaction() {
       reasons: [],
       confidence: 'low',
     });
+    setCallBackendVoiceAssessment(null);
+    setCallVoiceAuditMessage('');
     resetCallAudioHeuristics();
     hasPlayedCallAlertRef.current = false;
-    void startCallAudioSampling();
+    callVoiceAuditSessionRef.current += 1;
+    const sessionId = callVoiceAuditSessionRef.current;
 
     const recognition = new speechApi();
     recognition.continuous = true;
@@ -995,7 +1290,7 @@ export default function Transaction() {
 
       const cleaned = transcriptText.trim();
       const { risk, matched } = evaluateCallRisk(cleaned);
-      const aiAssessment = evaluateAIVoiceSuspicion();
+      const aiAssessment = mergeVoiceAssessments(evaluateAIVoiceSuspicion(), callBackendVoiceAssessmentRef.current);
       setAiVoiceAssessment(aiAssessment);
 
       const combinedRisk = clamp01(
@@ -1039,6 +1334,14 @@ export default function Transaction() {
     recognition.start();
     callRecognitionRef.current = recognition;
     setIsListeningCall(true);
+
+    void startCallAudioSampling().then((stream) => {
+      if (!stream || callVoiceAuditSessionRef.current !== sessionId) {
+        return;
+      }
+
+      void sampleAndScoreCallAudio(stream, sessionId);
+    });
   };
 
   useEffect(() => {
@@ -1049,6 +1352,7 @@ export default function Transaction() {
 
   useEffect(() => {
     return () => {
+      callVoiceAuditSessionRef.current += 1;
       if (callRecognitionRef.current) {
         callRecognitionRef.current.stop();
       }
@@ -1683,8 +1987,8 @@ export default function Transaction() {
           <div className="w-full max-w-[560px] rounded-3xl border border-[#5DA8FF40] bg-[#121A28] p-6 md:p-8 flex flex-col gap-5">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="h-11 w-11 rounded-xl bg-[#5DA8FF1A] flex items-center justify-center">
-                  <Lock size={19} className="text-[#8FC7FF]" />
+                <div className={`h-11 w-11 rounded-xl ${isListeningCall ? 'bg-[#5DA8FF33] animate-pulse' : 'bg-[#5DA8FF1A]'} flex items-center justify-center`}>
+                  <ShieldCheck size={20} className="text-[#8FC7FF]" />
                 </div>
                 <div>
                   <h3 className="text-white text-xl font-bold font-['Sora']">Before We Start</h3>
@@ -1736,7 +2040,7 @@ export default function Transaction() {
 
       {isCallConsultOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-[760px] rounded-3xl border border-[#5DA8FF40] bg-[#131822] p-6 md:p-8 flex flex-col gap-5">
+          <div className="w-full max-w-[760px] rounded-3xl border border-[#5DA8FF40] bg-[#131822] p-6 md:p-8 flex flex-col gap-5 relative">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className={`h-11 w-11 rounded-xl ${isListeningCall ? 'bg-[#5DA8FF33] animate-pulse' : 'bg-[#5DA8FF1A]'} flex items-center justify-center`}>
@@ -1753,15 +2057,23 @@ export default function Transaction() {
               </button>
             </div>
 
-            <div className="rounded-xl border border-white/10 bg-[#0F1520] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-white">Scam Risk Right Now</p>
-                <span className="text-sm font-semibold text-[#D8E8FA]">{formatPercent(callRiskScore)}</span>
-              </div>
-              <div className="mt-2 h-3 rounded-full bg-white/10 overflow-hidden">
-                <div className={`h-full transition-all duration-300 ${getCallRiskClass(callRiskScore)}`} style={{ width: `${Math.max(4, Math.round(callRiskScore * 100))}%` }} />
-              </div>
-              <p className="mt-2 text-xs text-[#BDD3E9]">{callVerdict}</p>
+            {/* --- Traffic Light UI --- */}
+            <div className="rounded-xl border border-white/10 bg-[#0F1520] p-4 flex flex-col gap-2">
+              {(() => {
+                const status = statusConfig.find(cfg => callRiskScore >= cfg.min && callRiskScore < cfg.max) || statusConfig[0];
+                return (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <span style={{ background: status.bg }} className="inline-flex items-center justify-center w-8 h-8 rounded-full text-white text-lg font-bold">{status.emoji}</span>
+                      <div>
+                        <span className="text-white font-bold text-base">Voice Authenticity</span>
+                        <span className="ml-2 text-xs text-[#D8E8FA]">Confidence: {formatPercent(callRiskScore)}</span>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-sm font-semibold" style={{ color: status.bg }}>{status.text}</div>
+                  </>
+                );
+              })()}
             </div>
 
             <div className={`rounded-xl border p-4 ${aiVoiceAssessment.suspected ? 'border-[#FF3B3055] bg-[#FF3B3016]' : 'border-[#5DA8FF40] bg-[#102030]'}`}>
@@ -1784,6 +2096,15 @@ export default function Transaction() {
                 </div>
               )}
               <p className="mt-2 text-[11px] text-[#9BB6CF]">Confidence: {aiVoiceAssessment.confidence.toUpperCase()}</p>
+              {callBackendVoiceAssessment && (
+                <div className="mt-3 rounded-lg border border-white/10 bg-black/10 px-3 py-2">
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-[#9BB6CF]">Server audio audit</p>
+                  <p className="mt-1 text-xs text-[#D7E6F6]">
+                    {formatPercent(callBackendVoiceAssessment.score)} risk • {callBackendVoiceAssessment.reasons[0] ?? 'No additional synthetic speech markers.'}
+                  </p>
+                </div>
+              )}
+              {callVoiceAuditMessage && <p className="mt-2 text-[11px] text-[#9BB6CF]">{callVoiceAuditMessage}</p>}
             </div>
 
             <div className="rounded-xl border border-[#5DA8FF40] bg-[#0E1624] p-4">
@@ -1818,7 +2139,7 @@ export default function Transaction() {
 
             {callError && <p className="text-xs text-[#FFBCB7]">{callError}</p>}
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 items-center">
               <button
                 type="button"
                 onClick={() => (isListeningCall ? stopCallConsultation() : startCallConsultation())}
@@ -1826,6 +2147,19 @@ export default function Transaction() {
               >
                 {isListeningCall ? <MicOff size={16} /> : <Mic size={16} />}
                 {isListeningCall ? 'Stop Listening' : 'Start Listening'}
+              </button>
+              {/* --- National Security Reporting Button --- */}
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold bg-[#F59E0B] text-[#101418] hover:bg-[#FFD700] ml-2"
+                onClick={() => {
+                  const number = '+6012-345-6789'; // Replace with actual detected number if available
+                  const score = formatPercent(callRiskScore);
+                  const msg = encodeURIComponent(`Fraud Report: AI Voice Clone detected from ${number}. Risk Score: ${score}. Evidence: Spectral artifacts detected.`);
+                  window.open(`https://wa.me/60162206262?text=${msg}`);
+                }}
+              >
+                Report Scammer to MCMC
               </button>
             </div>
           </div>
@@ -1994,9 +2328,6 @@ export default function Transaction() {
           {/* 3. Approved Modal */}
           {modalState === 'approved' && (
             <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#32D74B40] rounded-3xl p-8 flex flex-col items-center gap-6">
-              <div className="w-16 h-16 rounded-full bg-[#32D74B20] flex items-center justify-center">
-                <CheckCircle size={32} className="text-[#32D74B]" />
-              </div>
               <h2 className="text-[#111827] dark:text-white text-2xl font-bold font-['Sora'] text-center">Status: Approved</h2>
               <div className="bg-[#32D74B15] px-4 py-2 rounded-full">
                 <span className="text-[#32D74B] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Safe)</span>
@@ -2013,9 +2344,6 @@ export default function Transaction() {
           {/* 3.5 Guardian Approval Pending */}
           {modalState === 'guardianPending' && (
             <div className="w-[430px] bg-[#1A1A1A] border border-[#5DA8FF66] rounded-3xl p-8 flex flex-col items-center gap-5 shadow-[0_0_32px_rgba(93,168,255,0.22)]">
-              <div className="w-16 h-16 rounded-full bg-[#5DA8FF22] flex items-center justify-center">
-                <ShieldCheck size={30} className="text-[#8FC7FF]" />
-              </div>
               <h2 className="text-white text-[22px] font-bold font-['Sora'] text-center leading-tight">Waiting for Guardian Approval</h2>
               <div className="bg-[#5DA8FF15] px-4 py-2 rounded-full">
                 <span className="text-[#9ED1FF] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Review)</span>
@@ -2044,9 +2372,6 @@ export default function Transaction() {
           {/* 4. Verification Required */}
           {modalState === 'verification' && (
             <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#FF9F0A40] rounded-3xl p-8 flex flex-col items-center gap-6">
-              <div className="w-16 h-16 rounded-full bg-[#FF9F0A20] flex items-center justify-center">
-                <AlertTriangle size={32} className="text-[#FF9F0A]" />
-              </div>
               <h2 className="text-[#111827] dark:text-white text-[22px] font-bold font-['Sora'] text-center leading-tight">Status: Verification Required</h2>
               <div className="bg-[#FF9F0A15] px-4 py-2 rounded-full">
                 <span className="text-[#FF9F0A] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Careful)</span>
@@ -2243,3 +2568,49 @@ export default function Transaction() {
     </div>
   );
 }
+
+// Traffic Light UI for Voice Authenticity
+function VoiceTrafficLightBanner({ score }: { score: number }) {
+  let color = '#32D74B', bg = '#E6F9ED', text = 'No AI patterns found. Safe to talk.';
+  let icon = <CheckCircle size={18} className="text-[#32D74B]" />;
+  let label = 'Voice Authenticity';
+  if (score >= 0.75) {
+    color = '#FF3B30';
+    bg = '#FF3B3012';
+    text = '🛑 STOP: AI CLONE DETECTED. This is not a real person. Hang up immediately!';
+    icon = <ShieldAlert size={18} className="text-[#FF3B30]" />;
+  } else if (score >= 0.5) {
+    color = '#FF9F0A';
+    bg = '#FF9F0A18';
+    text = '⚠️ Warning: Unusual Voice. This might be a computer. Be careful what you say.';
+    icon = <AlertTriangle size={18} className="text-[#FF9F0A]" />;
+  }
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: bg, border: `1.5px solid ${color}` }}>
+        {icon}
+        <div className="flex flex-col">
+          <span className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color }}>{label}</span>
+          <span className="text-sm font-semibold" style={{ color }}>{text}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Manual trigger for demo: Simulate Call button
+const simulateCall = () => {
+  if (!isCallConsultOpen) {
+    setIsCallConsentOpen(false);
+    setIsCallConsultOpen(true);
+  }
+};
+
+<button
+  type="button"
+  onClick={simulateCall}
+  aria-label="Simulate Incoming Call"
+  className="fixed bottom-6 left-6 z-40 inline-flex h-12 w-12 items-center justify-center rounded-full border border-[#FF5500] bg-[#FFF6F0] text-[#FF5500] shadow-lg hover:bg-[#FF5500] hover:text-white transition-all"
+>
+  <PhoneCall size={22} />
+</button>
