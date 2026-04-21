@@ -6,13 +6,16 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import Navigation from "./components/Navigation";
 import TourOverlay from "./components/TourOverlay";
 import { FraudEventsProvider } from "./contexts/FraudEventsContext";
+import { LanguageProvider } from "./contexts/LanguageContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { TourProvider } from "./contexts/TourContext";
 import Landing from "./pages/Landing";
 import Transaction from "./pages/Transaction";
+import SwipeShield from "./pages/SwipeShield";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import GuardianDemo from "./pages/GuardianDemo";
+import Admin from "./pages/Admin";
 
 
 function Router() {
@@ -20,7 +23,9 @@ function Router() {
     <Switch>
       <Route path={"/"} component={Landing} />
       <Route path={"/dashboard"} component={Dashboard} />
+      <Route path={"/admin"} component={Admin} />
       <Route path={"/transaction"} component={Transaction} />
+      <Route path={"/swipe-shield"} component={SwipeShield} />
       <Route path={"/profile"} component={Profile} />
       <Route path={"/guardian-notifications"} component={GuardianDemo} />
       <Route path={"/guardian-demo"} component={GuardianDemo} />
@@ -43,16 +48,18 @@ function App() {
         defaultTheme="dark"
         switchable
       >
-        <TooltipProvider>
-          <FraudEventsProvider>
-            <TourProvider>
-              <Navigation />
-              <Toaster />
-              <Router />
-              <TourOverlay />
-            </TourProvider>
-          </FraudEventsProvider>
-        </TooltipProvider>
+        <LanguageProvider>
+          <TooltipProvider>
+            <FraudEventsProvider>
+              <TourProvider>
+                <Navigation />
+                <Toaster />
+                <Router />
+                <TourOverlay />
+              </TourProvider>
+            </FraudEventsProvider>
+          </TooltipProvider>
+        </LanguageProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

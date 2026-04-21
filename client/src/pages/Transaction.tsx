@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X, PhoneCall, Mic, MicOff, Lock, Smartphone } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X, PhoneCall, Mic, MicOff, Lock, Smartphone, Send, Globe } from 'lucide-react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { FRAUD_API_BASE_URL } from '@/const';
 import { useFraudEvents } from '@/contexts/FraudEventsContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const MALAYSIA_BANKS = [
   'Maybank',
@@ -141,6 +142,14 @@ type FraudResult = {
   };
 };
 
+type AutoReportChannel = 'mcmc' | 'google-safe-browsing';
+
+type AutoReportState = {
+  status: 'idle' | 'sending' | 'sent' | 'error';
+  message: string;
+  externalReportId: string | null;
+};
+
 type ContextResult = {
   type: 'TRANSFER' | 'CASH_OUT';
   amount: number;
@@ -176,6 +185,13 @@ type BoatProfile = {
   damage: number;
   warningStrikes: number;
   locked: boolean;
+};
+
+type AIVoiceAssessment = {
+  suspected: boolean;
+  score: number;
+  reasons: string[];
+  confidence: 'low' | 'medium' | 'high';
 };
 
 type QuizQuestion = {
@@ -475,6 +491,7 @@ function parseQrPayload(raw: string): QrPayload | null {
 
 export default function Transaction() {
   const { addEvent, updateEventStatus } = useFraudEvents();
+  const { t } = useLanguage();
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
   const [modalState, setModalState] = useState<'idle' | 'confirming' | 'processing' | 'approved' | 'verification' | 'blocked' | 'quiz' | 'face-id' | 'pin-entry' | 'guardianPending'>('idle');
   const [enteredPin, setEnteredPin] = useState('');
@@ -493,17 +510,43 @@ export default function Transaction() {
   const [lastQrPreview, setLastQrPreview] = useState<string>('');
   const [scannedQrPayload, setScannedQrPayload] = useState<QrPayload | null>(null);
   const [qrScanStatus, setQrScanStatus] = useState<{ tone: 'safe' | 'warn'; message: string } | null>(null);
+  const [autoReportState, setAutoReportState] = useState<AutoReportState>({
+    status: 'idle',
+    message: '',
+    externalReportId: null,
+  });
+
+  const generateExternalReportId = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const token = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    return `EMR-${token}`;
+  };
   const [isCallConsentOpen, setIsCallConsentOpen] = useState(false);
   const [isCallConsultOpen, setIsCallConsultOpen] = useState(false);
   const [isListeningCall, setIsListeningCall] = useState(false);
   const [callRiskScore, setCallRiskScore] = useState(0.05);
   const [callVerdict, setCallVerdict] = useState('Tap Start Listening to check this call.');
   const [callSignals, setCallSignals] = useState<string[]>([]);
+  const [aiVoiceAssessment, setAiVoiceAssessment] = useState<AIVoiceAssessment>({
+    suspected: false,
+    score: 0,
+    reasons: [],
+    confidence: 'low',
+  });
   const [callError, setCallError] = useState<string | null>(null);
   const [boatProfile, setBoatProfile] = useState<BoatProfile>({ safePoints: 0, damage: 0, warningStrikes: 0, locked: false });
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const callRecognitionRef = useRef<any>(null);
   const hasPlayedCallAlertRef = useRef(false);
+  const callAudioContextRef = useRef<AudioContext | null>(null);
+  const callAnalyserRef = useRef<AnalyserNode | null>(null);
+  const callAudioRafRef = useRef<number | null>(null);
+  const callMediaStreamRef = useRef<MediaStream | null>(null);
+  const callEnergyHistoryRef = useRef<number[]>([]);
+  const callCentroidHistoryRef = useRef<number[]>([]);
+  const callHighBandRatiosRef = useRef<number[]>([]);
+  const callFlatnessHistoryRef = useRef<number[]>([]);
+  const callLastAnalysisTsRef = useRef(0);
   const scannerRegionId = 'qr-reader-shield';
 
   useEffect(() => {
@@ -585,6 +628,98 @@ export default function Transaction() {
     }
   };
 
+  const buildAutoReportPayload = (channel: AutoReportChannel) => {
+    const riskScore = fraudResult?.risk_score ?? 0;
+    const modelScore = fraudResult?.model_score ?? null;
+    const amountValue = Number(amount || 0);
+    const qrPreview = scannedQrPayload ? JSON.stringify(scannedQrPayload).slice(0, 180) : (lastQrPreview || null);
+
+    return {
+      report_channel: channel,
+      sender_account: SENIOR_ACCOUNT,
+      recipient_name: recipientName || fraudResult?.qr_integrity?.account_name || 'Unknown Recipient',
+      recipient_account: recipientAccount || fraudResult?.qr_integrity?.merchant_id || 'N/A',
+      amount: Number.isFinite(amountValue) ? amountValue : 0,
+      currency: selectedCurrency,
+      risk_score: riskScore,
+      model_score: modelScore,
+      reason_code: fraudResult?.reason_code ?? 'High risk scam detected by Fraud Shield.',
+      recommendation: fraudResult?.recommendation ?? 'Block the transfer and review the payment path.',
+      transaction_status: fraudResult?.status ?? 'BLOCKED',
+      device_id: activeDeviceId,
+      ip_profile: activeIpProfile,
+      qr_preview: qrPreview,
+      evidence: [
+        fraudResult?.reason_code,
+        fraudResult?.recommendation,
+        fraudResult?.qr_integrity?.pattern_match_message,
+        fraudResult?.qr_integrity?.warnings?.[0],
+      ].filter(Boolean) as string[],
+    };
+  };
+
+  const submitAutoReport = async () => {
+    if (!fraudResult) return;
+
+    const externalReportId = generateExternalReportId();
+
+    setAutoReportState({
+      status: 'sending',
+      message: 'Submitting report to MCMC and Google Safe Browsing...',
+      externalReportId,
+    });
+
+    const mcmcPayload = buildAutoReportPayload('mcmc');
+    const googlePayload = buildAutoReportPayload('google-safe-browsing');
+    localStorage.setItem('fraud-shield-auto-report-draft-v1', JSON.stringify({
+      mcmc: mcmcPayload,
+      googleSafeBrowsing: googlePayload,
+      saved_at: new Date().toISOString(),
+    }));
+
+    try {
+      const [mcmcResult, googleResult] = await Promise.allSettled([
+        fetch(`${FRAUD_API_BASE_URL}/api/v1/reports/mcmc`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(mcmcPayload),
+        }),
+        fetch(`${FRAUD_API_BASE_URL}/api/v1/reports/google-safe-browsing`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(googlePayload),
+        }),
+      ]);
+
+      const mcmcOk = mcmcResult.status === 'fulfilled' && mcmcResult.value.ok;
+      const googleOk = googleResult.status === 'fulfilled' && googleResult.value.ok;
+
+      if (mcmcOk) {
+        await mcmcResult.value.json();
+      }
+      if (googleOk) {
+        await googleResult.value.json();
+      }
+
+      const finalStatus = mcmcOk && googleOk ? 'sent' : 'error';
+      const finalMessage = mcmcOk && googleOk
+        ? 'Fraud report submitted to both MCMC and Google Safe Browsing.'
+        : 'Partial submission: one or more channels failed. Draft is saved locally for retry.';
+
+      setAutoReportState({
+        status: finalStatus,
+        message: finalMessage,
+        externalReportId,
+      });
+    } catch {
+      setAutoReportState({
+        status: 'error',
+        message: 'Saved a local fraud report draft. You can retry once the backend is available.',
+        externalReportId,
+      });
+    }
+  };
+
   const speakCallScamWarning = () => {
     if (!('speechSynthesis' in window)) return;
     const utterance = new SpeechSynthesisUtterance('Warning. This caller may be a scammer and is asking for your banking details.');
@@ -628,11 +763,198 @@ export default function Transaction() {
     return { risk, matched };
   };
 
+  const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+  const stdDev = (values: number[]) => {
+    if (values.length < 2) return 0;
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const variance = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / values.length;
+    return Math.sqrt(variance);
+  };
+
+  const resetCallAudioHeuristics = () => {
+    callEnergyHistoryRef.current = [];
+    callCentroidHistoryRef.current = [];
+    callHighBandRatiosRef.current = [];
+    callFlatnessHistoryRef.current = [];
+    callLastAnalysisTsRef.current = 0;
+  };
+
+  const stopCallAudioSampling = () => {
+    if (callAudioRafRef.current !== null) {
+      cancelAnimationFrame(callAudioRafRef.current);
+      callAudioRafRef.current = null;
+    }
+
+    if (callMediaStreamRef.current) {
+      callMediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      callMediaStreamRef.current = null;
+    }
+
+    if (callAudioContextRef.current) {
+      void callAudioContextRef.current.close();
+      callAudioContextRef.current = null;
+    }
+
+    callAnalyserRef.current = null;
+    resetCallAudioHeuristics();
+  };
+
+  const startCallAudioSampling = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) {
+        setCallError('Audio analysis is not supported in this browser.');
+        return;
+      }
+
+      const context = new AudioCtx();
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.2;
+
+      const source = context.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      callAudioContextRef.current = context;
+      callAnalyserRef.current = analyser;
+      callMediaStreamRef.current = stream;
+
+      const run = (ts: number) => {
+        const activeAnalyser = callAnalyserRef.current;
+        const activeContext = callAudioContextRef.current;
+        if (!activeAnalyser || !activeContext) return;
+
+        if (ts - callLastAnalysisTsRef.current < 120) {
+          callAudioRafRef.current = requestAnimationFrame(run);
+          return;
+        }
+        callLastAnalysisTsRef.current = ts;
+
+        const freq = new Uint8Array(activeAnalyser.frequencyBinCount);
+        const time = new Float32Array(activeAnalyser.fftSize);
+        activeAnalyser.getByteFrequencyData(freq);
+        activeAnalyser.getFloatTimeDomainData(time);
+
+        const nyquist = activeContext.sampleRate / 2;
+        const highBandStartHz = 3400;
+        const highBandStartIdx = Math.floor((highBandStartHz / nyquist) * freq.length);
+
+        let totalEnergy = 0;
+        let highBandEnergy = 0;
+        let centroidNumerator = 0;
+        let centroidDenominator = 0;
+        const flatnessValues: number[] = [];
+
+        for (let i = 0; i < freq.length; i += 1) {
+          const magnitude = freq[i] / 255;
+          totalEnergy += magnitude;
+          centroidNumerator += i * magnitude;
+          centroidDenominator += magnitude;
+
+          if (i >= highBandStartIdx) {
+            highBandEnergy += magnitude;
+            flatnessValues.push(Math.max(1e-6, magnitude));
+          }
+        }
+
+        const highBandRatio = totalEnergy > 0 ? highBandEnergy / totalEnergy : 0;
+        const centroid = centroidDenominator > 0 ? centroidNumerator / centroidDenominator : 0;
+        const rms = Math.sqrt(time.reduce((sum, value) => sum + (value * value), 0) / time.length);
+
+        const geoMean = Math.exp(flatnessValues.reduce((sum, value) => sum + Math.log(value), 0) / Math.max(1, flatnessValues.length));
+        const arithMean = flatnessValues.reduce((sum, value) => sum + value, 0) / Math.max(1, flatnessValues.length);
+        const highBandFlatness = arithMean > 0 ? geoMean / arithMean : 0;
+
+        const cap = <T,>(arr: T[], value: T, max = 160) => {
+          arr.push(value);
+          if (arr.length > max) arr.shift();
+        };
+
+        cap(callHighBandRatiosRef.current, highBandRatio);
+        cap(callCentroidHistoryRef.current, centroid);
+        cap(callEnergyHistoryRef.current, rms);
+        cap(callFlatnessHistoryRef.current, highBandFlatness);
+
+        callAudioRafRef.current = requestAnimationFrame(run);
+      };
+
+      callAudioRafRef.current = requestAnimationFrame(run);
+    } catch {
+      setCallError('Microphone access is needed for AI-voice suspicion checks.');
+    }
+  };
+
+  const evaluateAIVoiceSuspicion = (): AIVoiceAssessment => {
+    const highRatios = callHighBandRatiosRef.current;
+    const centroidHistory = callCentroidHistoryRef.current;
+    const energyHistory = callEnergyHistoryRef.current;
+    const flatnessHistory = callFlatnessHistoryRef.current;
+
+    const sampleCount = Math.min(highRatios.length, centroidHistory.length, energyHistory.length, flatnessHistory.length);
+    if (sampleCount < 12) {
+      return {
+        suspected: false,
+        score: 0,
+        reasons: [],
+        confidence: 'low',
+      };
+    }
+
+    const avgHighRatio = highRatios.reduce((sum, value) => sum + value, 0) / highRatios.length;
+    const avgFlatness = flatnessHistory.reduce((sum, value) => sum + value, 0) / flatnessHistory.length;
+    const centroidVariance = stdDev(centroidHistory);
+    const energyVariance = stdDev(energyHistory);
+
+    const reasons: string[] = [];
+    let score = 0;
+
+    if (avgHighRatio > 0.42) {
+      score += 0.24;
+      reasons.push('High-frequency spectral artifacts detected.');
+    }
+
+    if (avgFlatness > 0.58) {
+      score += 0.22;
+      reasons.push('Upper-band texture appears overly synthetic.');
+    }
+
+    if (centroidVariance < 32) {
+      score += 0.2;
+      reasons.push('Pitch contour is unusually stable for natural speech prosody.');
+    }
+
+    if (energyVariance < 0.012) {
+      score += 0.18;
+      reasons.push('Rhythm/energy variation is too uniform for spontaneous human speech.');
+    }
+
+    score = clamp01(score);
+    const suspected = score >= 0.45;
+    const confidence: 'low' | 'medium' | 'high' = score >= 0.72 ? 'high' : score >= 0.45 ? 'medium' : 'low';
+
+    return {
+      suspected,
+      score,
+      reasons,
+      confidence,
+    };
+  };
+
   const stopCallConsultation = () => {
     if (callRecognitionRef.current) {
       callRecognitionRef.current.stop();
       callRecognitionRef.current = null;
     }
+    stopCallAudioSampling();
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
@@ -650,7 +972,15 @@ export default function Transaction() {
     setCallRiskScore(0.06);
     setCallSignals([]);
     setCallVerdict('Listening...');
+    setAiVoiceAssessment({
+      suspected: false,
+      score: 0,
+      reasons: [],
+      confidence: 'low',
+    });
+    resetCallAudioHeuristics();
     hasPlayedCallAlertRef.current = false;
+    void startCallAudioSampling();
 
     const recognition = new speechApi();
     recognition.continuous = true;
@@ -665,16 +995,30 @@ export default function Transaction() {
 
       const cleaned = transcriptText.trim();
       const { risk, matched } = evaluateCallRisk(cleaned);
-      setCallRiskScore(risk);
-      setCallSignals(matched);
+      const aiAssessment = evaluateAIVoiceSuspicion();
+      setAiVoiceAssessment(aiAssessment);
 
-      if (risk >= 0.7) {
-        setCallVerdict('High risk detected. End the call now.');
+      const combinedRisk = clamp01(
+        risk + (aiAssessment.suspected ? Math.max(0.18, aiAssessment.score * 0.36) : aiAssessment.score * 0.14),
+      );
+
+      const mergedSignals = Array.from(new Set([
+        ...matched,
+        ...(aiAssessment.suspected ? ['[AI_VOICE_SUSPECTED]'] : []),
+      ]));
+
+      setCallRiskScore(combinedRisk);
+      setCallSignals(mergedSignals);
+
+      if (combinedRisk >= 0.7 || aiAssessment.suspected) {
+        setCallVerdict(aiAssessment.suspected
+          ? 'High risk detected. Suspected AI-generated voice on this call.'
+          : 'High risk detected. End the call now.');
         if (!hasPlayedCallAlertRef.current) {
           hasPlayedCallAlertRef.current = true;
           speakCallScamWarning();
         }
-      } else if (risk >= 0.35) {
+      } else if (combinedRisk >= 0.35) {
         setCallVerdict('Warning signs detected. Stay careful.');
       } else {
         setCallVerdict('No strong scam signs yet.');
@@ -683,10 +1027,12 @@ export default function Transaction() {
 
     recognition.onerror = () => {
       setCallError('Listening error occurred. You can stop and start again.');
+      stopCallAudioSampling();
       setIsListeningCall(false);
     };
 
     recognition.onend = () => {
+      stopCallAudioSampling();
       setIsListeningCall(false);
     };
 
@@ -706,6 +1052,7 @@ export default function Transaction() {
       if (callRecognitionRef.current) {
         callRecognitionRef.current.stop();
       }
+      stopCallAudioSampling();
     };
   }, []);
 
@@ -885,6 +1232,11 @@ export default function Transaction() {
 
   const handleProcessTransaction = async () => {
     setModalState('processing');
+    setAutoReportState({
+      status: 'idle',
+      message: '',
+      externalReportId: null,
+    });
     try {
       const amountValue = Number(amount || 0);
       if (!Number.isFinite(amountValue) || amountValue <= 0) {
@@ -935,6 +1287,28 @@ export default function Transaction() {
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const result: FraudResult = await response.json();
       setFraudResult(result);
+
+      if (result.status !== 'APPROVED') {
+        localStorage.setItem(
+          'fraud-shield-auto-report-draft-v1',
+          JSON.stringify({
+            report_channel: 'mcmc',
+            sender_account: SENIOR_ACCOUNT,
+            recipient_name: recipientName || result.qr_integrity?.account_name || 'Unknown Recipient',
+            recipient_account: recipientAccount || result.qr_integrity?.merchant_id || 'N/A',
+            amount: amountValue,
+            currency: selectedCurrency,
+            risk_score: result.risk_score,
+            model_score: result.model_score,
+            reason_code: result.reason_code,
+            recommendation: result.recommendation,
+            transaction_status: result.status,
+            device_id: activeDeviceId,
+            ip_profile: activeIpProfile,
+            qr_preview: scannedQrPayload ? JSON.stringify(scannedQrPayload).slice(0, 180) : (lastQrPreview || null),
+          }),
+        );
+      }
 
       if (result.notify_guardian) {
         speakGuardianNotification();
@@ -1020,6 +1394,15 @@ export default function Transaction() {
     }
   };
 
+  const dismissReportedCase = () => {
+    setAutoReportState({
+      status: 'idle',
+      message: '',
+      externalReportId: null,
+    });
+    setModalState('idle');
+  };
+
   return (
     <div className="min-h-screen bg-[#F3F4F6] dark:bg-[#0C0C0C] font-['Inter'] flex flex-col items-center pt-16">
       
@@ -1039,6 +1422,19 @@ export default function Transaction() {
           <div className="flex flex-col gap-2">
             <h1 className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">Make a Secure Transaction</h1>
             <p className="text-[#6B7280] dark:text-[#8A8A8A] text-lg">Transfer funds safely with AI-powered fraud monitoring.</p>
+          </div>
+
+          <div className="rounded-2xl border border-[#5DA8FF33] bg-[#0D1624] px-5 py-4 flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-[#5DA8FF1A] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[#9ED1FF]">Third-Party Security Layer</span>
+              <span className="rounded-full bg-[#32D74B18] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[#72E18B]">Offline PWA Ready</span>
+            </div>
+            <p className="text-sm text-[#D6E7F7] leading-6">
+              This app sits beside existing PayNet / DuitNow rails as a risk-screening layer. It does not replace the payment network; it checks device, QR, and behavioral signals before money moves.
+            </p>
+            <p className="text-xs text-[#A9C1DA] leading-5">
+              Core screens and scam-detection drafts are cached locally so the demo still works for low-connectivity or shared-device users.
+            </p>
           </div>
 
           <div className="rounded-2xl border border-[#FF5500]/30 bg-[#FF5500]/10 px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -1368,6 +1764,28 @@ export default function Transaction() {
               <p className="mt-2 text-xs text-[#BDD3E9]">{callVerdict}</p>
             </div>
 
+            <div className={`rounded-xl border p-4 ${aiVoiceAssessment.suspected ? 'border-[#FF3B3055] bg-[#FF3B3016]' : 'border-[#5DA8FF40] bg-[#102030]'}`}>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-white">AI Voice Check</p>
+                <span className={`text-xs font-bold uppercase tracking-[0.12em] ${aiVoiceAssessment.suspected ? 'text-[#FFB9B4]' : 'text-[#A4D6FF]'}`}>
+                  {aiVoiceAssessment.suspected ? 'Suspected AI Voice' : 'No AI Voice Pattern'}
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-[#C8DBEE]">
+                {aiVoiceAssessment.suspected
+                  ? 'This call is suspected to use synthetic/AI-generated voice characteristics.'
+                  : 'No strong synthetic voice fingerprints detected yet.'}
+              </p>
+              {aiVoiceAssessment.reasons.length > 0 && (
+                <div className="mt-3 flex flex-col gap-1.5">
+                  {aiVoiceAssessment.reasons.slice(0, 3).map((reason) => (
+                    <p key={reason} className="text-[11px] text-[#D7E6F6]">• {reason}</p>
+                  ))}
+                </div>
+              )}
+              <p className="mt-2 text-[11px] text-[#9BB6CF]">Confidence: {aiVoiceAssessment.confidence.toUpperCase()}</p>
+            </div>
+
             <div className="rounded-xl border border-[#5DA8FF40] bg-[#0E1624] p-4">
               <div className="flex items-center gap-2">
                 <Lock size={15} className="text-[#8FC7FF]" />
@@ -1636,6 +2054,55 @@ export default function Transaction() {
               <SafetyWeatherCard riskScore={fraudResult?.risk_score ?? 0.5} />
               {renderQrIntegritySummary()}
               <p className="text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'Unusual activity detected. Please verify your identity to continue.'}</p>
+              <div className="w-full rounded-2xl border border-[#FF9F0A40] bg-[#FF9F0A10] p-5 flex flex-col gap-4">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-[#FF9F0A] font-bold">{t('tx.autoReport.title')}</p>
+                <p className="text-sm text-[#CDA77A] leading-6">
+                  {t('tx.autoReport.descVerify')}
+                </p>
+                {autoReportState.status !== 'sent' && (
+                  <button
+                    type="button"
+                    onClick={() => void submitAutoReport()}
+                    disabled={autoReportState.status === 'sending'}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FF5500] px-3 py-2.5 text-xs font-semibold text-white hover:bg-[#E04B00] disabled:opacity-60"
+                  >
+                    <Globe size={14} />
+                    <Send size={14} />
+                    {autoReportState.status === 'sending' ? t('tx.autoReport.submitting') : t('tx.autoReport.button')}
+                  </button>
+                )}
+                {autoReportState.status !== 'idle' && (
+                  <div className="text-sm text-[#D9E6F4] leading-7">
+                    {autoReportState.status === 'sent' ? (
+                      <div className="text-[#D7FFE1] space-y-2">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle size={16} className="text-[#32D74B]" />
+                          <p className="text-sm font-bold">{t('tx.autoReport.caseReported')}</p>
+                        </div>
+                        <p className="mt-2">{t('tx.autoReport.successLine1')}</p>
+                        <p className="mt-2">{t('tx.autoReport.reportedTo')}</p>
+                        <ul className="mt-2 space-y-1 list-disc list-inside">
+                          <li>Google Safe Browsing</li>
+                          <li>MCMC Malaysia</li>
+                        </ul>
+                        <p className="mt-2">{t('tx.autoReport.thankYou')}</p>
+                        {autoReportState.externalReportId && (
+                          <p className="mt-2 font-semibold">Report ID: {autoReportState.externalReportId}</p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={dismissReportedCase}
+                          className="mt-3 inline-flex items-center justify-center rounded-lg border border-[#32D74B55] bg-[#32D74B18] px-3 py-2 text-xs font-semibold text-[#D7FFE1] hover:bg-[#32D74B25]"
+                        >
+                          {t('tx.autoReport.close')}
+                        </button>
+                      </div>
+                    ) : (
+                      <p>{autoReportState.message}</p>
+                    )}
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => {
                   setModalState('face-id');
@@ -1696,35 +2163,78 @@ export default function Transaction() {
           {/* 5. Transaction Blocked */}
           {modalState === 'blocked' && (
             <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#FF3B30] rounded-3xl p-8 flex flex-col items-center gap-6 shadow-[0_0_40px_rgba(255,59,48,0.25)]">
-              <div className="w-16 h-16 rounded-full bg-[#FF3B3020] flex items-center justify-center">
-                <ShieldAlert size={32} className="text-[#FF3B30]" />
-              </div>
-              <h2 className="text-[#111827] dark:text-white text-[22px] font-bold font-['Sora'] text-center">Status: Transaction Blocked</h2>
-              <div className="bg-[#FF3B3015] px-4 py-2 rounded-full">
-                <span className="text-[#FF3B30] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Danger)</span>
-              </div>
-              {fraudResult?.notify_guardian && (
-                <div className="w-full bg-[#32D74B15] border border-[#32D74B40] rounded-lg px-4 py-3 flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-full bg-[#32D74B] flex items-center justify-center flex-shrink-0">
-                    <CheckCircle size={16} className="text-[#0C0C0C]" />
+              {autoReportState.status === 'idle' ? (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-[#FF3B3020] flex items-center justify-center">
+                    <ShieldAlert size={32} className="text-[#FF3B30]" />
                   </div>
-                  <p className="text-xs text-[#32D74B] font-medium">Your family guardian has been notified about this alert.</p>
-                </div>
-              )}
-              <SafetyWeatherCard riskScore={fraudResult?.risk_score ?? 0.9} />
-              {renderQrIntegritySummary()}
-              <p className="text-[#6B7280] dark:text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'This transaction has been blocked due to high fraud risk.'}</p>
-              <button 
-                onClick={() => {
-                  const subject = encodeURIComponent('Inquiry: Blocked Transaction (High Risk)');
-                  const body = encodeURIComponent(`Hello Support Team,\n\nMy transaction was just blocked by the Fraud Shield and I would like to request a review. Here are the details:\n\n- Date: ${new Date().toLocaleDateString()}\n- Attempted Amount: ${selectedCurrency} ${amount || '0.00'}\n- Flagged Reason: ${fraudResult?.reason_code ?? 'High Risk Detected'}\n\nPlease advise on how I can proceed.`);
-                  window.location.href = `mailto:fraud-support@securebank.com?subject=${subject}&body=${body}`;
-                  setModalState('idle');
-                }} 
-                className="w-full bg-[#FF3B30] text-[#111827] dark:text-white rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E6352B]"
-              >
-                Contact Support
-              </button>
+                  <h2 className="text-[#111827] dark:text-white text-[22px] font-bold font-['Sora'] text-center">Status: Transaction Blocked</h2>
+                  <div className="bg-[#FF3B3015] px-4 py-2 rounded-full">
+                    <span className="text-[#FF3B30] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Danger)</span>
+                  </div>
+                  {fraudResult?.notify_guardian && (
+                    <div className="w-full bg-[#32D74B15] border border-[#32D74B40] rounded-lg px-4 py-3 flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-[#32D74B] flex items-center justify-center flex-shrink-0">
+                        <CheckCircle size={16} className="text-[#0C0C0C]" />
+                      </div>
+                      <p className="text-xs text-[#32D74B] font-medium">Your family guardian has been notified about this alert.</p>
+                    </div>
+                  )}
+                  <SafetyWeatherCard riskScore={fraudResult?.risk_score ?? 0.9} />
+                  {renderQrIntegritySummary()}
+                  <p className="text-[#6B7280] dark:text-[#8A8A8A] text-center leading-relaxed text-[15px]">{fraudResult?.reason_code ?? 'This transaction has been blocked due to high fraud risk.'}</p>
+                </>
+              ) : null}
+
+              <div className="w-full rounded-2xl border border-[#FF3B3040] bg-[#FF3B3010] p-5 flex flex-col gap-4">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-[#FF3B30] font-bold">{t('tx.autoReport.title')}</p>
+                <p className="text-sm text-[#F0B6B0] leading-6">
+                  {t('tx.autoReport.descBlocked')}
+                </p>
+                {autoReportState.status !== 'sent' && (
+                  <button
+                    type="button"
+                    onClick={() => void submitAutoReport()}
+                    disabled={autoReportState.status === 'sending'}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FF3B30] px-3 py-2.5 text-xs font-semibold text-white hover:bg-[#E6352B] disabled:opacity-60"
+                  >
+                    <Globe size={14} />
+                    <Send size={14} />
+                    {autoReportState.status === 'sending' ? t('tx.autoReport.submitting') : t('tx.autoReport.button')}
+                  </button>
+                )}
+                {autoReportState.status !== 'idle' && (
+                  <div className="text-sm text-[#D9E6F4] leading-7">
+                    {autoReportState.status === 'sent' ? (
+                      <div className="text-[#D7FFE1] space-y-2">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle size={16} className="text-[#32D74B]" />
+                          <p className="text-sm font-bold">{t('tx.autoReport.caseReported')}</p>
+                        </div>
+                        <p className="mt-2">{t('tx.autoReport.successLine1')}</p>
+                        <p className="mt-2">{t('tx.autoReport.reportedTo')}</p>
+                        <ul className="mt-2 space-y-1 list-disc list-inside">
+                          <li>Google Safe Browsing</li>
+                          <li>MCMC Malaysia</li>
+                        </ul>
+                        <p className="mt-2">{t('tx.autoReport.thankYou')}</p>
+                        {autoReportState.externalReportId && (
+                          <p className="mt-2 font-semibold">Report ID: {autoReportState.externalReportId}</p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={dismissReportedCase}
+                          className="mt-3 inline-flex items-center justify-center rounded-lg border border-[#32D74B55] bg-[#32D74B18] px-3 py-2 text-xs font-semibold text-[#D7FFE1] hover:bg-[#32D74B25]"
+                        >
+                          {t('tx.autoReport.close')}
+                        </button>
+                      </div>
+                    ) : (
+                      <p>{autoReportState.message}</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

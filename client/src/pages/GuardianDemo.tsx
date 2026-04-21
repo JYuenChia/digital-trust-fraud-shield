@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'wouter';
 import { ShieldAlert, RefreshCw, ArrowLeft } from 'lucide-react';
 import { FRAUD_API_BASE_URL } from '@/const';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 type GuardianContact = {
   guardian_account: string;
@@ -52,6 +53,7 @@ type PendingApproval = {
 const SENIOR_ACCOUNT = 'ALEX8899';
 
 export default function GuardianDemo() {
+  const { t } = useLanguage();
   const [guardians, setGuardians] = useState<GuardianContact[]>([]);
   const [selectedGuardianAccount, setSelectedGuardianAccount] = useState('');
   const [alerts, setAlerts] = useState<GuardianAlertsResponse['notifications']>([]);
@@ -67,7 +69,7 @@ export default function GuardianDemo() {
 
   const loadGuardians = async () => {
     const response = await fetch(`${FRAUD_API_BASE_URL}/guardians/${SENIOR_ACCOUNT}`);
-    if (!response.ok) throw new Error('Could not load guardians.');
+    if (!response.ok) throw new Error(t('guardian.errorLoadGuardians'));
     const data = await response.json();
     const nextGuardians: GuardianContact[] = data.guardians ?? [];
     setGuardians(nextGuardians);
@@ -82,7 +84,7 @@ export default function GuardianDemo() {
       return;
     }
     const response = await fetch(`${FRAUD_API_BASE_URL}/guardian-notifications/${guardianAccount}`);
-    if (!response.ok) throw new Error('Could not load guardian notifications.');
+    if (!response.ok) throw new Error(t('guardian.errorLoadNotifications'));
     const data: GuardianAlertsResponse = await response.json();
     setAlerts(data.notifications ?? []);
   };
@@ -93,7 +95,7 @@ export default function GuardianDemo() {
       return;
     }
     const response = await fetch(`${FRAUD_API_BASE_URL}/guardian-pending-approvals/${guardianAccount}`);
-    if (!response.ok) throw new Error('Could not load pending approvals.');
+    if (!response.ok) throw new Error(t('guardian.errorLoadPending'));
     const data = await response.json();
     setPendingApprovals((data.approvals ?? []) as PendingApproval[]);
   };
@@ -109,18 +111,18 @@ export default function GuardianDemo() {
         body: JSON.stringify({
           guardian_account: selectedGuardianAccount,
           decision,
-          note: decision === 'APPROVE' ? 'Approved after guardian review.' : 'Rejected due to scam concern.',
+          note: decision === 'APPROVE' ? t('guardian.noteApprove') : t('guardian.noteReject'),
         }),
       });
       const data = await response.json();
       if (!response.ok || data.success === false) {
-        throw new Error(data.message || 'Unable to record decision.');
+        throw new Error(data.message || t('guardian.errorRecordDecision'));
       }
-      setStatus(decision === 'APPROVE' ? 'Transaction approved by guardian.' : 'Transaction rejected by guardian.');
+      setStatus(decision === 'APPROVE' ? t('guardian.approvedByGuardian') : t('guardian.rejectedByGuardian'));
       await loadPendingApprovals(selectedGuardianAccount);
       await loadAlerts(selectedGuardianAccount);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Unable to record decision.');
+      setStatus(error instanceof Error ? error.message : t('guardian.errorRecordDecision'));
     } finally {
       setDecisionBusyId(null);
     }
@@ -132,7 +134,7 @@ export default function GuardianDemo() {
       setStatus(null);
       await loadGuardians();
     } catch {
-      setStatus('Unable to load guardian data right now.');
+      setStatus(t('guardian.errorLoadDataNow'));
     } finally {
       setIsLoading(false);
     }
@@ -148,7 +150,7 @@ export default function GuardianDemo() {
       loadAlerts(selectedGuardianAccount),
       loadPendingApprovals(selectedGuardianAccount),
     ]).catch(() => {
-      setStatus('Unable to load notifications right now.');
+      setStatus(t('guardian.errorLoadNotificationsNow'));
     });
   }, [selectedGuardianAccount]);
 
@@ -165,14 +167,14 @@ export default function GuardianDemo() {
           <div className="flex items-center gap-3">
             <ShieldAlert size={24} className="text-[#7EC8FF]" />
             <div className="flex flex-col">
-              <h1 className="text-white font-['Sora'] text-3xl font-bold">Guardian Notification Feed</h1>
-              <p className="text-[#9AB0C8] text-sm">Shows alerts triggered by high-risk transfers or risky QR scans.</p>
+              <h1 className="text-white font-['Sora'] text-3xl font-bold">{t('guardian.title')}</h1>
+              <p className="text-[#9AB0C8] text-sm">{t('guardian.subtitle')}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/profile">
               <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10">
-                <ArrowLeft size={15} /> Back to Profile
+                <ArrowLeft size={15} /> {t('guardian.backToProfile')}
               </button>
             </Link>
             <button
@@ -184,7 +186,7 @@ export default function GuardianDemo() {
               disabled={!selectedGuardianAccount}
               className="inline-flex items-center gap-2 rounded-lg bg-[#5DA8FF] px-3 py-2 text-sm font-semibold text-[#0E1722] hover:bg-[#4B97EA] disabled:opacity-60"
             >
-              <RefreshCw size={15} /> Refresh
+              <RefreshCw size={15} /> {t('guardian.refresh')}
             </button>
           </div>
         </div>
@@ -192,13 +194,13 @@ export default function GuardianDemo() {
         <div className="rounded-2xl border border-white/10 bg-[#151D29]/75 p-5 flex flex-col gap-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
-              <label className="text-xs uppercase tracking-[0.14em] text-[#8CBCE9]">Guardian Account</label>
+              <label className="text-xs uppercase tracking-[0.14em] text-[#8CBCE9]">{t('guardian.guardianAccount')}</label>
               <select
                 value={selectedGuardianAccount}
                 onChange={(e) => setSelectedGuardianAccount(e.target.value)}
                 className="rounded-lg border border-white/10 bg-[#101722] px-3 py-2 text-sm text-white outline-none"
               >
-                <option value="">Choose guardian</option>
+                <option value="">{t('guardian.chooseGuardian')}</option>
                 {guardians.map((g) => (
                   <option key={g.guardian_account} value={g.guardian_account}>
                     {g.guardian_name} ({g.guardian_account})
@@ -207,38 +209,38 @@ export default function GuardianDemo() {
               </select>
             </div>
             <div className="rounded-lg border border-[#5DA8FF33] bg-[#5DA8FF12] p-3">
-              <p className="text-xs uppercase tracking-[0.14em] text-[#8CBCE9]">Current Guardian</p>
-              <p className="mt-1 text-sm font-semibold text-white">{selectedGuardian?.guardian_name || 'Not selected'}</p>
-              <p className="text-xs text-[#B8CAE0]">{selectedGuardian?.email || 'No email'} • {selectedGuardian?.phone || 'No phone'}</p>
+              <p className="text-xs uppercase tracking-[0.14em] text-[#8CBCE9]">{t('guardian.currentGuardian')}</p>
+              <p className="mt-1 text-sm font-semibold text-white">{selectedGuardian?.guardian_name || t('guardian.notSelected')}</p>
+              <p className="text-xs text-[#B8CAE0]">{selectedGuardian?.email || t('guardian.noEmail')} • {selectedGuardian?.phone || t('guardian.noPhone')}</p>
             </div>
           </div>
 
           <div className="rounded-lg border border-white/10 bg-[#0E1420] p-3">
             <div className="rounded-lg border border-[#5DA8FF44] bg-[#0D1624] p-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-white">Transactions Waiting for Guardian Decision</p>
+                <p className="text-sm font-semibold text-white">{t('guardian.waitingDecision')}</p>
                 <span className="rounded-full bg-[#5DA8FF22] px-2.5 py-1 text-[11px] font-semibold text-[#CFE7FF]">
-                  {pendingApprovals.filter((item) => item.status === 'PENDING').length} pending
+                  {t('guardian.pendingCount').replace('{count}', String(pendingApprovals.filter((item) => item.status === 'PENDING').length))}
                 </span>
               </div>
 
               <div className="mt-3 flex flex-col gap-2 max-h-[300px] overflow-auto pr-1">
                 {pendingApprovals.length === 0 && (
-                  <p className="text-sm text-[#96A7BC]">No pending approvals right now.</p>
+                  <p className="text-sm text-[#96A7BC]">{t('guardian.noPending')}</p>
                 )}
 
                 {pendingApprovals.map((item) => (
                   <div key={item.approval_id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-white">{item.sender_name} • {Math.round((item.risk_score || 0) * 100)}% risk</p>
+                      <p className="text-sm font-semibold text-white">{item.sender_name} • {Math.round((item.risk_score || 0) * 100)}% {t('guardian.risk')}</p>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${item.status === 'PENDING' ? 'bg-[#FF9F0A25] text-[#FFD39F]' : item.status === 'APPROVED' ? 'bg-[#32D74B25] text-[#B9F8C6]' : 'bg-[#FF3B3025] text-[#FFC6C3]'}`}>
                         {item.status}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-[#D6E4F3]">{item.transaction_summary.currency} {item.transaction_summary.amount} to {item.transaction_summary.recipient}</p>
+                    <p className="mt-1 text-xs text-[#D6E4F3]">{item.transaction_summary.currency} {item.transaction_summary.amount} {t('guardian.to')} {item.transaction_summary.recipient}</p>
                     <p className="mt-1 text-xs text-[#BDD2E8]">{item.reason}</p>
-                    <p className="mt-1 text-[11px] text-[#9BB0C5]">Approval ID: {item.approval_id}</p>
-                    <p className="text-[11px] text-[#8FA7BF]">Expires: {new Date(item.expires_at).toLocaleString()}</p>
+                    <p className="mt-1 text-[11px] text-[#9BB0C5]">{t('guardian.approvalId')}: {item.approval_id}</p>
+                    <p className="text-[11px] text-[#8FA7BF]">{t('guardian.expires')}: {new Date(item.expires_at).toLocaleString()}</p>
 
                     {item.status === 'PENDING' && (
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -248,7 +250,7 @@ export default function GuardianDemo() {
                           disabled={decisionBusyId === item.approval_id}
                           className="rounded-lg bg-[#32D74B] px-3 py-1.5 text-xs font-semibold text-[#111111] hover:bg-[#29C340] disabled:opacity-60"
                         >
-                          Approve Transaction
+                          {t('guardian.approveTransaction')}
                         </button>
                         <button
                           type="button"
@@ -256,7 +258,7 @@ export default function GuardianDemo() {
                           disabled={decisionBusyId === item.approval_id}
                           className="rounded-lg bg-[#FF3B30] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#E6352B] disabled:opacity-60"
                         >
-                          Reject for Safety
+                          {t('guardian.rejectForSafety')}
                         </button>
                       </div>
                     )}
@@ -266,21 +268,21 @@ export default function GuardianDemo() {
             </div>
 
             <div className="mt-3 flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-white">Live Alert Inbox</p>
+              <p className="text-sm font-semibold text-white">{t('guardian.liveAlertInbox')}</p>
               <span className="rounded-full bg-[#FF9F0A22] px-2.5 py-1 text-[11px] font-semibold text-[#FFD39F]">
-                {alerts.length} alerts
+                {t('guardian.alertCount').replace('{count}', String(alerts.length))}
               </span>
             </div>
 
             <div className="mt-3 flex flex-col gap-2 max-h-[460px] overflow-auto pr-1">
               {alerts.length === 0 && (
-                <p className="text-sm text-[#96A7BC]">No high-risk alerts yet. Trigger a risky transfer or suspicious QR scan to see this feed update.</p>
+                <p className="text-sm text-[#96A7BC]">{t('guardian.noHighRiskAlerts')}</p>
               )}
 
               {alerts.map((alert, idx) => (
                 <div key={`${alert.timestamp}-${idx}`} className="rounded-lg border border-[#FF8A5538] bg-[#FF8A5512] px-3 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-white">{Math.round((alert.risk_score || 0) * 100)}% risk • {alert.sender_name}</p>
+                    <p className="text-sm font-semibold text-white">{Math.round((alert.risk_score || 0) * 100)}% {t('guardian.risk')} • {alert.sender_name}</p>
                     <span className="rounded-full bg-[#FFFFFF1A] px-2 py-0.5 text-[10px] font-bold text-[#FFD1B0]">{alert.type.replaceAll('_', ' ')}</span>
                   </div>
                   <p className="mt-1 text-xs text-[#FFD6BF]">{alert.risk_reason}</p>
@@ -292,7 +294,7 @@ export default function GuardianDemo() {
         </div>
 
         <div className="rounded-xl border border-[#7EC8FF44] bg-[#7EC8FF14] px-4 py-3 text-sm text-[#CFEAFF]">
-          Page path: /guardian-notifications
+          {t('guardian.pagePath')}: /guardian-notifications
         </div>
 
         {status && (

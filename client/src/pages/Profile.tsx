@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ShieldCheck, ShieldAlert, Plus, CreditCard, CheckCircle2, Landmark, Smartphone, Sun, Moon, X } from 'lucide-react';
 import { FRAUD_API_BASE_URL } from '@/const';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Link } from 'wouter';
 
@@ -83,6 +84,7 @@ const SENIOR_ACCOUNT = 'ALEX8899';
 
 export default function Profile() {
   const { theme, toggleTheme } = useTheme();
+  const { language, setLanguage, t } = useLanguage();
   const [fullName, setFullName] = useState(() => {
     const saved = localStorage.getItem(`${PROFILE_STORAGE_KEY}-name`);
     if (!saved || saved === 'Aminah Mustafa') return 'Alex Tan';
@@ -167,7 +169,7 @@ export default function Profile() {
     localStorage.setItem(`${PROFILE_STORAGE_KEY}-nationality`, nationality);
     localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin`, String(walletPinEnabled));
     localStorage.setItem(`${PROFILE_STORAGE_KEY}-biometric`, String(biometricEnabled));
-    setSaveMessage('Profile updated successfully.');
+    setSaveMessage(t('profile.updated'));
     setTimeout(() => setSaveMessage(''), 1800);
   };
 
@@ -394,45 +396,59 @@ export default function Profile() {
 
       <div className="w-full max-w-[1480px] relative z-10 px-10 py-10 pb-16 flex flex-col gap-8">
         <div data-tour="profile-header" className="flex flex-col gap-2">
-          <h1 className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">Profile & Payment Security</h1>
-          <p className="text-[#6B7280] dark:text-[#8A8A8A] text-lg">Manage account details, verification status, and linked bank cards.</p>
+          <h1 className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">{t('profile.title')}</h1>
+          <p className="text-[#6B7280] dark:text-[#8A8A8A] text-lg">{t('profile.subtitle')}</p>
         </div>
 
         <div className="grid grid-cols-1 gap-6">
           <div data-tour="profile-security" className="bg-[#FFFFFF]/55 dark:bg-[#1A1A1A]/55 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-3xl p-7 flex flex-col gap-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-[#111827] dark:text-white text-xl font-bold font-['Sora']">Account Details</h2>
-              <button onClick={persistProfile} className="bg-[#FF5500] hover:bg-[#E04B00] transition-colors px-5 py-2 rounded-lg text-[#111827] dark:text-white font-semibold text-sm">Save Changes</button>
+              <h2 className="text-[#111827] dark:text-white text-xl font-bold font-['Sora']">{t('profile.accountDetails')}</h2>
+              <button onClick={persistProfile} className="bg-[#FF5500] hover:bg-[#E04B00] transition-colors px-5 py-2 rounded-lg text-[#111827] dark:text-white font-semibold text-sm">{t('profile.saveChanges')}</button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
-                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Full Name</label>
+                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">{t('profile.fullName')}</label>
                 <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="bg-transparent text-[#111827] dark:text-white font-semibold outline-none" />
               </div>
               <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
-                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Email</label>
+                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">{t('profile.email')}</label>
                 <input value={email} onChange={(e) => setEmail(e.target.value)} className="bg-transparent text-[#111827] dark:text-white font-semibold outline-none" />
               </div>
               <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
-                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Phone Number</label>
+                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">{t('profile.phoneNumber')}</label>
                 <input value={phone} onChange={(e) => setPhone(e.target.value)} className="bg-transparent text-[#111827] dark:text-white font-semibold outline-none" />
               </div>
               <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
-                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Nationality</label>
+                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">{t('profile.nationality')}</label>
                 <input value={nationality} onChange={(e) => setNationality(e.target.value)} className="bg-transparent text-[#111827] dark:text-white font-semibold outline-none" />
               </div>
+            </div>
+
+            <div className="rounded-xl border border-black/10 dark:border-white/10 bg-[#F8FAFC] dark:bg-[#141414] p-4 flex flex-col gap-2">
+              <span className="text-[#111827] dark:text-white text-sm font-semibold">{t('profile.languagePreference')}</span>
+              <p className="text-xs text-[#6B7280] dark:text-[#8A8A8A]">{t('profile.languageHint')}</p>
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as 'en' | 'ms' | 'zh')}
+                className="w-full md:w-72 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-[#0F0F0F] px-3 py-2 text-sm text-[#111827] dark:text-white"
+              >
+                <option value="en">{t('language.english')}</option>
+                <option value="ms">{t('language.malay')}</option>
+                <option value="zh">{t('language.chinese')}</option>
+              </select>
             </div>
 
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">                  <div className="flex items-center justify-between border rounded-xl p-4 transition-colors border-black/10 dark:border-white/10 bg-[#F8FAFC] dark:bg-[#141414]">
                     <div className="flex items-center gap-3">
                       {theme === 'dark' ? <Moon className="text-[#8A8A8A]" size={20} /> : <Sun className="text-[#FF9F0A]" size={20} />}
-                      <span className="text-[#111827] dark:text-white text-sm font-semibold">Application Theme</span>
+                      <span className="text-[#111827] dark:text-white text-sm font-semibold">{t('profile.applicationTheme')}</span>
                     </div>
                     {toggleTheme && (
                       <button onClick={toggleTheme} className="bg-[#111827] dark:bg-white text-white dark:text-[#111827] px-4 py-1.5 rounded-lg text-xs font-bold transition-colors">
-                        Switch to {theme === 'light' ? 'Dark' : 'Light'}
+                        {theme === 'light' ? t('profile.switchDark') : t('profile.switchLight')}
                       </button>
                     )}
                   </div>
@@ -448,7 +464,7 @@ export default function Profile() {
                     setNewPin('');
                   }
                 }} className={`flex items-center justify-between border rounded-xl p-4 transition-colors ${walletPinEnabled ? 'border-[#32D74B55] bg-[#32D74B10]' : 'border-black/10 dark:border-white/10 bg-[#F8FAFC] dark:bg-[#141414]'}`}>
-                  <span className="text-[#111827] dark:text-white text-sm font-semibold">Wallet PIN Protection</span>
+                  <span className="text-[#111827] dark:text-white text-sm font-semibold">{t('profile.walletPinProtection')}</span>
                   <span className={`text-xs font-bold px-2 py-1 rounded ${walletPinEnabled ? 'bg-[#32D74B30] text-[#32D74B]' : 'bg-[#FF3B3020] text-[#FF3B30]'}`}>{walletPinEnabled ? 'ON' : 'OFF'}</span>
                 </button>
                 {!walletPinEnabled && (
