@@ -1,6 +1,7 @@
 import React from 'react';
 import { CreditCard, ShieldAlert, BarChart3, Clock, TrendingUp, TrendingDown, ArrowUpRight, AlertTriangle, ShieldX, Map, Activity, PieChart, ShieldCheck } from 'lucide-react';
 import { useFraudEvents } from '@/contexts/FraudEventsContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const formatCurrency = (amount: number, currency: string) => {
   try {
@@ -31,6 +32,7 @@ const riskLabel = (score: number) => {
 };
 
 export default function Dashboard() {
+  const { t } = useLanguage();
   const { events, clearEvents } = useFraudEvents();
 
   const totalTransactions = events.length;
@@ -67,52 +69,52 @@ export default function Dashboard() {
           {/* Stat Card 1 */}
           <div className="bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-4">
             <div className="flex justify-between items-center">
-              <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm font-semibold tracking-wider">TOTAL TRANSACTIONS</span>
+              <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm font-semibold tracking-wider">{t('dashboard.totalTransactions')}</span>
               <CreditCard size={20} className="text-[#9CA3AF] dark:text-[#525252]" />
             </div>
             <div className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">{totalTransactions}</div>
             <div className="flex items-center gap-2">
               <TrendingUp size={16} className="text-[#FF5500]" />
-              <span className="text-[#FF5500] text-sm font-semibold">Live from transaction simulator</span>
+              <span className="text-[#FF5500] text-sm font-semibold">{t('dashboard.liveFromSimulator')}</span>
             </div>
           </div>
 
           {/* Stat Card 2 */}
           <div className="bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-4">
             <div className="flex justify-between items-center">
-              <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm font-semibold tracking-wider">BLOCKED FRAUD</span>
+              <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm font-semibold tracking-wider">{t('dashboard.blockedFraud')}</span>
               <ShieldAlert size={20} className="text-[#9CA3AF] dark:text-[#525252]" />
             </div>
             <div className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">{blockedCount}</div>
             <div className="flex items-center gap-2">
               <TrendingDown size={16} className="text-[#FF3B30]" />
-              <span className="text-[#FF3B30] text-sm font-semibold">{flaggedCount} flagged pending review</span>
+              <span className="text-[#FF3B30] text-sm font-semibold">{t('dashboard.flaggedPending').replace('{count}', String(flaggedCount))}</span>
             </div>
           </div>
 
           {/* Stat Card 3 */}
           <div className="bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-4">
             <div className="flex justify-between items-center">
-              <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm font-semibold tracking-wider">FRAUD RATE</span>
+              <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm font-semibold tracking-wider">{t('dashboard.fraudRate')}</span>
               <BarChart3 size={20} className="text-[#9CA3AF] dark:text-[#525252]" />
             </div>
             <div className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">{fraudRate.toFixed(1)}%</div>
             <div className="flex items-center gap-2">
               <TrendingUp size={16} className="text-[#FF3B30]" />
-              <span className="text-[#FF3B30] text-sm font-semibold">Flagged + blocked / total</span>
+              <span className="text-[#FF3B30] text-sm font-semibold">{t('dashboard.flaggedBlockedOverTotal')}</span>
             </div>
           </div>
 
           {/* Stat Card 4 */}
           <div className="bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-4">
             <div className="flex justify-between items-center">
-              <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm font-semibold tracking-wider">AVG REVIEW TIME</span>
+              <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm font-semibold tracking-wider">{t('dashboard.avgReviewTime')}</span>
               <Clock size={20} className="text-[#9CA3AF] dark:text-[#525252]" />
             </div>
             <div className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">{Math.round(avgRisk * 100)}%</div>
             <div className="flex items-center gap-2">
               <TrendingDown size={16} className="text-[#FF5500]" />
-              <span className="text-[#FF5500] text-sm font-semibold">Average final risk score</span>
+              <span className="text-[#FF5500] text-sm font-semibold">{t('dashboard.avgFinalRiskScore')}</span>
             </div>
           </div>
         </div>
@@ -122,14 +124,14 @@ export default function Dashboard() {
           {/* Chart Card */}
           <div className="flex-[2] bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-6">
             <div className="flex justify-between items-center">
-              <span className="text-[#111827] dark:text-white font-['Sora'] font-semibold tracking-wider">RISK SCORE DISTRIBUTION</span>
+              <span className="text-[#111827] dark:text-white font-['Sora'] font-semibold tracking-wider">{t('dashboard.riskDistribution')}</span>
               <ArrowUpRight size={20} className="text-[#6B7280] dark:text-[#8A8A8A]" />
             </div>
             <div className="w-full h-64 bg-[#F8FAFC] dark:bg-[#141414] rounded-lg border border-black/5 dark:border-white/5 p-6 flex items-end justify-between gap-4">
               {[
-                { key: 'Low', value: lowRiskCount, color: 'bg-[#32D74B]' },
-                { key: 'Medium', value: mediumRiskCount, color: 'bg-[#FF9F0A]' },
-                { key: 'High', value: highRiskCount, color: 'bg-[#FF3B30]' },
+                { key: t('dashboard.low'), value: lowRiskCount, color: 'bg-[#32D74B]' },
+                { key: t('dashboard.medium'), value: mediumRiskCount, color: 'bg-[#FF9F0A]' },
+                { key: t('dashboard.high'), value: highRiskCount, color: 'bg-[#FF3B30]' },
               ].map((bucket) => (
                 <div key={bucket.key} className="flex-1 flex flex-col items-center gap-3">
                   <div className="text-[#6B7280] dark:text-[#8A8A8A] text-xs">{bucket.value}</div>
@@ -148,13 +150,13 @@ export default function Dashboard() {
           {/* Alerts Card */}
           <div data-tour="dashboard-alerts" className="flex-[1] bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-6">
             <div className="flex justify-between items-center">
-              <span className="text-[#111827] dark:text-white font-['Sora'] font-semibold tracking-wider">REAL-TIME ALERTS</span>
-              <div className="bg-[#FF3B30]/20 px-3 py-1 rounded-full text-[#FF3B30] text-xs font-bold w-fit">{alerts.length} NEW</div>
+              <span className="text-[#111827] dark:text-white font-['Sora'] font-semibold tracking-wider">{t('dashboard.realTimeAlerts')}</span>
+              <div className="bg-[#FF3B30]/20 px-3 py-1 rounded-full text-[#FF3B30] text-xs font-bold w-fit">{t('dashboard.newCount').replace('{count}', String(alerts.length))}</div>
             </div>
             
             <div className="flex flex-col gap-4">
               {alerts.length === 0 && (
-                <div className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">No alerts yet. Run a flagged or blocked transaction to populate this panel.</div>
+                <div className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">{t('dashboard.noAlerts')}</div>
               )}
               {alerts.map((alert) => (
                 <div key={alert.id} className="flex gap-4 items-start bg-[#F8FAFC] dark:bg-[#141414] p-4 rounded-lg border border-black/5 dark:border-white/5">
@@ -177,9 +179,9 @@ export default function Dashboard() {
         {/* Table Card */}
         <div className="w-full bg-[#FFFFFF]/50 dark:bg-[#1A1A1A]/50 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-xl p-6 flex flex-col gap-6">
           <div className="flex justify-between items-center">
-            <span className="text-[#111827] dark:text-white font-['Sora'] font-semibold tracking-wider">RECENT TRANSACTIONS</span>
+              <span className="text-[#111827] dark:text-white font-['Sora'] font-semibold tracking-wider">{t('dashboard.recentTransactions')}</span>
             <button onClick={clearEvents} className="text-[#FF5500] text-sm font-semibold border border-[#FF5500]/30 px-4 py-2 rounded-lg hover:bg-[#FF5500]/10 transition-colors">
-              Clear Demo Data
+              {t('dashboard.clearDemoData')}
             </button>
           </div>
           
@@ -187,12 +189,12 @@ export default function Dashboard() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-black/10 dark:border-white/10 text-[#6B7280] dark:text-[#8A8A8A] text-xs uppercase tracking-wider font-semibold">
-                  <th className="pb-4 px-4 font-normal">Transaction ID</th>
-                  <th className="pb-4 px-4 font-normal">User</th>
-                  <th className="pb-4 px-4 font-normal">Amount</th>
-                  <th className="pb-4 px-4 font-normal">Date & Time</th>
-                  <th className="pb-4 px-4 font-normal">Risk Score</th>
-                  <th className="pb-4 px-4 font-normal">Status</th>
+                  <th className="pb-4 px-4 font-normal">{t('dashboard.transactionId')}</th>
+                  <th className="pb-4 px-4 font-normal">{t('dashboard.user')}</th>
+                  <th className="pb-4 px-4 font-normal">{t('dashboard.amount')}</th>
+                  <th className="pb-4 px-4 font-normal">{t('dashboard.dateTime')}</th>
+                  <th className="pb-4 px-4 font-normal">{t('dashboard.riskScore')}</th>
+                  <th className="pb-4 px-4 font-normal">{t('dashboard.status')}</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
@@ -203,22 +205,22 @@ export default function Dashboard() {
                     <td className="py-4 px-4 text-[#111827] dark:text-white font-['Sora'] font-semibold">{formatCurrency(evt.amount, evt.currency)}</td>
                     <td className="py-4 px-4 text-[#6B7280] dark:text-[#8A8A8A]">{new Date(evt.timestamp).toLocaleString()}</td>
                     <td className="py-4 px-4">
-                      <span className={`${evt.status === 'BLOCKED' ? 'bg-[#FF3B30]/10 text-[#FF3B30]' : evt.status === 'FLAGGED' ? 'bg-[#FF9F0A]/10 text-[#FF9F0A]' : 'bg-[#32D74B]/10 text-[#32D74B]'} px-2 py-1 rounded font-bold`}>{Math.round(evt.riskScore * 100)} ({riskLabel(evt.riskScore)})</span>
+                      <span className={`${evt.status === 'BLOCKED' ? 'bg-[#FF3B30]/10 text-[#FF3B30]' : evt.status === 'FLAGGED' ? 'bg-[#FF9F0A]/10 text-[#FF9F0A]' : 'bg-[#32D74B]/10 text-[#32D74B]'} px-2 py-1 rounded font-bold`}>{Math.round(evt.riskScore * 100)} ({riskLabel(evt.riskScore) === 'High' ? t('dashboard.high') : riskLabel(evt.riskScore) === 'Medium' ? t('dashboard.medium') : t('dashboard.low')})</span>
                     </td>
                     <td className="py-4 px-4">
                       {evt.status === 'BLOCKED' && (
                         <span className="flex items-center gap-1 text-[#FF3B30]">
-                          <ShieldX size={14} /> Blocked
+                          <ShieldX size={14} /> {t('dashboard.blocked')}
                         </span>
                       )}
                       {evt.status === 'FLAGGED' && (
                         <span className="flex items-center gap-1 text-[#FF9F0A]">
-                          <AlertTriangle size={14} /> Flagged
+                          <AlertTriangle size={14} /> {t('dashboard.flagged')}
                         </span>
                       )}
                       {evt.status === 'APPROVED' && (
                         <span className="flex items-center gap-1 text-[#32D74B]">
-                          <ShieldCheck size={14} /> Approved
+                          <ShieldCheck size={14} /> {t('dashboard.approved')}
                         </span>
                       )}
                     </td>
@@ -226,7 +228,7 @@ export default function Dashboard() {
                 ))}
                 {events.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-8 px-4 text-[#6B7280] dark:text-[#8A8A8A] text-center">No transactions yet. Submit a transaction from the Transaction page to populate this dashboard.</td>
+                    <td colSpan={6} className="py-8 px-4 text-[#6B7280] dark:text-[#8A8A8A] text-center">{t('dashboard.noTransactions')}</td>
                   </tr>
                 )}
               </tbody>

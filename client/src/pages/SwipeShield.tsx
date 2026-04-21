@@ -3,6 +3,7 @@ import { AnimatePresence, motion, PanInfo } from 'framer-motion';
 import { Link } from 'wouter';
 import { RotateCcw } from 'lucide-react';
 import { FRAUD_API_BASE_URL } from '@/const';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 type SwipeDirection = 'safe' | 'scam';
 type ScenarioChannel = 'sms' | 'bank-message' | 'email' | 'whatsapp' | 'video-call';
@@ -43,69 +44,6 @@ type FeedbackState = {
   redFlag: string;
   education: string;
 };
-
-const SCENARIOS: Scenario[] = [
-  {
-    id: 'urgent-account-lock',
-    level: 'Very Easy',
-    channel: 'sms',
-    title: 'Urgent Account Lock',
-    sender: '+6012-389-0041',
-    preview: 'Unknown mobile number',
-    message: 'Your bank account is BLOCKED! Click immediately to verify: bit.ly/fake-bank-login',
-    type: 'scam',
-    redFlag: 'Extreme urgency + shortened URL from a non-official number.',
-    education: 'Banks will never send account-critical links via a standard mobile phone number.',
-  },
-  {
-    id: 'official-otp-request',
-    level: 'Easy',
-    channel: 'email',
-    title: 'Official OTP Request',
-    sender: 'MAYBANK SECURITY CENTER',
-    preview: 'Logo + polished UI',
-    message: 'We detected a login from Singapore. Reply with your 6-digit OTP to cancel the transaction.',
-    type: 'scam',
-    redFlag: 'Asking you to reply with OTP directly.',
-    education: 'Your OTP is your digital signature. Sharing it by reply is like giving a thief your house keys.',
-  },
-  {
-    id: 'lhdn-refund',
-    level: 'Medium',
-    channel: 'email',
-    title: 'LHDN Tax Refund',
-    sender: 'refund-notice@lhdn-tax-gov.com',
-    preview: 'Looks like a government letterhead',
-    message: 'You have an unclaimed tax refund of RM 850.50. Login to our Secure Portal to submit bank details.',
-    type: 'scam',
-    redFlag: 'Direct refund link and non-official email domain.',
-    education: 'Always navigate to the official gov.my website manually. Never trust a direct refund link in email.',
-  },
-  {
-    id: 'struggling-friend',
-    level: 'Hard',
-    channel: 'whatsapp',
-    title: 'Struggling Friend',
-    sender: 'Auntie Mary',
-    preview: 'Real profile photo + emotional request',
-    message: 'Hi dear, I am at the grocery store and my card failed. Please transfer RM 200 to this account now.',
-    type: 'scam',
-    redFlag: 'Pressure + transfer request to unfamiliar account owner (money mule risk).',
-    education: 'Always call the person directly to verify their voice before sending money to unfamiliar account numbers.',
-  },
-  {
-    id: 'deepfake-ai-call',
-    level: 'Extreme',
-    channel: 'video-call',
-    title: 'Deepfake / AI Call',
-    sender: 'Family Emergency Call',
-    preview: 'Dark-room video + urgent QR payment',
-    message: 'I got into an accident, phone dying, send RM 1,000 to this tow truck QR code NOW.',
-    type: 'scam',
-    redFlag: 'High-pressure emergency + pay third party instantly via QR.',
-    education: 'Scammers use AI to mimic faces and voices. Set a family safety word for real emergencies.',
-  },
-];
 
 const cardVariants = {
   enter: { y: 20, opacity: 0, scale: 0.98 },
@@ -175,20 +113,20 @@ const deriveLocalSummary = (score: number, total: number): OnboardingScoreRespon
   };
 };
 
-const getChannelLabel = (channel: ScenarioChannel): string => {
+const getChannelLabel = (channel: ScenarioChannel, t: (key: string) => string): string => {
   switch (channel) {
     case 'sms':
-      return 'SMS';
+      return t('swipe.channel.sms');
     case 'bank-message':
-      return 'Bank Message';
+      return t('swipe.channel.bankMessage');
     case 'email':
-      return 'Email';
+      return t('swipe.channel.email');
     case 'whatsapp':
-      return 'WhatsApp';
+      return t('swipe.channel.whatsapp');
     case 'video-call':
-      return 'Video Call';
+      return t('swipe.channel.videoCall');
     default:
-      return 'Message';
+      return t('swipe.channel.message');
   }
 };
 
@@ -207,7 +145,70 @@ function playTone(ctx: AudioContext, frequency: number, durationSec: number, typ
 }
 
 export default function SwipeShield() {
-  const total = SCENARIOS.length;
+  const { t } = useLanguage();
+  const scenarios: Scenario[] = [
+    {
+      id: 'urgent-account-lock',
+      level: 'Very Easy',
+      channel: 'sms',
+      title: t('swipe.s1.title'),
+      sender: '+6012-389-0041',
+      preview: t('swipe.s1.preview'),
+      message: t('swipe.s1.message'),
+      type: 'scam',
+      redFlag: t('swipe.s1.redFlag'),
+      education: t('swipe.s1.education'),
+    },
+    {
+      id: 'official-otp-request',
+      level: 'Easy',
+      channel: 'email',
+      title: t('swipe.s2.title'),
+      sender: 'MAYBANK SECURITY CENTER',
+      preview: t('swipe.s2.preview'),
+      message: t('swipe.s2.message'),
+      type: 'scam',
+      redFlag: t('swipe.s2.redFlag'),
+      education: t('swipe.s2.education'),
+    },
+    {
+      id: 'lhdn-refund',
+      level: 'Medium',
+      channel: 'email',
+      title: t('swipe.s3.title'),
+      sender: 'refund-notice@lhdn-tax-gov.com',
+      preview: t('swipe.s3.preview'),
+      message: t('swipe.s3.message'),
+      type: 'scam',
+      redFlag: t('swipe.s3.redFlag'),
+      education: t('swipe.s3.education'),
+    },
+    {
+      id: 'struggling-friend',
+      level: 'Hard',
+      channel: 'whatsapp',
+      title: t('swipe.s4.title'),
+      sender: t('swipe.s4.sender'),
+      preview: t('swipe.s4.preview'),
+      message: t('swipe.s4.message'),
+      type: 'scam',
+      redFlag: t('swipe.s4.redFlag'),
+      education: t('swipe.s4.education'),
+    },
+    {
+      id: 'deepfake-ai-call',
+      level: 'Extreme',
+      channel: 'video-call',
+      title: t('swipe.s5.title'),
+      sender: t('swipe.s5.sender'),
+      preview: t('swipe.s5.preview'),
+      message: t('swipe.s5.message'),
+      type: 'scam',
+      redFlag: t('swipe.s5.redFlag'),
+      education: t('swipe.s5.education'),
+    },
+  ];
+  const total = scenarios.length;
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [lastDirection, setLastDirection] = useState<SwipeDirection>('scam');
@@ -218,7 +219,7 @@ export default function SwipeShield() {
   const submittedRef = useRef(false);
   const audioRef = useRef<AudioContext | null>(null);
 
-  const currentScenario = SCENARIOS[currentIndex];
+  const currentScenario = scenarios[currentIndex];
   const isComplete = currentIndex >= total;
   const progressPercent = Math.round((currentIndex / total) * 100);
 
@@ -233,6 +234,14 @@ export default function SwipeShield() {
       color: ['#FFE066', '#5AF78E', '#61AFEF', '#FF6B6B'][index % 4],
     }));
   }, []);
+
+  const getLevelLabel = (level: Scenario['level']) => {
+    if (level === 'Very Easy') return t('swipe.level.veryEasy');
+    if (level === 'Easy') return t('swipe.level.easy');
+    if (level === 'Medium') return t('swipe.level.medium');
+    if (level === 'Hard') return t('swipe.level.hard');
+    return t('swipe.level.extreme');
+  };
 
   const playFeedbackAudio = (isCorrect: boolean) => {
     try {
@@ -358,7 +367,7 @@ export default function SwipeShield() {
             <span>5G 87%</span>
           </div>
           <div className="px-4 py-3 bg-[#1F2937] border-b border-white/10">
-            <p className="text-xs text-[#A9B7CF]">Messages</p>
+                  <p className="text-xs text-[#A9B7CF]">{t('swipe.surface.messages')}</p>
             <p className="text-sm font-semibold">{scenario.sender}</p>
           </div>
           <div className="p-4 bg-[#0B1220] min-h-[320px]">
@@ -387,8 +396,8 @@ export default function SwipeShield() {
               <p className="mt-2 text-[#111827] text-sm leading-6">{scenario.message}</p>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <button className="rounded-xl py-2 text-xs font-semibold text-white bg-[#1D4ED8]">Reply OTP</button>
-              <button className="rounded-xl py-2 text-xs font-semibold text-[#1D4ED8] border border-[#1D4ED8]">Ignore</button>
+              <button className="rounded-xl py-2 text-xs font-semibold text-white bg-[#1D4ED8]">{t('swipe.surface.replyOtp')}</button>
+              <button className="rounded-xl py-2 text-xs font-semibold text-[#1D4ED8] border border-[#1D4ED8]">{t('swipe.surface.ignore')}</button>
             </div>
           </div>
         </div>
@@ -409,16 +418,16 @@ export default function SwipeShield() {
               {scenario.id === 'official-otp-request' && (
                 <div className="mb-3 rounded-lg bg-[#0B3D91] px-3 py-2 text-xs text-white font-semibold inline-flex items-center gap-2">
                   <span className="h-5 w-5 rounded-full bg-[#FACC15] text-[#0B3D91] font-bold flex items-center justify-center">M</span>
-                  MAYBANK OFFICIAL NOTICE
+                  {t('swipe.surface.maybankNotice')}
                 </div>
               )}
               <p className="text-[11px] text-[#64748B]">From: {scenario.sender}</p>
               <p className="text-[11px] text-[#64748B] mt-1">
-                Subject: {scenario.id === 'official-otp-request' ? 'Unusual Login From Singapore' : 'Unclaimed Tax Refund - RM 850.50'}
+                {t('swipe.surface.subject')}: {scenario.id === 'official-otp-request' ? t('swipe.surface.subjectOtp') : t('swipe.surface.subjectRefund')}
               </p>
               <p className="mt-3 text-sm text-[#1E293B] leading-6">{scenario.message}</p>
               <button className="mt-4 rounded-lg bg-[#2563EB] text-white text-xs font-semibold px-3 py-2">
-                {scenario.id === 'official-otp-request' ? 'Reply with OTP' : 'Go to Secure Portal'}
+                {scenario.id === 'official-otp-request' ? t('swipe.surface.replyWithOtp') : t('swipe.surface.goSecurePortal')}
               </button>
             </div>
           </div>
@@ -433,7 +442,7 @@ export default function SwipeShield() {
             <div className="h-9 w-9 rounded-full bg-[#A7F3D0] text-[#14532D] font-bold flex items-center justify-center">AM</div>
             <div>
               <p className="text-sm font-semibold">{scenario.sender}</p>
-              <p className="text-[11px] text-[#B8F2D3]">online</p>
+              <p className="text-[11px] text-[#B8F2D3]">{t('swipe.surface.online')}</p>
             </div>
           </div>
           <div className="p-4 min-h-[320px] bg-[linear-gradient(180deg,#052E16,#064E3B)]">
@@ -441,7 +450,7 @@ export default function SwipeShield() {
               {scenario.message}
             </div>
             <div className="mt-4 rounded-xl bg-white/90 px-3 py-2 text-xs text-[#111827] max-w-[78%]">
-              Beneficiary name mismatch: <span className="font-semibold">MUHAMMAD RAZAK ENTERPRISE</span>
+              {t('swipe.surface.beneficiaryMismatch')}: <span className="font-semibold">MUHAMMAD RAZAK ENTERPRISE</span>
             </div>
           </div>
         </div>
@@ -451,8 +460,8 @@ export default function SwipeShield() {
     return (
       <div className="w-full rounded-3xl overflow-hidden border border-[#E11D48]/35 shadow-[0_22px_65px_rgba(80,0,30,0.45)] bg-[#020617] text-white">
         <div className="px-4 py-3 border-b border-white/10 bg-[#111827] flex items-center justify-between">
-          <p className="text-sm font-semibold">Incoming Video Call</p>
-          <p className="text-xs text-[#FCA5A5]">UNSTABLE</p>
+          <p className="text-sm font-semibold">{t('swipe.surface.incomingCall')}</p>
+          <p className="text-xs text-[#FCA5A5]">{t('swipe.surface.unstable')}</p>
         </div>
         <div className="relative min-h-[320px] p-4 bg-[radial-gradient(circle_at_30%_20%,#1E1B4B,transparent_60%),radial-gradient(circle_at_80%_70%,#3F0F2E,transparent_60%),#030712]">
           <motion.div
@@ -461,10 +470,10 @@ export default function SwipeShield() {
             transition={{ duration: 1.4, repeat: Infinity }}
           />
           <div className="relative h-full rounded-2xl border border-white/15 bg-black/45 p-4">
-            <p className="text-xs text-[#93C5FD]">Family Emergency Call</p>
+            <p className="text-xs text-[#93C5FD]">{t('swipe.s5.sender')}</p>
             <p className="mt-3 text-sm leading-6 text-[#F1F5F9]">{scenario.message}</p>
             <div className="mt-4 rounded-xl border border-[#FCA5A5]/40 bg-[#7F1D1D]/35 p-3 text-xs">
-              QR pay request: RM 1,000 to third-party driver
+              {t('swipe.surface.qrPayRequest')}
             </div>
           </div>
         </div>
@@ -484,7 +493,7 @@ export default function SwipeShield() {
           <>
             <div className="mb-6 rounded-2xl border border-white/15 bg-white/5 backdrop-blur-xl p-4">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-white/80 text-sm font-bold uppercase tracking-wider">Level {currentIndex + 1} of {total}</span>
+                <span className="text-white/80 text-sm font-bold uppercase tracking-wider">{t('swipe.levelOf').replace('{current}', String(currentIndex + 1)).replace('{total}', String(total))}</span>
                 <span className="text-white/80 text-sm font-bold uppercase tracking-wider">{progressPercent}%</span>
               </div>
               <div className="h-3 rounded-full bg-white/10 overflow-hidden">
@@ -514,8 +523,8 @@ export default function SwipeShield() {
                   className="relative rounded-3xl border border-white/10 bg-black/25 backdrop-blur-xl p-4 md:p-5 shadow-[0_28px_80px_rgba(0,0,0,0.5)]"
                 >
                   <div className="mb-4 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-[#0EA5E9]/25 text-[#7DD3FC] text-xs font-semibold px-3 py-1">{getChannelLabel(currentScenario.channel)}</span>
-                    <span className="rounded-full bg-[#A855F7]/25 text-[#E9D5FF] text-xs font-semibold px-3 py-1">{currentScenario.level}</span>
+                    <span className="rounded-full bg-[#0EA5E9]/25 text-[#7DD3FC] text-xs font-semibold px-3 py-1">{getChannelLabel(currentScenario.channel, t)}</span>
+                    <span className="rounded-full bg-[#A855F7]/25 text-[#E9D5FF] text-xs font-semibold px-3 py-1">{getLevelLabel(currentScenario.level)}</span>
                     <span className="rounded-full bg-[#34D399]/25 text-[#A7F3D0] text-xs font-semibold px-3 py-1">{currentScenario.title}</span>
                   </div>
 
@@ -529,7 +538,7 @@ export default function SwipeShield() {
                       className="rounded-2xl py-3.5 px-4 text-base font-bold transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
                       style={{ background: 'linear-gradient(135deg, #EF4444 0%, #FB7185 100%)', color: '#fff' }}
                     >
-                      Swipe Left: Scam
+                      {t('swipe.swipeLeftScam')}
                     </button>
                     <button
                       type="button"
@@ -538,11 +547,11 @@ export default function SwipeShield() {
                       className="rounded-2xl py-3.5 px-4 text-base font-bold transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50"
                       style={{ background: 'linear-gradient(135deg, #10B981 0%, #22D3EE 100%)', color: '#fff' }}
                     >
-                      Swipe Right: Safe
+                      {t('swipe.swipeRightSafe')}
                     </button>
                   </div>
 
-                  <p className="mt-3 text-center text-xs text-[#C7D2FE]">Drag card or tap buttons</p>
+                  <p className="mt-3 text-center text-xs text-[#C7D2FE]">{t('swipe.dragOrTap')}</p>
 
                   <AnimatePresence>
                     {feedback && (
@@ -553,19 +562,19 @@ export default function SwipeShield() {
                         className="absolute inset-3 z-20 rounded-2xl bg-black/82 border-2 border-[#FACC15] p-4 md:p-5 flex flex-col justify-center"
                       >
                         <p className={`text-xl md:text-2xl font-bold ${feedback.isCorrect ? 'text-[#4ADE80]' : 'text-[#FB7185]'}`}>
-                          {feedback.isCorrect ? 'Correct' : 'Not Quite'}
+                          {feedback.isCorrect ? t('swipe.correct') : t('swipe.notQuite')}
                         </p>
                         <p className="mt-1 text-sm text-white/80">
-                          You chose <span className="font-semibold uppercase">{feedback.choice}</span>. Correct answer: <span className="font-semibold uppercase">{feedback.expected}</span>.
+                          {t('swipe.feedbackChoice').replace('{choice}', feedback.choice).replace('{expected}', feedback.expected)}
                         </p>
 
                         <div className="mt-4 rounded-xl bg-[#FACC15] text-[#111827] p-3">
-                          <p className="text-[11px] uppercase font-black tracking-wider">Red Flag</p>
+                          <p className="text-[11px] uppercase font-black tracking-wider">{t('swipe.redFlag')}</p>
                           <p className="mt-1 text-sm font-semibold leading-6">{feedback.redFlag}</p>
                         </div>
 
                         <div className="mt-3 rounded-xl border border-white/20 bg-white/10 p-3">
-                          <p className="text-[11px] uppercase font-black tracking-wider text-[#FCD34D]">Why This Matters</p>
+                          <p className="text-[11px] uppercase font-black tracking-wider text-[#FCD34D]">{t('swipe.whyThisMatters')}</p>
                           <p className="mt-1 text-sm text-white leading-6">{feedback.education}</p>
                         </div>
                       </motion.div>
@@ -599,15 +608,15 @@ export default function SwipeShield() {
                 </div>
 
                 <h2 className="mt-5 text-4xl md:text-5xl font-bold text-white font-['Sora']">
-                  {syncResult.accuracy >= 0.8 ? 'Excellent' : syncResult.accuracy >= 0.4 ? 'Good Work' : 'Practice More'}
+                  {syncResult.accuracy >= 0.8 ? t('swipe.excellent') : syncResult.accuracy >= 0.4 ? t('swipe.goodWork') : t('swipe.practiceMore')}
                 </h2>
-                <p className="mt-2 text-white/75 text-sm md:text-base">{syncResult.next_step}</p>
+                <p className="mt-2 text-white/75 text-sm md:text-base">{syncResult.friction_tier === 'strict' ? t('swipe.nextStep.strict') : syncResult.friction_tier === 'balanced' ? t('swipe.nextStep.balanced') : t('swipe.nextStep.light')}</p>
 
                 <div className="mt-6 rounded-2xl bg-black/25 border border-white/10 p-4">
-                  <p className="text-xs uppercase tracking-wider text-white/65">Accuracy</p>
+                  <p className="text-xs uppercase tracking-wider text-white/65">{t('swipe.accuracy')}</p>
                   <p className="mt-1 text-3xl font-bold text-white">{Math.round(syncResult.accuracy * 100)}%</p>
-                  <p className="mt-1 text-sm text-[#A7F3D0]">Friction tier: <span className="uppercase font-semibold">{syncResult.friction_tier}</span></p>
-                  <p className="mt-1 text-xs text-white/70">{syncStatus === 'offline' ? 'Saved locally (offline mode)' : 'Synced with API'}</p>
+                  <p className="mt-1 text-sm text-[#A7F3D0]">{t('swipe.frictionTier')}: <span className="uppercase font-semibold">{syncResult.friction_tier}</span></p>
+                  <p className="mt-1 text-xs text-white/70">{syncStatus === 'offline' ? t('swipe.savedOffline') : t('swipe.syncedApi')}</p>
                 </div>
 
                 <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -617,11 +626,11 @@ export default function SwipeShield() {
                     className="rounded-2xl py-3.5 px-4 text-base font-bold text-white bg-gradient-to-r from-emerald-500 to-cyan-500 hover:opacity-95"
                   >
                     <RotateCcw className="inline mr-2" size={18} />
-                    Play Again
+                    {t('swipe.playAgain')}
                   </button>
                   <Link href="/transaction">
                     <div className="rounded-2xl py-3.5 px-4 text-base font-bold text-white bg-gradient-to-r from-fuchsia-500 to-violet-500 text-center cursor-pointer hover:opacity-95">
-                      Back to App
+                      {t('swipe.backToApp')}
                     </div>
                   </Link>
                 </div>

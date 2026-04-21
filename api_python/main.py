@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import joblib
 import pandas as pd
 import numpy as np
@@ -95,6 +95,9 @@ GUARDIAN_ALERT_LOGS = []
 # In-memory pending guardian approvals for flagged transactions.
 GUARDIAN_PENDING_APPROVALS = {}
 
+# In-memory auto-report log for demo submissions to external safety channels.
+AUTO_REPORT_LOGS = []
+
 # 2. Define what a 'Transaction' looks like
 class Transaction(BaseModel):
     type: str # 'TRANSFER' or 'CASH_OUT'
@@ -184,6 +187,24 @@ class GuardianApprovalDecision(BaseModel):
     note: str | None = None
 
 
+class AutoReportRequest(BaseModel):
+    report_channel: str  # mcmc or google_safe_browsing
+    sender_account: str
+    recipient_name: str
+    recipient_account: str
+    amount: float
+    currency: str = "MYR"
+    risk_score: float
+    model_score: float | None = None
+    reason_code: str
+    recommendation: str
+    transaction_status: str
+    device_id: str = "demo-web"
+    ip_profile: str = "auto"
+    qr_preview: str | None = None
+    evidence: list[str] = Field(default_factory=list)
+
+
 def build_onboarding_friction_profile(score: int, total: int) -> dict:
     safe_total = max(int(total), 1)
     safe_score = max(0, min(int(score), safe_total))
@@ -223,6 +244,37 @@ def build_onboarding_friction_profile(score: int, total: int) -> dict:
             "default_note": "High score detected. Use lighter friction, while still keeping risk checks active.",
         },
     }
+
+
+def build_auto_report_record(payload: AutoReportRequest, target: str) -> dict:
+    created_at = datetime.now().isoformat() + "Z"
+    report_id = f"RPT-{target.upper()}-{uuid4().hex[:10].upper()}"
+    safe_amount = max(float(payload.amount), 0.0)
+    safe_risk = max(0.0, min(float(payload.risk_score), 0.999))
+
+    record = {
+        "report_id": report_id,
+        "target": target,
+        "report_channel": payload.report_channel,
+        "submission_status": "queued",
+        "created_at": created_at,
+        "sender_account": payload.sender_account,
+        "recipient_name": payload.recipient_name,
+        "recipient_account": payload.recipient_account,
+        "amount": round(safe_amount, 2),
+        "currency": payload.currency,
+        "risk_score": round(safe_risk, 4),
+        "model_score": None if payload.model_score is None else round(float(payload.model_score), 4),
+        "reason_code": payload.reason_code,
+        "recommendation": payload.recommendation,
+        "transaction_status": payload.transaction_status,
+        "device_id": payload.device_id,
+        "ip_profile": payload.ip_profile,
+        "qr_preview": payload.qr_preview,
+        "evidence": payload.evidence[:5],
+    }
+    AUTO_REPORT_LOGS.append(record)
+    return record
 
 
 def normalize_name_dest(recipient_account: str) -> str:
@@ -1439,6 +1491,36 @@ async def submit_onboarding_score(payload: OnboardingScoreRequest):
         "guardian_protocol": profile["guardian_protocol"],
         "next_step": "SwipeShield completed. Use this score to tune onboarding defaults.",
     }
+
+
+@app.post("/api/v1/reports/mcmc")
+async def submit_mcmc_report(payload: AutoReportRequest):
+    record = build_auto_report_record(payload, "mcmc")
+    record.update(
+        {
+            "submission_status": "ready",
+            "submission_url": "https://aduan.mcmc.gov.my/",
+            "next_steps": "Review the generated evidence bundle and file it with MCMC as a third-party security escalation.",
+            "channel_label": "MCMC",
+            "third_party_layer": "PayNet/DuitNow-compatible security overlay",
+        }
+    )
+    return record
+
+
+@app.post("/api/v1/reports/google-safe-browsing")
+async def submit_google_safe_browsing_report(payload: AutoReportRequest):
+    record = build_auto_report_record(payload, "google_safe_browsing")
+    record.update(
+        {
+            "submission_status": "ready",
+            "submission_url": "https://safebrowsing.google.com/safebrowsing/report_phish/?hl=en",
+            "next_steps": "Review the generated evidence bundle and submit the phishing intelligence signal to Google Safe Browsing.",
+            "channel_label": "Google Safe Browsing",
+            "third_party_layer": "Threat intelligence submission",
+        }
+    )
+    return record
 
 
 if __name__ == "__main__":
