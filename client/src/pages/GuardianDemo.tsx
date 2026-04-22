@@ -155,26 +155,22 @@ export default function GuardianDemo() {
   }, [selectedGuardianAccount]);
 
   return (
-    <div className="min-h-screen bg-[#0C0C0C] font-['Inter'] flex flex-col items-center pt-16">
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden flex justify-center">
-        <div className="absolute w-[120%] h-[800px] bg-[#2E8BFF] opacity-[0.35] blur-[170px] rounded-[100%] bottom-[-430px] left-1/2 -translate-x-1/2" />
-        <div className="absolute w-[80%] h-[600px] bg-[#5DA8FF] opacity-[0.08] blur-[140px] rounded-[100%] bottom-[-320px] left-[-20%]" />
-        <div className="absolute w-[80%] h-[600px] bg-[#2E8BFF] opacity-[0.06] blur-[140px] rounded-[100%] bottom-[-320px] right-[-20%]" />
-      </div>
-
-      <div className="w-full max-w-[1180px] relative z-10 px-6 md:px-10 py-10 pb-20 flex flex-col gap-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <ShieldAlert size={24} className="text-[#7EC8FF]" />
-            <div className="flex flex-col">
-              <h1 className="text-white font-['Sora'] text-3xl font-bold">{t('guardian.title')}</h1>
-              <p className="text-[#9AB0C8] text-sm">{t('guardian.subtitle')}</p>
+    <div className="min-h-screen bg-[#F9FAFB] text-foreground font-sans flex flex-col items-center pt-16">
+      <div className="w-full max-w-[1480px] px-8 py-10 pb-16 flex flex-col gap-8">
+        <div className="flex flex-wrap items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
+              <ShieldAlert size={28} className="text-[#FF5500]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <h1 className="text-gray-900 font-['Sora'] text-4xl font-bold">{t('guardian.title')}</h1>
+              <p className="text-gray-500 text-lg">{t('guardian.subtitle')}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <Link href="/profile">
-              <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10">
-                <ArrowLeft size={15} /> {t('guardian.backToProfile')}
+              <button type="button" className="h-11 rounded-[8px] border border-[#D1D5DB] bg-white px-5 text-sm font-semibold text-gray-700 hover:bg-gray-50 flex items-center gap-2 shadow-sm transition-all">
+                <ArrowLeft size={16} /> {t('guardian.backToProfile')}
               </button>
             </Link>
             <button
@@ -184,124 +180,188 @@ export default function GuardianDemo() {
                 loadPendingApprovals(selectedGuardianAccount);
               }}
               disabled={!selectedGuardianAccount}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#5DA8FF] px-3 py-2 text-sm font-semibold text-[#0E1722] hover:bg-[#4B97EA] disabled:opacity-60"
+              className="h-11 rounded-[8px] bg-[#FF5500] px-5 text-sm font-semibold text-white hover:bg-[#E64D00] flex items-center gap-2 shadow-sm transition-all disabled:opacity-60"
             >
-              <RefreshCw size={15} /> {t('guardian.refresh')}
+              <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} /> {t('guardian.refresh')}
             </button>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-[#151D29]/75 p-5 flex flex-col gap-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <label className="text-xs uppercase tracking-[0.14em] text-[#8CBCE9]">{t('guardian.guardianAccount')}</label>
-              <select
-                value={selectedGuardianAccount}
-                onChange={(e) => setSelectedGuardianAccount(e.target.value)}
-                className="rounded-lg border border-white/10 bg-[#101722] px-3 py-2 text-sm text-white outline-none"
+        <div className="flex flex-col lg:flex-row gap-0 bg-white rounded-[12px] shadow-sm border border-[#E5E7EB] overflow-hidden">
+          <aside className="lg:w-72 lg:shrink-0 bg-transparent border-r border-[#F3F4F6]">
+            <nav className="flex lg:flex-col p-4 gap-1">
+              <button
+                type="button"
+                className="h-11 rounded-[8px] px-4 text-sm font-medium text-left transition-all bg-orange-50 text-orange-600"
               >
-                <option value="">{t('guardian.chooseGuardian')}</option>
-                {guardians.map((g) => (
-                  <option key={g.guardian_account} value={g.guardian_account}>
-                    {g.guardian_name} ({g.guardian_account})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="rounded-lg border border-[#5DA8FF33] bg-[#5DA8FF12] p-3">
-              <p className="text-xs uppercase tracking-[0.14em] text-[#8CBCE9]">{t('guardian.currentGuardian')}</p>
-              <p className="mt-1 text-sm font-semibold text-white">{selectedGuardian?.guardian_name || t('guardian.notSelected')}</p>
-              <p className="text-xs text-[#B8CAE0]">{selectedGuardian?.email || t('guardian.noEmail')} • {selectedGuardian?.phone || t('guardian.noPhone')}</p>
-            </div>
-          </div>
+                Notification Feed
+              </button>
+              <Link href="/profile" className="w-full">
+                <button
+                  type="button"
+                  className="h-11 rounded-[8px] px-4 text-sm font-medium text-left transition-all text-gray-600 hover:bg-gray-50 w-full"
+                >
+                  Guardian Link Settings
+                </button>
+              </Link>
+            </nav>
+          </aside>
 
-          <div className="rounded-lg border border-white/10 bg-[#0E1420] p-3">
-            <div className="rounded-lg border border-[#5DA8FF44] bg-[#0D1624] p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-white">{t('guardian.waitingDecision')}</p>
-                <span className="rounded-full bg-[#5DA8FF22] px-2.5 py-1 text-[11px] font-semibold text-[#CFE7FF]">
-                  {t('guardian.pendingCount').replace('{count}', String(pendingApprovals.filter((item) => item.status === 'PENDING').length))}
-                </span>
-              </div>
+          <section className="flex-1 p-8 md:p-10 flex flex-col gap-8 bg-white min-h-[600px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="flex flex-col gap-8">
+                {/* Guardian Account Selection */}
+                <div className="flex flex-col gap-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Guardian Account</h3>
+                  <select
+                    value={selectedGuardianAccount}
+                    onChange={(e) => setSelectedGuardianAccount(e.target.value)}
+                    className="h-12 w-full rounded-[8px] border border-[#D1D5DB] bg-[#F9FAFB] px-4 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-orange-500/20 shadow-sm transition-all"
+                  >
+                    <option value="">{t('guardian.chooseGuardian')}</option>
+                    {guardians.map((g) => (
+                      <option key={g.guardian_account} value={g.guardian_account}>
+                        {g.guardian_name} ({g.guardian_account})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div className="mt-3 flex flex-col gap-2 max-h-[300px] overflow-auto pr-1">
-                {pendingApprovals.length === 0 && (
-                  <p className="text-sm text-[#96A7BC]">{t('guardian.noPending')}</p>
-                )}
-
-                {pendingApprovals.map((item) => (
-                  <div key={item.approval_id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-white">{item.sender_name} • {Math.round((item.risk_score || 0) * 100)}% {t('guardian.risk')}</p>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${item.status === 'PENDING' ? 'bg-[#FF9F0A25] text-[#FFD39F]' : item.status === 'APPROVED' ? 'bg-[#32D74B25] text-[#B9F8C6]' : 'bg-[#FF3B3025] text-[#FFC6C3]'}`}>
-                        {item.status}
-                      </span>
+                {/* Current Guardian Details */}
+                <div className="rounded-[8px] border border-[#F3F4F6] bg-[#F9FAFB] p-6 shadow-sm flex flex-col gap-4">
+                  <div className="flex items-center gap-3 border-b border-[#E5E7EB] pb-3">
+                    <ShieldAlert size={18} className="text-orange-500" />
+                    <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wide">Current Guardian</h3>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-gray-900">{selectedGuardian?.guardian_name || t('guardian.notSelected')}</p>
+                    <div className="flex flex-col gap-1 mt-2">
+                      <p className="text-sm text-gray-500 font-medium">{selectedGuardian?.email || t('guardian.noEmail')}</p>
+                      <p className="text-sm text-gray-500 font-medium">{selectedGuardian?.phone || t('guardian.noPhone')}</p>
                     </div>
-                    <p className="mt-1 text-xs text-[#D6E4F3]">{item.transaction_summary.currency} {item.transaction_summary.amount} {t('guardian.to')} {item.transaction_summary.recipient}</p>
-                    <p className="mt-1 text-xs text-[#BDD2E8]">{item.reason}</p>
-                    <p className="mt-1 text-[11px] text-[#9BB0C5]">{t('guardian.approvalId')}: {item.approval_id}</p>
-                    <p className="text-[11px] text-[#8FA7BF]">{t('guardian.expires')}: {new Date(item.expires_at).toLocaleString()}</p>
+                  </div>
+                </div>
 
-                    {item.status === 'PENDING' && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => decideApproval(item.approval_id, 'APPROVE')}
-                          disabled={decisionBusyId === item.approval_id}
-                          className="rounded-lg bg-[#32D74B] px-3 py-1.5 text-xs font-semibold text-[#111111] hover:bg-[#29C340] disabled:opacity-60"
-                        >
-                          {t('guardian.approveTransaction')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => decideApproval(item.approval_id, 'REJECT')}
-                          disabled={decisionBusyId === item.approval_id}
-                          className="rounded-lg bg-[#FF3B30] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#E6352B] disabled:opacity-60"
-                        >
-                          {t('guardian.rejectForSafety')}
-                        </button>
+                {/* Live Alert Inbox */}
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between border-b border-[#F3F4F6] pb-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Live Alert Inbox</h3>
+                    <span className="rounded-full bg-orange-50 px-3 py-1 text-[11px] font-bold text-orange-600 border border-orange-100">
+                      {t('guardian.alertCount').replace('{count}', String(alerts.length))}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-3 max-h-[460px] overflow-auto pr-2 custom-scrollbar">
+                    {alerts.length === 0 && (
+                      <div className="bg-gray-50 border border-dashed border-[#E5E7EB] rounded-[8px] p-8 text-center">
+                        <p className="text-sm text-gray-400 italic">{t('guardian.noHighRiskAlerts')}</p>
                       </div>
                     )}
+
+                    {alerts.map((alert, idx) => (
+                      <div key={`${alert.timestamp}-${idx}`} className="rounded-[8px] border border-[#F3F4F6] bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <span className="text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-[6px] uppercase tracking-tight">
+                            {Math.round((alert.risk_score || 0) * 100)}% {t('guardian.risk')}
+                          </span>
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{alert.type.replaceAll('_', ' ')}</span>
+                        </div>
+                        <p className="text-sm font-bold text-gray-900 mb-1">{alert.sender_name}</p>
+                        <p className="text-xs text-gray-500 leading-relaxed font-medium">{alert.risk_reason}</p>
+                        <div className="mt-3 pt-3 border-t border-[#F9FAFB] text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                          {new Date(alert.timestamp).toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                {/* Pending Transactions */}
+                <div className="flex items-center justify-between border-b border-[#F3F4F6] pb-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Waiting for Approval</h3>
+                  <span className="rounded-full bg-orange-50 px-3 py-1 text-[11px] font-bold text-orange-600 border border-orange-100">
+                    {t('guardian.pendingCount').replace('{count}', String(pendingApprovals.filter((item) => item.status === 'PENDING').length))}
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-4 max-h-[800px] overflow-auto pr-2 custom-scrollbar">
+                  {pendingApprovals.length === 0 && (
+                    <div className="bg-gray-50 border border-dashed border-[#E5E7EB] rounded-[8px] p-8 text-center">
+                      <p className="text-sm text-gray-400 italic">{t('guardian.noPending')}</p>
+                    </div>
+                  )}
+
+                  {pendingApprovals.map((item) => (
+                    <div key={item.approval_id} className="rounded-[8px] border border-[#F3F4F6] bg-white p-6 shadow-sm flex flex-col gap-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex flex-col gap-1">
+                          <p className="text-sm font-bold text-gray-900">{item.sender_name}</p>
+                          <div className="flex items-center gap-2">
+                             <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">
+                              {Math.round((item.risk_score || 0) * 100)}% {t('guardian.risk')}
+                            </span>
+                             <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-tight ${
+                               item.status === 'PENDING' ? 'bg-orange-50 text-orange-600 border border-orange-100' : 
+                               item.status === 'APPROVED' ? 'bg-green-50 text-green-600 border border-green-100' : 
+                               'bg-red-50 text-red-600 border border-red-100'
+                             }`}>
+                              {item.status}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xl font-bold text-gray-900">{item.transaction_summary.currency} {item.transaction_summary.amount}</p>
+                          <p className="text-[10px] text-gray-400 font-bold uppercase">{t('guardian.to')} {item.transaction_summary.recipient}</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-[#F9FAFB] rounded-[8px] p-4 text-xs text-gray-600 font-medium leading-relaxed border border-[#F3F4F6]">
+                        {item.reason}
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                          <span>{t('guardian.approvalId')}: {item.approval_id}</span>
+                          <span className="text-orange-600">{t('guardian.expires')}: {new Date(item.expires_at).toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+
+                      {item.status === 'PENDING' && (
+                        <div className="grid grid-cols-2 gap-3 mt-2">
+                          <button
+                            type="button"
+                            onClick={() => decideApproval(item.approval_id, 'APPROVE')}
+                            disabled={decisionBusyId === item.approval_id}
+                            className="h-10 rounded-[8px] bg-green-600 px-4 text-xs font-bold text-white hover:bg-green-700 shadow-sm active:scale-95 transition-all disabled:opacity-60"
+                          >
+                            {t('guardian.approveTransaction')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => decideApproval(item.approval_id, 'REJECT')}
+                            disabled={decisionBusyId === item.approval_id}
+                            className="h-10 rounded-[8px] bg-red-600 px-4 text-xs font-bold text-white hover:bg-red-700 shadow-sm active:scale-95 transition-all disabled:opacity-60"
+                          >
+                            {t('guardian.rejectForSafety')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-white">{t('guardian.liveAlertInbox')}</p>
-              <span className="rounded-full bg-[#FF9F0A22] px-2.5 py-1 text-[11px] font-semibold text-[#FFD39F]">
-                {t('guardian.alertCount').replace('{count}', String(alerts.length))}
-              </span>
-            </div>
-
-            <div className="mt-3 flex flex-col gap-2 max-h-[460px] overflow-auto pr-1">
-              {alerts.length === 0 && (
-                <p className="text-sm text-[#96A7BC]">{t('guardian.noHighRiskAlerts')}</p>
-              )}
-
-              {alerts.map((alert, idx) => (
-                <div key={`${alert.timestamp}-${idx}`} className="rounded-lg border border-[#FF8A5538] bg-[#FF8A5512] px-3 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-white">{Math.round((alert.risk_score || 0) * 100)}% {t('guardian.risk')} • {alert.sender_name}</p>
-                    <span className="rounded-full bg-[#FFFFFF1A] px-2 py-0.5 text-[10px] font-bold text-[#FFD1B0]">{alert.type.replaceAll('_', ' ')}</span>
-                  </div>
-                  <p className="mt-1 text-xs text-[#FFD6BF]">{alert.risk_reason}</p>
-                  <p className="mt-1 text-[11px] text-[#BCA99C]">{new Date(alert.timestamp).toLocaleString()}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+            {status && (
+              <div className="mt-8 px-6 py-4 rounded-[8px] bg-gray-50 border border-[#E5E7EB] text-sm text-gray-600 font-medium flex items-center gap-3 shadow-inner">
+                <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+                {status}
+              </div>
+            )}
+          </section>
         </div>
-
-        <div className="rounded-xl border border-[#7EC8FF44] bg-[#7EC8FF14] px-4 py-3 text-sm text-[#CFEAFF]">
-          {t('guardian.pagePath')}: /guardian-notifications
-        </div>
-
-        {status && (
-          <div className="rounded-xl border border-[#FF9F0A44] bg-[#FF9F0A14] px-4 py-3 text-sm text-[#FFD9A8]">
-            {status}
-          </div>
-        )}
       </div>
     </div>
   );

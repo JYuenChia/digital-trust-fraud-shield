@@ -12,7 +12,6 @@ import { TourProvider } from "./contexts/TourContext";
 import Landing from "./pages/Landing";
 import Transaction from "./pages/Transaction";
 import SwipeShield from "./pages/SwipeShield";
-import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import GuardianDemo from "./pages/GuardianDemo";
 import Admin from "./pages/Admin";
@@ -22,7 +21,6 @@ function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Landing} />
-      <Route path={"/dashboard"} component={Dashboard} />
       <Route path={"/admin"} component={Admin} />
       <Route path={"/transaction"} component={Transaction} />
       <Route path={"/swipe-shield"} component={SwipeShield} />

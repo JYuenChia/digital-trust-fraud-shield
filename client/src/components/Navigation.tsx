@@ -13,7 +13,6 @@ export const Navigation: React.FC = () => {
 
   const navItems = [
     { label: t('nav.overview'), href: '/' },
-    { label: t('nav.dashboard'), href: '/dashboard' },
     { label: t('nav.admin'), href: '/admin' },
     { label: t('nav.transactions'), href: '/transaction' }
   ];

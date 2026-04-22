@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X, PhoneCall, Mic, MicOff, Lock, Smartphone, Send, Globe } from 'lucide-react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeScanner } from 'html5-qrcode';
 import { FRAUD_API_BASE_URL } from '@/const';
 import { useFraudEvents } from '@/contexts/FraudEventsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -589,6 +589,7 @@ export default function Transaction() {
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [qrScanError, setQrScanError] = useState<string | null>(null);
   const [lastQrPreview, setLastQrPreview] = useState<string>('');
+  const [isQrImageDecoding, setIsQrImageDecoding] = useState(false);
   const [scannedQrPayload, setScannedQrPayload] = useState<QrPayload | null>(null);
   const [qrScanStatus, setQrScanStatus] = useState<{ tone: 'safe' | 'warn' | 'danger'; message: string } | null>(null);
   const [activeStep, setActiveStep] = useState<FormStep>('recipient');
@@ -1435,6 +1436,56 @@ export default function Transaction() {
     return result;
   };
 
+  const handleDecodedQrText = async (decodedText: string) => {
+    setLastQrPreview(decodedText.slice(0, 120));
+    const threatResult = await scanQrThreat(decodedText);
+
+    const parsed = parseQrPayload(decodedText);
+    if (parsed && (parsed.merchant_id || parsed.account_name)) {
+      setScannedQrPayload(parsed);
+      setRecipientAccount(parsed.merchant_id || parsed.account_name || '');
+      setRecipientName(parsed.account_name || recipientName);
+      if (typeof parsed.amount === 'number' && parsed.amount > 0) {
+        setAmount(String(parsed.amount));
+      }
+      if (parsed.provider) {
+        setSelectedProvider(parsed.provider);
+      }
+    } else {
+      setScannedQrPayload(null);
+    }
+
+    closeQrScanner();
+
+    if (parsed && threatResult.status === 'APPROVED') {
+      setFraudResult(threatResult);
+      setQrScanStatus({ tone: 'safe', message: 'QR checked. Recipient details are filled in for you.' });
+    } else {
+      setQrScanStatus({ tone: 'warn', message: threatResult.reason_code || 'This QR needs caution.' });
+      applyResultModal(threatResult);
+    }
+  };
+
+  const handleQrImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setIsQrImageDecoding(true);
+    setQrScanError(null);
+
+    try {
+      const html5Qr = new Html5Qrcode(scannerRegionId);
+      const decodedText = await html5Qr.scanFile(file, true);
+      await handleDecodedQrText(decodedText);
+    } catch (error) {
+      console.error('QR image decode error:', error);
+      setQrScanError('Could not read QR from this image. Try a clearer photo or use live scan.');
+    } finally {
+      setIsQrImageDecoding(false);
+    }
+  };
+
   useEffect(() => {
     if (!isQrScannerOpen) return;
 
@@ -1453,7 +1504,6 @@ export default function Transaction() {
     scannerRef.current = scanner;
     scanner.render(
       async (decodedText) => {
-        setLastQrPreview(decodedText.slice(0, 120));
         try {
           const parsed = parseQrPayload(decodedText);
           let extracted: OcrExtractionResult | undefined;
@@ -1607,45 +1657,26 @@ export default function Transaction() {
       }
 
       let response: Response;
-      if (scannedQrPayload) {
-        response = await fetch(`${FRAUD_API_BASE_URL}/predict-qr`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sender_account: SENIOR_ACCOUNT,
-            device_id: activeDeviceId,
-            ip_profile: activeIpProfile,
-            qr: {
-              ...scannedQrPayload,
-              amount: amountValue,
-              merchant_id: recipientAccount || scannedQrPayload.merchant_id,
-              account_name: recipientName || scannedQrPayload.account_name,
-              provider: selectedProvider,
-            },
-          }),
-        });
-      } else {
-        const contextResponse = await fetch(`${FRAUD_API_BASE_URL}/context`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sender_account: SENIOR_ACCOUNT,
-            recipient_account: recipientAccount,
-            amount: amountValue,
-            device_id: activeDeviceId,
-            ip_profile: activeIpProfile,
-          }),
-        });
+      const contextResponse = await fetch(`${FRAUD_API_BASE_URL}/context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender_account: SENIOR_ACCOUNT,
+          recipient_account: recipientAccount,
+          amount: amountValue,
+          device_id: activeDeviceId,
+          ip_profile: activeIpProfile,
+        }),
+      });
 
-        if (!contextResponse.ok) throw new Error(`Context API error: ${contextResponse.status}`);
-        const transactionData: ContextResult = await contextResponse.json();
+      if (!contextResponse.ok) throw new Error(`Context API error: ${contextResponse.status}`);
+      const transactionData: ContextResult = await contextResponse.json();
 
-        response = await fetch(`${FRAUD_API_BASE_URL}/predict`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...transactionData, sender_account: SENIOR_ACCOUNT }),
-        });
-      }
+      response = await fetch(`${FRAUD_API_BASE_URL}/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...transactionData, sender_account: SENIOR_ACCOUNT }),
+      });
 
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const result: FraudResult = await response.json();
@@ -2001,6 +2032,21 @@ export default function Transaction() {
 
             <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-slate-50 dark:bg-[#101010] p-3">
               <div id={scannerRegionId} className="min-h-[280px] rounded-xl overflow-hidden" />
+              <div className="mt-3 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#151515] p-3">
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-[#6B7280] dark:text-[#9EA8B5]">
+                  Upload QR Image
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleQrImageUpload}
+                  disabled={isQrImageDecoding}
+                  className="block w-full text-sm text-[#111827] dark:text-white file:mr-3 file:rounded-md file:border-0 file:bg-[#FF5500] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[#111827] dark:file:text-white hover:file:bg-[#E04B00]"
+                />
+                <p className="mt-2 text-xs text-[#6B7280] dark:text-[#A0A0A0]">
+                  {isQrImageDecoding ? 'Reading image...' : 'Use this if camera scan is unavailable.'}
+                </p>
+              </div>
             </div>
 
             <div className="rounded-xl border border-black/10 dark:border-white/10 bg-[#FFFFFF] dark:bg-[#111111] px-4 py-3">
@@ -2241,7 +2287,15 @@ export default function Transaction() {
           
           {/* 1. Confirming Modal */}
           {modalState === 'confirming' && (
-            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col gap-6">
+            <div className="relative w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col gap-6">
+              <button
+                type="button"
+                onClick={() => setModalState('idle')}
+                className="absolute top-5 right-5 text-gray-400 hover:text-black dark:text-gray-500 dark:hover:text-white transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
               <div className="text-[#FF5500]">
                 <Play size={32} className="fill-[#FF5500] stroke-none rotate-90" />
               </div>
@@ -2271,9 +2325,19 @@ export default function Transaction() {
             </div>
           )}
 
+
+
           {/* PIN Entry Modal */}
           {modalState === 'pin-entry' && (
-            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col items-center gap-6">
+            <div className="relative w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col items-center gap-6">
+              <button
+                type="button"
+                onClick={() => setModalState('idle')}
+                className="absolute top-5 right-5 text-gray-400 hover:text-black dark:text-gray-500 dark:hover:text-white transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
               <h2 className="text-[#111827] dark:text-white text-2xl font-bold font-['Sora'] text-center">Wallet PIN</h2>
               <p className="text-[#6B7280] dark:text-[#8A8A8A] text-sm text-center">Enter your 6-digit PIN to authorize this transfer.</p>
               
@@ -2330,7 +2394,15 @@ export default function Transaction() {
 
           {/* 2. Processing Modal */}
           {modalState === 'processing' && (
-            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl pt-12 pb-12 px-8 flex flex-col items-center gap-6">
+            <div className="relative w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl pt-12 pb-12 px-8 flex flex-col items-center gap-6">
+              <button
+                type="button"
+                onClick={() => setModalState('idle')}
+                className="absolute top-5 right-5 text-gray-400 hover:text-black dark:text-gray-500 dark:hover:text-white transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
               <Loader size={48} className="text-[#FF5500] animate-spin" />
               <h2 className="text-[#111827] dark:text-white text-xl font-bold font-['Sora'] text-center">Analyzing transaction risk...</h2>
               <p className="text-[#6B7280] dark:text-[#8A8A8A] text-sm text-center">Running real-time anomaly scoring...</p>
@@ -2453,7 +2525,15 @@ export default function Transaction() {
 
           {/* 4.5. FaceID Prototype Modal */}
           {modalState === 'face-id' && (
-            <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#5DA8FF50] rounded-3xl p-8 flex flex-col items-center gap-6 shadow-[0_0_40px_rgba(93,168,255,0.15)]">
+            <div className="relative w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#5DA8FF50] rounded-3xl p-8 flex flex-col items-center gap-6 shadow-[0_0_40px_rgba(93,168,255,0.15)]">
+              <button
+                type="button"
+                onClick={() => setModalState('idle')}
+                className="absolute top-5 right-5 text-gray-400 hover:text-black dark:text-gray-500 dark:hover:text-white transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
               <h2 className="text-[#111827] dark:text-white text-[22px] font-bold font-['Sora'] text-center leading-tight">FaceID Verification</h2>
               <div className="text-[#6B7280] dark:text-[#8A8A8A] text-sm text-center">Please position your face within the frame.</div>
               
