@@ -1,15 +1,37 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
-import { ShieldAlert, Search, Bell , Menu } from 'lucide-react';
+import { ShieldAlert, Search, Bell, Menu, Download } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTour } from '@/contexts/TourContext';
 
 export const Navigation: React.FC = () => {
   const [location] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
+  const [showInstallBtn, setShowInstallBtn] = React.useState(false);
   const { startTour } = useTour();
   const { t } = useLanguage();
   const isProfilePage = location === '/profile';
+
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBtn(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+      setShowInstallBtn(false);
+    }
+  };
 
   const navItems = [
     { label: t('nav.overview'), href: '/' },
@@ -66,6 +88,16 @@ export const Navigation: React.FC = () => {
 
         {/* Header Actions (Desktop) */}
         <div className="hidden md:flex items-center gap-6">
+          {showInstallBtn && (
+            <button
+              onClick={handleInstallClick}
+              className="flex items-center gap-2 bg-[#FF3B30]/10 hover:bg-[#FF3B30]/20 text-[#FF3B30] px-4 py-2 rounded-lg transition-colors border-none cursor-pointer"
+            >
+              <Download size={18} />
+              <span className="text-xs font-bold tracking-wider uppercase font-['Inter']">Install App</span>
+            </button>
+          )}
+
           {/* Search Box */}
           <div className="flex items-center gap-3 bg-[#FFFFFF] dark:bg-[#1A1A1A] rounded-lg px-4 py-2.5">
             <Search size={18} className="text-[#6B7280] dark:text-[#8A8A8A]" />
@@ -107,6 +139,18 @@ export const Navigation: React.FC = () => {
               </Link>
             );
           })}
+          {showInstallBtn && (
+            <button
+              onClick={() => {
+                handleInstallClick();
+                setIsMobileMenuOpen(false);
+              }}
+              className="py-3 px-4 rounded-lg cursor-pointer text-[#FF3B30] bg-[#FF3B30]/10 border-none text-left flex items-center gap-3 mt-1"
+            >
+              <Download size={18} />
+              <span className="font-['Inter'] font-bold text-sm tracking-widest uppercase">Install App</span>
+            </button>
+          )}
           <div className="h-px bg-black/10 dark:bg-white/10 my-2"></div>
           <button
             type="button"
