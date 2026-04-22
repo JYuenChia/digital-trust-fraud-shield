@@ -1,5 +1,5 @@
 {
-  "name": "Digital Trust Fraud Shield",
+  "name": "Digital Trust Fraud",
   "short_name": "Fraud Shield",
   "description": "AI-powered digital fraud protection demo app.",
   "start_url": "/",
@@ -8,6 +8,18 @@
   "background_color": "#0D1624",
   "theme_color": "#0D1624",
   "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
     {
       "src": "/icon.svg",
       "sizes": "any",
