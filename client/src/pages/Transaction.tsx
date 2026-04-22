@@ -66,6 +66,17 @@ const MALAYSIA_EWALLETS = [
   'Setel Wallet',
 ];
 
+// EMV AID and provider ID mappings for Malaysian banks
+const PROVIDER_ID_BANK_MAP: Record<string, string> = {
+  'A0000006150001': 'RHB Bank',
+  'A0000002980840': 'Maybank',
+  'A0000000021010': 'CIMB Bank',
+  'A0000000980840': 'Public Bank',
+  'A0000007610002': 'HSBC Malaysia',
+  'A0000003710002': 'UOB Malaysia',
+  'A0000004401002': 'Bank Muamalat',
+};
+
 type DropdownGroup = {
   label?: string;
   options: Array<{
@@ -218,14 +229,9 @@ type OcrExtractionResult = {
   recipientName?: string;
 };
 
-type SafetyWeatherState = 'calm' | 'cloudy' | 'storm';
+type FormStep = 'sender' | 'recipient';
 
-type BoatProfile = {
-  safePoints: number;
-  damage: number;
-  warningStrikes: number;
-  locked: boolean;
-};
+type SafetyWeatherState = 'calm' | 'cloudy' | 'storm';
 
 type AIVoiceAssessment = {
   suspected: boolean;
@@ -234,66 +240,8 @@ type AIVoiceAssessment = {
   confidence: 'low' | 'medium' | 'high';
 };
 
-type QuizQuestion = {
-  id: string;
-  question: string;
-  options: string[];
-  correctIndex: number;
-};
-
-const BOAT_PROFILE_STORAGE_KEY = 'fraud-shield-bangka-profile-v1';
 const PROFILE_PIN_STORAGE_KEY = 'fraud-shield-profile-v1-pin-value';
 const SENIOR_ACCOUNT = 'ALEX8899';
-
-function SafetyBoatCard({ profile }: { profile: BoatProfile }) {
-  const damage = profile.damage;
-  const warningStrikes = profile.warningStrikes;
-
-  return (
-    <div className="rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#0F141A] p-4 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-[0.16em] text-[#6B7280] dark:text-[#8A8A8A]">Safety Tracker</span>
-        <span className="text-xs font-semibold text-emerald-700 dark:text-[#72E18B]">
-          MONITORING
-        </span>
-      </div>
-
-      <div className="relative h-24 rounded-lg border border-black/10 dark:border-white/10 overflow-hidden bg-blue-100 dark:bg-[#0C1C2B]">
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(140,210,255,0.32)_0%,rgba(53,123,185,0.52)_45%,rgba(12,49,84,0.95)_100%)]" />
-        <svg viewBox="0 0 180 100" className="absolute left-3 bottom-1 h-20 w-40" aria-hidden="true">
-          <path d="M20 62h120l-10 18c-2 4-6 6-11 6H42c-5 0-9-2-11-6L20 62z" fill="#D89A61" />
-          <rect x="78" y="26" width="5" height="36" rx="2" fill="#B17745" />
-          <path d="M82 28l35 13H82z" fill="#F7D8B2" />
-          <path d="M78 30l-28 12h28z" fill="#F2CFA7" />
-          <circle cx="40" cy="70" r="8" fill="none" stroke="#9EE0F7" strokeWidth="3" />
-
-          {damage >= 20 && <path d="M65 80l8-7" stroke="#662A2A" strokeWidth="2" />}
-          {damage >= 40 && <path d="M92 77l11-8" stroke="#662A2A" strokeWidth="2" />}
-          {damage >= 60 && <path d="M48 74l11-8" stroke="#662A2A" strokeWidth="2" />}
-        </svg>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2 text-xs">
-        <div className="rounded-md bg-black/5 dark:bg-white/5 px-2 py-2">
-          <p className="text-[#6B7280] dark:text-[#8A8A8A]">Safe Points</p>
-          <p className="text-[#111827] dark:text-white font-semibold">{profile.safePoints}</p>
-        </div>
-        <div className="rounded-md bg-black/5 dark:bg-white/5 px-2 py-2">
-          <p className="text-[#6B7280] dark:text-[#8A8A8A]">Damage</p>
-          <p className={`font-semibold ${damage >= 60 ? 'text-[#FF6B6B]' : 'text-[#111827] dark:text-white'}`}>{damage}%</p>
-        </div>
-        <div className="rounded-md bg-black/5 dark:bg-white/5 px-2 py-2">
-          <p className="text-[#6B7280] dark:text-[#8A8A8A]">Warning Alerts</p>
-          <p className={`font-semibold ${warningStrikes >= 2 ? 'text-[#FF9F0A]' : 'text-[#111827] dark:text-white'}`}>{warningStrikes}</p>
-        </div>
-      </div>
-
-      <p className="text-[11px] text-slate-600 dark:text-[#9CA8B5]">
-        More safe transfers raise points. Repeated risky behavior increases damage and warnings.
-      </p>
-    </div>
-  );
-}
 
 function getSafetyWeatherState(riskScore: number): SafetyWeatherState {
   if (riskScore >= 0.75) return 'storm';
@@ -410,6 +358,29 @@ function parseTlv(raw: string): Record<string, string> {
   return out;
 }
 
+function cleanQrRecipientName(raw?: string): string | undefined {
+  if (!raw) return undefined;
+
+  let cleaned = raw.replace(/\s+/g, ' ').trim();
+  cleaned = cleaned.replace(/[^A-Za-z0-9 .,&'\-/]/g, '');
+
+  // Some EMV payloads leak the next TLV tag suffix into merchant name (e.g. TEOJINGYING60).
+  if (/^[A-Za-z]{5,}\d{2}$/.test(cleaned)) {
+    cleaned = cleaned.slice(0, -2);
+  }
+
+  return cleaned || undefined;
+}
+
+function normalizeLikelyAccountNumber(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length < 10 || digits.length > 16) {
+    return undefined;
+  }
+  return digits;
+}
+
 function parseEmvCoPayload(raw: string): QrPayload | null {
   // EMVCo merchant-presented mode usually starts with 000201...
   const compact = raw.replace(/\s+/g, '');
@@ -428,7 +399,10 @@ function parseEmvCoPayload(raw: string): QrPayload | null {
 
     const nested = parseTlv(value);
     const gui = nested['00'];
-    if (!provider && gui) provider = gui;
+    if (!provider && gui) {
+      // Map known EMV AID to bank names
+      provider = PROVIDER_ID_BANK_MAP[gui] || gui;
+    }
 
     merchantId = nested['01'] || nested['02'] || nested['03'] || nested['04'] || merchantId;
 
@@ -442,22 +416,16 @@ function parseEmvCoPayload(raw: string): QrPayload | null {
 
   const amountRaw = root['54'];
   const amount = amountRaw ? Number(amountRaw) : undefined;
+  const accountName = cleanQrRecipientName(root['59'] || undefined);
 
   const parsed: QrPayload = {
     merchant_id: merchantId,
-    account_name: root['59'] || undefined,
+    account_name: accountName,
     amount: Number.isFinite(amount) && (amount as number) > 0 ? amount : undefined,
     currency: root['53'] === '458' ? 'MYR' : (root['53'] || 'MYR'),
     provider,
     signature: 'UNKNOWN',
   };
-
-  if (!parsed.merchant_id && parsed.account_name) {
-    const normalized = parsed.account_name.replace(/[^A-Z0-9]/gi, '').toUpperCase();
-    if (normalized) {
-      parsed.merchant_id = `M${normalized.slice(0, 18)}`;
-    }
-  }
 
   if (!parsed.merchant_id && !parsed.account_name) return null;
   return parsed;
@@ -624,6 +592,8 @@ export default function Transaction() {
   const [isQrImageDecoding, setIsQrImageDecoding] = useState(false);
   const [scannedQrPayload, setScannedQrPayload] = useState<QrPayload | null>(null);
   const [qrScanStatus, setQrScanStatus] = useState<{ tone: 'safe' | 'warn' | 'danger'; message: string } | null>(null);
+  const [activeStep, setActiveStep] = useState<FormStep>('recipient');
+  const [recipientVerification, setRecipientVerification] = useState<{ label: string } | null>(null);
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
   const [ocrSummary, setOcrSummary] = useState<string | null>(null);
   const [autoReportState, setAutoReportState] = useState<AutoReportState>({
@@ -652,7 +622,6 @@ export default function Transaction() {
   const [callBackendVoiceAssessment, setCallBackendVoiceAssessment] = useState<AIVoiceAssessment | null>(null);
   const [callVoiceAuditMessage, setCallVoiceAuditMessage] = useState<string>('');
   const [callError, setCallError] = useState<string | null>(null);
-  const [boatProfile, setBoatProfile] = useState<BoatProfile>({ safePoints: 0, damage: 0, warningStrikes: 0, locked: false });
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const callRecognitionRef = useRef<any>(null);
   const hasPlayedCallAlertRef = useRef(false);
@@ -668,6 +637,7 @@ export default function Transaction() {
   const callBackendVoiceAssessmentRef = useRef<AIVoiceAssessment | null>(null);
   const callVoiceAuditSessionRef = useRef(0);
   const ocrInputRef = useRef<HTMLInputElement | null>(null);
+  const amountInputRef = useRef<HTMLInputElement | null>(null);
   const scannerRegionId = 'qr-reader-shield';
 
   useEffect(() => {
@@ -694,23 +664,6 @@ export default function Transaction() {
     callBackendVoiceAssessmentRef.current = callBackendVoiceAssessment;
   }, [callBackendVoiceAssessment]);
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(BOAT_PROFILE_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as BoatProfile;
-      if (typeof parsed.safePoints === 'number') {
-        setBoatProfile(parsed);
-      }
-    } catch {
-      // Ignore invalid local data.
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(BOAT_PROFILE_STORAGE_KEY, JSON.stringify(boatProfile));
-  }, [boatProfile]);
-
   const continueTransactionAfterGate = () => {
     const pinEnabled = localStorage.getItem('fraud-shield-profile-v1-pin') !== 'false';
     if (pinEnabled) {
@@ -721,8 +674,6 @@ export default function Transaction() {
     }
     handleProcessTransaction();
   };
-
-
 
   const activeDeviceId: 'demo-web' | 'demo-new-device' =
     judgeDemoPreset === 'new-device' || judgeDemoPreset === 'max-risk' ? 'demo-new-device' : 'demo-web';
@@ -1443,6 +1394,9 @@ export default function Transaction() {
     if (extracted.currency) {
       setSelectedCurrency(extracted.currency);
     }
+    if (typeof extracted.amount !== 'number' || extracted.amount <= 0) {
+      setActiveStep('recipient');
+    }
   };
 
   const applyResultModal = (result: FraudResult) => {
@@ -1555,8 +1509,9 @@ export default function Transaction() {
           let extracted: OcrExtractionResult | undefined;
 
           if (parsed && (parsed.merchant_id || parsed.account_name)) {
+            const detectedAccount = normalizeLikelyAccountNumber(parsed.merchant_id);
             setScannedQrPayload(parsed);
-            setRecipientAccount(parsed.merchant_id || parsed.account_name || '');
+            setRecipientAccount(detectedAccount || '');
             setRecipientName(parsed.account_name || recipientName);
             if (typeof parsed.amount === 'number' && parsed.amount > 0) {
               setAmount(parsed.amount.toFixed(2));
@@ -1565,7 +1520,7 @@ export default function Transaction() {
               setSelectedProvider(parsed.provider);
             }
             extracted = {
-              accountNumber: parsed.merchant_id,
+              accountNumber: detectedAccount,
               recipientName: parsed.account_name,
               amount: parsed.amount,
               currency: parsed.currency,
@@ -1586,14 +1541,26 @@ export default function Transaction() {
           const hasAutoFill = Boolean(
             extracted?.accountNumber || extracted?.recipientName || extracted?.amount,
           );
+          const hasDetectedAmount = typeof extracted?.amount === 'number' && extracted.amount > 0;
 
           if (hasAutoFill && threatResult.status === 'APPROVED') {
             setFraudResult(threatResult);
-            setQrScanStatus({ tone: 'safe', message: 'Scan complete. Account, recipient, and amount were filled for your verification.' });
+            setRecipientVerification({ label: 'Verified' });
+            if (hasDetectedAmount) {
+              setQrScanStatus({ tone: 'safe', message: 'Scan complete. Account, recipient, and amount were filled for your verification.' });
+              // Auto-trigger confirmation modal for immediate user verification when amount is available.
+              setModalState('confirming');
+            } else {
+              setQrScanStatus({ tone: 'safe', message: 'Scan complete. Recipient details are filled. Please enter amount to continue.' });
+              setActiveStep('recipient');
+              window.setTimeout(() => amountInputRef.current?.focus(), 0);
+            }
           } else if (threatResult.status === 'BLOCKED') {
+            setRecipientVerification(null);
             setQrScanStatus({ tone: 'danger', message: threatResult.reason_code || 'Red alert: this payment destination appears risky.' });
             applyResultModal(threatResult);
           } else {
+            setRecipientVerification(null);
             setQrScanStatus({ tone: 'warn', message: threatResult.reason_code || 'This QR needs caution.' });
             applyResultModal(threatResult);
           }
@@ -1644,14 +1611,26 @@ export default function Transaction() {
 
       const threatResult = await scanQrThreat(extractedText, extracted);
       closeQrScanner();
+      const hasDetectedAmount = typeof extracted.amount === 'number' && extracted.amount > 0;
 
       if (threatResult.status === 'APPROVED') {
         setFraudResult(threatResult);
-        setQrScanStatus({ tone: 'safe', message: 'OCR complete. Transfer details are auto-filled. Please verify and confirm.' });
+        setRecipientVerification({ label: 'Verified' });
+        if (hasDetectedAmount) {
+          setQrScanStatus({ tone: 'safe', message: 'OCR complete. Transfer details are auto-filled. Please verify and confirm.' });
+          // Auto-trigger confirmation modal for immediate user verification when amount is available.
+          setModalState('confirming');
+        } else {
+          setQrScanStatus({ tone: 'safe', message: 'OCR complete. Recipient details are auto-filled. Please enter amount to continue.' });
+          setActiveStep('recipient');
+          window.setTimeout(() => amountInputRef.current?.focus(), 0);
+        }
       } else if (threatResult.status === 'BLOCKED') {
+        setRecipientVerification(null);
         setQrScanStatus({ tone: 'danger', message: threatResult.reason_code || 'Red alert: recipient appears in known scam signals.' });
         applyResultModal(threatResult);
       } else {
+        setRecipientVerification(null);
         setQrScanStatus({ tone: 'warn', message: threatResult.reason_code || 'Recipient needs verification before transfer.' });
         applyResultModal(threatResult);
       }
@@ -1728,32 +1707,6 @@ export default function Transaction() {
       if (result.notify_guardian) {
         speakGuardianNotification();
       }
-
-      setBoatProfile((prev) => {
-        if (result.status === 'APPROVED') {
-          const pointsGain = 10 + (result.isVerifiedMerchant ? 6 : 0);
-          const nextDamage = Math.max(0, prev.damage - 8);
-          const nextStrikes = Math.max(0, prev.warningStrikes - 1);
-          return {
-            safePoints: prev.safePoints + pointsGain,
-            damage: nextDamage,
-            warningStrikes: nextStrikes,
-            locked: false,
-          };
-        }
-
-        const damageHit = result.status === 'BLOCKED' ? 24 : 14;
-        const nextDamage = Math.min(100, prev.damage + damageHit);
-        const nextStrikes = prev.warningStrikes + 1;
-        const locked = nextDamage >= 60 || nextStrikes >= 3;
-
-        return {
-          ...prev,
-          damage: nextDamage,
-          warningStrikes: nextStrikes,
-          locked,
-        };
-      });
 
       const newEventId = `txn-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
       setCurrentEventId(newEventId);
@@ -1839,196 +1792,219 @@ export default function Transaction() {
             <p className="text-[#6B7280] dark:text-[#8A8A8A] text-lg">Transfer funds safely with AI-powered fraud monitoring.</p>
           </div>
 
-          <div className="rounded-2xl border border-[#FF5500]/30 bg-[#FF5500]/10 px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="flex flex-col">
-              <span className="text-xs uppercase tracking-[0.18em] text-orange-700 dark:text-[#FF8A4D]">Quick Payment</span>
-              <span className="text-sm text-[#111827] dark:text-white">Scan a merchant or DuitNow QR code to automatically fill in payment details.</span>
+          <button
+            type="button"
+            onClick={() => setIsQrScannerOpen(true)}
+            className="w-full rounded-2xl bg-[#FF5500] px-6 py-6 text-left hover:bg-[#E04B00] transition-colors cursor-pointer shadow-[0_16px_40px_rgba(255,85,0,0.35)]"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-black/20 text-white">
+                  <ScanLine size={22} />
+                </span>
+                <div className="flex flex-col">
+                  <span className="text-[11px] uppercase tracking-[0.18em] text-[#FFE5D5]">Primary Action</span>
+                  <span className="text-white text-xl md:text-2xl font-extrabold font-['Sora']">Scan QR To Auto-Fill & Risk Check</span>
+                </div>
+              </div>
+              <span className="hidden md:inline text-white/90 text-sm font-semibold">Tap to start</span>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsQrScannerOpen(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FF5500] px-4 py-2.5 text-sm font-bold text-[#111827] dark:text-white hover:bg-[#E04B00] transition-colors cursor-pointer"
-            >
-              <ScanLine size={16} />
-              Scan Any QR for Scam
-            </button>
-          </div>
+          </button>
 
           {qrScanStatus && (
-            <div className={`rounded-xl px-4 py-3 border ${
+            <div className={`rounded-2xl px-5 py-5 ${
               qrScanStatus.tone === 'safe'
-                ? 'border-[#32D74B]/40 bg-[#32D74B]/10 text-[#C7FFD0]'
+                ? 'bg-[#19A75A] text-white'
                 : qrScanStatus.tone === 'danger'
-                  ? 'border-[#FF3B30]/40 bg-[#FF3B30]/10 text-[#FFC9C5]'
-                  : 'border-[#FF9F0A]/40 bg-[#FF9F0A]/10 text-[#FFD7A1]'
+                  ? 'bg-[#C62828] text-white'
+                  : 'bg-[#B56B00] text-white'
             }`}>
-              <span className="text-sm font-medium">{qrScanStatus.message}</span>
+              <div className="flex items-start gap-3">
+                {qrScanStatus.tone === 'safe' ? <CheckCircle size={20} className="mt-0.5" /> : qrScanStatus.tone === 'danger' ? <ShieldAlert size={20} className="mt-0.5" /> : <AlertTriangle size={20} className="mt-0.5" />}
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm font-extrabold tracking-[0.02em]">
+                    {qrScanStatus.tone === 'safe' ? 'Recipient Verified via MCMC Database' : qrScanStatus.tone === 'danger' ? 'Scam Risk Alert' : 'Manual Verification Required'}
+                  </p>
+                  <p className="text-sm font-semibold">{qrScanStatus.message}</p>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Sender Information */}
-          <div className="flex flex-col gap-6">
-            <h2 className="text-[#111827] dark:text-white text-lg font-semibold border-b border-black/10 dark:border-white/10 pb-4">Sender Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
-                <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Sender Name</span>
-                <span className="text-[#111827] dark:text-white font-semibold">Alex Tan</span>
-              </div>
-              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
-                <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Account Number</span>
-                <span className="text-[#111827] dark:text-white font-mono text-sm tracking-widest text-[#FF5500]">**** **** 8899</span>
-              </div>
-              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
-                <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Available Balance</span>
-                <span className="text-[#111827] dark:text-white font-semibold font-['Sora']">RM 12,450</span>
-              </div>
-              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
-                <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Wallet</span>
-                <span className="text-[#111827] dark:text-white font-semibold">DemoPay Wallet</span>
-              </div>
-            </div>
-            <SafetyBoatCard profile={boatProfile} />
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#121212]/70 p-2">
+            {[
+              { key: 'sender' as const, title: 'Account Details' },
+              { key: 'recipient' as const, title: 'Transfer' },
+            ].map((step) => (
+              <button
+                key={step.key}
+                type="button"
+                onClick={() => setActiveStep(step.key)}
+                className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${activeStep === step.key ? 'bg-[#FF5500] text-white' : 'bg-black/5 dark:bg-white/5 text-[#6B7280] dark:text-[#A2A2A2]'}`}
+              >
+                {step.title}
+              </button>
+            ))}
           </div>
 
-          {/* Recipient Information */}
-          <div className="flex flex-col gap-6">
-            <h2 className="text-[#111827] dark:text-white text-lg font-semibold border-b border-black/10 dark:border-white/10 pb-4">Recipient Information</h2>
-            {scannedQrPayload && (
-              <div className="flex items-center justify-between rounded-xl border border-[#FF5500]/30 bg-[#FF5500]/8 px-4 py-3">
-                <div className="flex flex-col">
-                  <span className="text-xs uppercase tracking-[0.18em] text-orange-700 dark:text-[#FF8A4D]">QR Integrity Shield</span>
-                  <span className="text-sm text-[#111827] dark:text-white">Recipient details loaded from QR.</span>
+          {activeStep === 'sender' && (
+            <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#111111]/70 px-5 py-5">
+              <h2 className="text-[#111827] dark:text-white text-lg font-semibold mb-4">Account Details</h2>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
+                  <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Sender Name</span>
+                  <span className="text-[#111827] dark:text-white font-semibold">Alex Tan</span>
+                </div>
+                <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
+                  <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Account Number</span>
+                  <span className="text-[#111827] dark:text-white font-mono text-sm tracking-widest text-[#FF5500]">**** **** 8899</span>
+                </div>
+                <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
+                  <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Available Balance</span>
+                  <span className="text-[#111827] dark:text-white font-semibold font-['Sora']">RM 12,450</span>
+                </div>
+                <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
+                  <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Wallet</span>
+                  <span className="text-[#111827] dark:text-white font-semibold">DemoPay Wallet</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeStep === 'recipient' && (
+            <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#111111]/70 px-5 py-5 flex flex-col gap-5">
+                {scannedQrPayload && (
+                  <div className="flex items-center justify-between rounded-xl border border-[#FF5500]/30 bg-[#FF5500]/8 px-4 py-3">
+                    <div className="flex flex-col">
+                      <span className="text-xs uppercase tracking-[0.18em] text-orange-700 dark:text-[#FF8A4D]">QR Integrity Shield</span>
+                      <span className="text-sm text-[#111827] dark:text-white">Recipient details loaded from QR.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScannedQrPayload(null);
+                        setQrScanStatus(null);
+                        setRecipientVerification(null);
+                      }}
+                      className="text-xs font-semibold text-orange-700 dark:text-[#FF8A4D] hover:text-[#FFAA78] cursor-pointer"
+                    >
+                      Clear QR
+                    </button>
+                  </div>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Recipient Name</label>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#1F9D55] px-2.5 py-0.5 text-[10px] font-bold text-white">
+                        <CheckCircle size={11} />
+                        Verified
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={recipientName}
+                      onFocus={() => setActiveStep('recipient')}
+                      onChange={(e) => {
+                        setRecipientName(e.target.value);
+                        setRecipientVerification(null);
+                      }}
+                      placeholder="Enter recipient name"
+                      className="bg-transparent text-[#111827] dark:text-white text-2xl font-bold outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
+                    <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Account Number</label>
+                    <input
+                      type="text"
+                      value={recipientAccount}
+                      onFocus={() => setActiveStep('recipient')}
+                      onChange={(e) => {
+                        setRecipientAccount(e.target.value);
+                        setRecipientVerification(null);
+                      }}
+                      placeholder="Enter account number"
+                      className="bg-transparent text-[#111827] dark:text-white font-mono text-xl tracking-[0.2em] text-[#FF5500] outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
+                    />
+                  </div>
+                  <StyledDropdown
+                    label="Wallet Provider"
+                    value={selectedProvider}
+                    onChange={setSelectedProvider}
+                    groups={[
+                      {
+                        label: 'Banks',
+                        options: MALAYSIA_BANKS.map((provider) => ({ label: provider, value: provider })),
+                      },
+                      {
+                        label: 'E-Wallets',
+                        options: MALAYSIA_EWALLETS.map((provider) => ({ label: provider, value: provider })),
+                      },
+                    ]}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
+                    <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Amount</label>
+                    <input
+                      ref={amountInputRef}
+                      type="text"
+                      value={amount}
+                      onFocus={() => setActiveStep('recipient')}
+                      onChange={(e) => {
+                        setAmount(e.target.value);
+                        setActiveStep('recipient');
+                      }}
+                      placeholder="0.00"
+                      className="bg-transparent text-[#111827] dark:text-white font-bold font-['Sora'] text-4xl outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
+                    <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Note (Optional)</label>
+                    <input
+                      type="text"
+                      defaultValue=""
+                      placeholder="Enter transfer note"
+                      className="bg-transparent text-[#111827] dark:text-white font-semibold italic opacity-80 outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-blue-200 dark:border-[#5DA8FF44] bg-blue-50 dark:bg-[#5DA8FF12] px-4 py-3">
+                  <p className="text-sm font-semibold text-blue-900 dark:text-[#D4E9FF]">Context Detection is Automatic</p>
+                  <p className="mt-1 text-xs text-blue-800 dark:text-[#B7D7FA]">Device fingerprint and IP reputation are auto-detected by the backend, just like real production flow.</p>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] uppercase tracking-[0.14em] text-blue-700 dark:text-[#89BDEB]">Judge Demo Preset</span>
+                    {[
+                      { key: 'real-auto', label: 'Real Auto' },
+                      { key: 'new-device', label: 'New Device' },
+                      { key: 'risky-ip', label: 'Risky IP' },
+                      { key: 'max-risk', label: 'Max Risk' },
+                    ].map((preset) => (
+                      <button
+                        key={preset.key}
+                        type="button"
+                        onClick={() => setJudgeDemoPreset(preset.key as 'real-auto' | 'new-device' | 'risky-ip' | 'max-risk')}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${judgeDemoPreset === preset.key ? 'bg-blue-500 dark:bg-[#5DA8FF] text-white dark:text-[#0F1722]' : 'bg-black/5 dark:bg-[#FFFFFF10] text-blue-800 dark:text-[#D2E6FA] hover:bg-black/10 dark:hover:bg-black/5 dark:bg-[#FFFFFF1A]'}`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <button
-                  type="button"
+                  data-tour="transaction-submit"
                   onClick={() => {
-                    setScannedQrPayload(null);
-                    setQrScanStatus(null);
+                    setModalState('confirming');
                   }}
-                  className="text-xs font-semibold text-orange-700 dark:text-[#FF8A4D] hover:text-[#FFAA78] cursor-pointer"
+                  className="w-full bg-[#FF5500] hover:bg-[#E04B00] transition-colors py-5 rounded-xl text-[#111827] dark:text-white font-['Sora'] font-bold text-lg mt-4 cursor-pointer"
                 >
-                  Clear QR
+                  Transfer Now
                 </button>
-              </div>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
-                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Recipient Name</label>
-                <input 
-                  type="text" 
-                  value={recipientName}
-                  onChange={(e) => setRecipientName(e.target.value)}
-                  placeholder="Enter recipient name"
-                  className="bg-transparent text-[#111827] dark:text-white font-semibold outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
-                />
-              </div>
-              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
-                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Account Number</label>
-                <input 
-                  type="text" 
-                  value={recipientAccount}
-                  onChange={(e) => setRecipientAccount(e.target.value)}
-                  placeholder="Enter account number"
-                  className="bg-transparent text-[#111827] dark:text-white font-mono text-sm tracking-widest text-[#FF5500] outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
-                />
-              </div>
-              <StyledDropdown
-                label="Wallet Provider"
-                value={selectedProvider}
-                onChange={setSelectedProvider}
-                groups={[
-                  {
-                    label: 'Banks',
-                    options: MALAYSIA_BANKS.map((provider) => ({ label: provider, value: provider })),
-                  },
-                  {
-                    label: 'E-Wallets',
-                    options: MALAYSIA_EWALLETS.map((provider) => ({ label: provider, value: provider })),
-                  },
-                ]}
-              />
             </div>
-          </div>
-
-          {/* Transaction Details */}
-          <div className="flex flex-col gap-6">
-            <h2 className="text-[#111827] dark:text-white text-lg font-semibold border-b border-black/10 dark:border-white/10 pb-4">Transaction Details</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
-                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Amount</label>
-                <input 
-                  type="text" 
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="bg-transparent text-[#111827] dark:text-white font-bold font-['Sora'] text-2xl outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
-                />
-              </div>
-              <StyledDropdown
-                label="Currency"
-                value={selectedCurrency}
-                onChange={setSelectedCurrency}
-                groups={[
-                  {
-                    options: ['MYR', 'USD', 'EUR', 'SGD'].map((currency) => ({ label: currency, value: currency })),
-                  },
-                ]}
-              />
-              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
-                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Transfer Note (Optional)</label>
-                <input 
-                  type="text" 
-                  defaultValue="" 
-                  placeholder="Enter transfer note"
-                  className="bg-transparent text-[#111827] dark:text-white font-semibold italic opacity-80 outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
-                />
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-blue-200 dark:border-[#5DA8FF44] bg-blue-50 dark:bg-[#5DA8FF12] px-4 py-3">
-              <p className="text-sm font-semibold text-blue-900 dark:text-[#D4E9FF]">Context Detection is Automatic</p>
-              <p className="mt-1 text-xs text-blue-800 dark:text-[#B7D7FA]">Device fingerprint and IP reputation are auto-detected by the backend, just like real production flow.</p>
-
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="text-[11px] uppercase tracking-[0.14em] text-blue-700 dark:text-[#89BDEB]">Judge Demo Preset</span>
-                {[
-                  { key: 'real-auto', label: 'Real Auto' },
-                  { key: 'new-device', label: 'New Device' },
-                  { key: 'risky-ip', label: 'Risky IP' },
-                  { key: 'max-risk', label: 'Max Risk' },
-                ].map((preset) => (
-                  <button
-                    key={preset.key}
-                    type="button"
-                    onClick={() => setJudgeDemoPreset(preset.key as 'real-auto' | 'new-device' | 'risky-ip' | 'max-risk')}
-                    className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${judgeDemoPreset === preset.key ? 'bg-blue-500 dark:bg-[#5DA8FF] text-white dark:text-[#0F1722]' : 'bg-black/5 dark:bg-[#FFFFFF10] text-blue-800 dark:text-[#D2E6FA] hover:bg-black/10 dark:hover:bg-black/5 dark:bg-[#FFFFFF1A]'}`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Security Indicator */}
-          <div className="flex items-center gap-4 bg-[#FFFFFF05] border border-white/10 p-5 rounded-xl">
-            <ShieldCheck size={28} className="text-[#32D74B]" />
-            <div className="flex flex-col">
-              <span className="text-white font-bold">Privacy-First AI Monitor</span>
-              <span className="text-[#8A8A8A] text-sm">Device, IP, & behavioral data encrypt-assessed for real-time risk scoring.</span>
-            </div>
-          </div>
-
-          {/* Button */}
-          <button 
-            data-tour="transaction-submit"
-            onClick={() => {
-              setModalState('confirming');
-            }}
-            className="w-full bg-[#FF5500] hover:bg-[#E04B00] transition-colors py-5 rounded-xl text-[#111827] dark:text-white font-['Sora'] font-bold text-lg mt-4 cursor-pointer"
-          >
-            Transfer Now
-          </button>
+          )}
         </div>
       </div>
 
@@ -2340,7 +2316,9 @@ export default function Transaction() {
                 <button onClick={() => setModalState('idle')} className="flex-1 bg-transparent border border-black/20 dark:border-white/20 text-[#111827] dark:text-white rounded-lg py-3 font-semibold hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer">
                   Cancel
                 </button>
-                <button onClick={() => continueTransactionAfterGate()} className="flex-1 bg-[#FF3B30] hover:bg-[#E0352B] transition-colors text-[#111827] dark:text-white rounded-lg py-3 font-semibold cursor-pointer">
+                <button onClick={() => {
+                  continueTransactionAfterGate();
+                }} className="flex-1 bg-[#FF3B30] hover:bg-[#E0352B] transition-colors text-[#111827] dark:text-white rounded-lg py-3 font-semibold cursor-pointer">
                   Confirm
                 </button>
               </div>
