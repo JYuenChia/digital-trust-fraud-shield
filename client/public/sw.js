@@ -1,4 +1,4 @@
-const CACHE_NAME = 'digital-trust-fraud-shield-v2';
+const CACHE_NAME = 'digital-trust-fraud-shield-v3';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -41,6 +41,20 @@ self.addEventListener('fetch', (event) => {
         const cachedOffline = await caches.match('/offline.html');
         return cachedOffline || caches.match('/index.html');
       }),
+    );
+    return;
+  }
+
+  // Prefer fresh app code so old UI sections do not persist from stale cache.
+  if (request.destination === 'script' || request.destination === 'style') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          return response;
+        })
+        .catch(() => caches.match(request).then((cached) => cached || caches.match('/offline.html'))),
     );
     return;
   }
