@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ShieldCheck, ShieldAlert, Plus, CreditCard, CheckCircle2, Landmark, Smartphone, Sun, Moon, X } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Plus, CreditCard, CheckCircle2, Landmark, Smartphone, X } from 'lucide-react';
 import { FRAUD_API_BASE_URL } from '@/const';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useTheme } from '../contexts/ThemeContext';
 import { Link } from 'wouter';
 
 type VerificationState = 'verified' | 'pending' | 'action_required';
@@ -85,7 +84,6 @@ const CARD_STORAGE_KEY = 'fraud-shield-cards-v1';
 const SENIOR_ACCOUNT = 'ALEX8899';
 
 export default function Profile() {
-  const { theme, toggleTheme } = useTheme();
   const { language, setLanguage, t } = useLanguage();
   const [fullName, setFullName] = useState(() => {
     const saved = localStorage.getItem(`${PROFILE_STORAGE_KEY}-name`);
@@ -99,10 +97,6 @@ export default function Profile() {
   });
   const [phone, setPhone] = useState(() => localStorage.getItem(`${PROFILE_STORAGE_KEY}-phone`) ?? '+60 12-777 8899');
   const [nationality, setNationality] = useState(() => localStorage.getItem(`${PROFILE_STORAGE_KEY}-nationality`) ?? 'Malaysia');
-  const [walletPinEnabled, setWalletPinEnabled] = useState(() => localStorage.getItem(`${PROFILE_STORAGE_KEY}-pin`) !== 'false');
-  const [biometricEnabled, setBiometricEnabled] = useState(() => localStorage.getItem(`${PROFILE_STORAGE_KEY}-biometric`) === 'true');
-  const [showPinSetupModal, setShowPinSetupModal] = useState(false);
-  const [newPin, setNewPin] = useState('');
   const [saveMessage, setSaveMessage] = useState('');
   const [activeTab, setActiveTab] = useState<ProfileTab>('account');
 
@@ -170,8 +164,6 @@ export default function Profile() {
     localStorage.setItem(`${PROFILE_STORAGE_KEY}-email`, email);
     localStorage.setItem(`${PROFILE_STORAGE_KEY}-phone`, phone);
     localStorage.setItem(`${PROFILE_STORAGE_KEY}-nationality`, nationality);
-    localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin`, String(walletPinEnabled));
-    localStorage.setItem(`${PROFILE_STORAGE_KEY}-biometric`, String(biometricEnabled));
     setSaveMessage(t('profile.updated'));
     setTimeout(() => setSaveMessage(''), 1800);
   };
@@ -442,25 +434,25 @@ export default function Profile() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-muted">
+                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-muted border border-border">
                     <label className="text-sm text-muted-foreground">{t('profile.fullName')}</label>
                     <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="bg-transparent text-foreground font-semibold outline-none" />
                   </div>
-                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-muted">
+                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-muted border border-border">
                     <label className="text-sm text-muted-foreground">{t('profile.email')}</label>
                     <input value={email} onChange={(e) => setEmail(e.target.value)} className="bg-transparent text-foreground font-semibold outline-none" />
                   </div>
-                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-muted">
+                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-muted border border-border">
                     <label className="text-sm text-muted-foreground">{t('profile.phoneNumber')}</label>
                     <input value={phone} onChange={(e) => setPhone(e.target.value)} className="bg-transparent text-foreground font-semibold outline-none" />
                   </div>
-                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-muted">
+                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-muted border border-border">
                     <label className="text-sm text-muted-foreground">{t('profile.nationality')}</label>
                     <input value={nationality} onChange={(e) => setNationality(e.target.value)} className="bg-transparent text-foreground font-semibold outline-none" />
                   </div>
                 </div>
 
-                <div className="rounded-xl bg-muted p-4 flex flex-col gap-2">
+                <div className="rounded-xl bg-muted border border-border p-4 flex flex-col gap-2">
                   <span className="text-foreground text-sm font-semibold">{t('profile.languagePreference')}</span>
                   <p className="text-xs text-muted-foreground">{t('profile.languageHint')}</p>
                   <select
@@ -472,42 +464,6 @@ export default function Profile() {
                     <option value="ms">{t('language.malay')}</option>
                     <option value="zh">{t('language.chinese')}</option>
                   </select>
-                </div>
-
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-center justify-between rounded-xl p-4 bg-muted">
-                    <div className="flex items-center gap-3">
-                      {theme === 'dark' ? <Moon className="text-muted-foreground" size={20} /> : <Sun className="text-[#F59E0B]" size={20} />}
-                      <span className="text-foreground text-sm font-semibold">{t('profile.applicationTheme')}</span>
-                    </div>
-                    {toggleTheme && (
-                      <button onClick={toggleTheme} className={`${primaryButtonClass} border border-input bg-background text-foreground`}>
-                        {theme === 'light' ? t('profile.switchDark') : t('profile.switchLight')}
-                      </button>
-                    )}
-                  </div>
-
-                  <div data-tour="profile-wallet-pin" className="flex flex-col gap-2">
-                    <button
-                      onClick={() => {
-                        if (walletPinEnabled) {
-                          setWalletPinEnabled(false);
-                          localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin`, 'false');
-                          localStorage.removeItem(`${PROFILE_STORAGE_KEY}-pin-value`);
-                        } else {
-                          setShowPinSetupModal(true);
-                          setNewPin('');
-                        }
-                      }}
-                      className="flex items-center justify-between rounded-xl p-4 bg-muted"
-                    >
-                      <span className="text-foreground text-sm font-semibold">{t('profile.walletPinProtection')}</span>
-                      <span className={`text-xs font-bold px-2 py-1 rounded ${walletPinEnabled ? 'bg-[#DCFCE7] text-[#15803D]' : 'bg-[#FEE2E2] text-[#B91C1C]'}`}>{walletPinEnabled ? 'ON' : 'OFF'}</span>
-                    </button>
-                    {!walletPinEnabled && (
-                      <p className="text-[#D97706] text-xs px-2">When Wallet PIN is enabled, your PIN will be required to authorize every transaction.</p>
-                    )}
-                  </div>
                 </div>
 
                 {saveMessage && <div className="text-[#15803D] text-sm font-semibold">{saveMessage}</div>}
@@ -524,11 +480,11 @@ export default function Profile() {
                 </div>
 
                 {showLinkForm && (
-                  <div className="rounded-xl bg-muted p-5 flex flex-col gap-4">
+                  <div className="rounded-xl bg-muted p-5 flex flex-col gap-4 border border-border">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div className="flex flex-col gap-2">
                         <label className="text-muted-foreground text-xs">Bank</label>
-                        <select value={newCardBank} onChange={(e) => setNewCardBank(e.target.value)} className="h-10 rounded-lg border border-input bg-background px-3 text-foreground">
+                        <select value={newCardBank} onChange={(e) => setNewCardBank(e.target.value)} className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground">
                           {MALAYSIA_BANKS.map((bank) => (
                             <option key={bank} value={bank}>{bank}</option>
                           ))}
@@ -536,15 +492,15 @@ export default function Profile() {
                       </div>
                       <div className="flex flex-col gap-2">
                         <label className="text-muted-foreground text-xs">Card Number</label>
-                        <input value={newCardNumber} onChange={(e) => setNewCardNumber(e.target.value)} placeholder="4111 1111 1111 1111" className="h-10 rounded-lg border border-input bg-background px-3 text-foreground" />
+                        <input value={newCardNumber} onChange={(e) => setNewCardNumber(e.target.value)} placeholder="4111 1111 1111 1111" className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground" />
                       </div>
                       <div className="flex flex-col gap-2">
                         <label className="text-muted-foreground text-xs">Card Holder</label>
-                        <input value={newCardHolder} onChange={(e) => setNewCardHolder(e.target.value)} placeholder="Name on card" className="h-10 rounded-lg border border-input bg-background px-3 text-foreground" />
+                        <input value={newCardHolder} onChange={(e) => setNewCardHolder(e.target.value)} placeholder="Name on card" className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground" />
                       </div>
                       <div className="flex flex-col gap-2">
                         <label className="text-muted-foreground text-xs">Card Type</label>
-                        <select value={newCardType} onChange={(e) => setNewCardType(e.target.value as 'debit' | 'credit')} className="h-10 rounded-lg border border-input bg-background px-3 text-foreground">
+                        <select value={newCardType} onChange={(e) => setNewCardType(e.target.value as 'debit' | 'credit')} className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground">
                           <option value="debit">Debit</option>
                           <option value="credit">Credit</option>
                         </select>
@@ -557,7 +513,7 @@ export default function Profile() {
 
                     {verificationStep === 'otp' && (
                       <div className="flex flex-wrap items-center gap-3">
-                        <input value={otpCode} onChange={(e) => setOtpCode(e.target.value)} placeholder="Enter 6-digit OTP" className="h-10 rounded-lg border border-input bg-background px-3 text-foreground" />
+                        <input value={otpCode} onChange={(e) => setOtpCode(e.target.value)} placeholder="Enter 6-digit OTP" className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground" />
                         <button onClick={confirmOtp} className={`${primaryButtonClass} bg-[#16A34A] hover:bg-[#15803D] text-white`}>Confirm OTP</button>
                       </div>
                     )}
@@ -574,7 +530,7 @@ export default function Profile() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {cards.map((card) => (
-                    <div key={card.id} className="rounded-xl p-5 bg-muted flex flex-col gap-3">
+                    <div key={card.id} className="rounded-xl p-5 bg-muted flex flex-col gap-3 border border-border">
                       <div className="flex items-center justify-between">
                         <CreditCard size={18} className="text-foreground" />
                         <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${statusPill(card.status)}`}>{card.status.toUpperCase()}</span>
@@ -599,7 +555,7 @@ export default function Profile() {
                   <span className="rounded-full bg-[#DBEAFE] px-3 py-1 text-xs font-semibold text-[#1D4ED8]">{guardians.length} linked</span>
                 </div>
 
-                <div className="rounded-xl bg-muted p-5 flex flex-col gap-4">
+                <div className="rounded-xl bg-muted p-5 flex flex-col gap-4 border border-border">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <input
                       type="text"
@@ -644,7 +600,7 @@ export default function Profile() {
                 <div className="flex flex-col gap-2 max-h-[360px] overflow-auto pr-1">
                   {guardians.length === 0 && <p className="text-sm text-muted-foreground">No guardian linked yet.</p>}
                   {guardians.map((g) => (
-                    <div key={g.guardian_account} className="rounded-lg bg-muted px-4 py-3 flex items-center justify-between gap-3">
+                    <div key={g.guardian_account} className="rounded-lg bg-muted px-4 py-3 flex items-center justify-between gap-3 border border-border">
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-foreground">{g.guardian_name}</span>
                         <span className="text-xs text-muted-foreground">{g.guardian_account} • {g.phone} • {g.email}</span>
@@ -676,7 +632,7 @@ export default function Profile() {
                   </div>
                 </div>
 
-                <div className="rounded-xl bg-muted p-5 flex flex-col gap-4">
+                <div className="rounded-xl bg-muted p-5 flex flex-col gap-4 border border-border">
                   <select
                     value={selectedGuardianAccount}
                     onChange={(e) => setSelectedGuardianAccount(e.target.value)}
@@ -794,93 +750,9 @@ export default function Profile() {
                 {guardianStatus}
               </div>
             )}
-
-            <div className="flex items-center gap-3 rounded-lg bg-muted px-4 py-3">
-              <ShieldAlert size={18} className="text-[#F59E0B]" />
-              <span className="text-muted-foreground text-sm">Profile and card changes are simulated locally for demo mode (no external banking API call).</span>
-            </div>
           </section>
         </div>
       </div>
-
-      {/* PIN Setup Modal */}
-      {showPinSetupModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-8 flex flex-col items-center gap-6">
-            <h2 className="text-[#111827] dark:text-white text-2xl font-bold font-['Sora'] text-center">Set Wallet PIN</h2>
-            <p className="text-[#6B7280] dark:text-[#8A8A8A] text-sm text-center">Create a 6-digit PIN to authorize future transfers.</p>
-            
-            <div className="flex justify-center gap-4 py-4">
-              {[...Array(6)].map((_, i) => (
-                <div 
-                  key={i} 
-                  className={`w-4 h-4 rounded-full transition-colors ${i < newPin.length ? 'bg-[#FF5500]' : 'bg-black/10 dark:bg-white/10'}`} 
-                />
-              ))}
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 w-full">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-                <button
-                  key={num}
-                  onClick={() => {
-                    if (newPin.length < 6) {
-                      const updated = newPin + num;
-                      setNewPin(updated);
-                      if (updated.length === 6) {
-                        setTimeout(() => {
-                           localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin-value`, updated);
-                           localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin`, 'true');
-                           setWalletPinEnabled(true);
-                           setShowPinSetupModal(false);
-                           setSaveMessage('Wallet PIN secure code enabled.');
-                           setTimeout(() => setSaveMessage(''), 2500);
-                        }, 300);
-                      }
-                    }
-                  }}
-                  className="h-14 rounded-2xl bg-[#F8FAFC] dark:bg-[#141414] hover:bg-black/5 dark:hover:bg-white/5 border border-black/5 dark:border-white/5 text-[#111827] dark:text-white font-bold text-xl transition-all flex items-center justify-center cursor-pointer shadow-sm active:scale-95"
-                >
-                  {num}
-                </button>
-              ))}
-              <button 
-                onClick={() => setShowPinSetupModal(false)}
-                className="h-14 rounded-2xl bg-transparent text-[#6B7280] dark:text-[#8A8A8A] font-semibold text-sm transition-all flex items-center justify-center cursor-pointer hover:text-[#111827] dark:hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (newPin.length < 6) {
-                    const updated = newPin + '0';
-                    setNewPin(updated);
-                    if (updated.length === 6) {
-                      setTimeout(() => {
-                         localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin-value`, updated);
-                         localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin`, 'true');
-                         setWalletPinEnabled(true);
-                         setShowPinSetupModal(false);
-                         setSaveMessage('Wallet PIN secure code enabled.');
-                         setTimeout(() => setSaveMessage(''), 2500);
-                      }, 300);
-                    }
-                  }
-                }}
-                className="h-14 rounded-2xl bg-[#F8FAFC] dark:bg-[#141414] hover:bg-black/5 dark:hover:bg-white/5 border border-black/5 dark:border-white/5 text-[#111827] dark:text-white font-bold text-xl transition-all flex items-center justify-center cursor-pointer shadow-sm active:scale-95"
-              >
-                0
-              </button>
-              <button 
-                onClick={() => setNewPin(prev => prev.slice(0, -1))}
-                className="h-14 rounded-2xl bg-transparent text-[#6B7280] dark:text-[#8A8A8A] hover:text-[#111827] dark:hover:text-white transition-all flex items-center justify-center cursor-pointer active:scale-95"
-              >
-                <X size={24} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
