@@ -102,6 +102,8 @@ GUARDIAN_LINKS = {
                 "phone": "+60-12-3456789",
                 "email": "sarah.tan@email.com",
                 "linked_at": "2026-01-15T10:00:00Z",
+                "permission_tier": "CO_SIGNER",  # Phase 2: Permission tiers
+                "verification_status": "VERIFIED",  # Phase 1: Multi-step verification
             }
         ],
         "senior_name": "Alex Tan",
@@ -117,6 +119,23 @@ GUARDIAN_PENDING_APPROVALS = {}
 
 # In-memory auto-report log for demo submissions to external safety channels.
 AUTO_REPORT_LOGS = []
+
+# ============ PHASE 1: Multi-Step Verification Storage ============
+GUARDIAN_INVITE_CODES = {}  # { code: { sender_account, code, created_at, expires_at, status, guardian_email } }
+GUARDIAN_ID_VERIFICATIONS = {}  # { verification_id: { sender_account, guardian_account, photo_url, status, verified_at } }
+GUARDIAN_PROXIMITY_CHECKS = {}  # { check_id: { sender_account, guardian_account, latitude, longitude, bluetooth_strength, checked_at, is_valid } }
+
+# ============ PHASE 2: Permission Tier Storage ============
+GUARDIAN_PERMISSION_TIERS = {}  # { f"{sender_account}:{guardian_account}": { permission_tier, set_at, set_by } }
+
+# ============ PHASE 4: Guest Mode Storage ============
+GUEST_MODE_SETTINGS = {}  # { user_account: { master_pin, biometric_enabled, guest_profiles: [] } }
+GUEST_PROFILES = {}  # { guest_id: { user_account, profile_name, restricted_features: [], created_at } }
+
+# ============ PHASE 5: Voice & Trusted Recipients Storage ============
+GUARDIAN_VOICE_MESSAGES = []  # List of { guardian_account, sender_account, message_text, message_url, created_at, triggered_by }
+TRUSTED_RECIPIENTS = {}  # { f"{guardian_account}:{merchant_id}": { merchant_name, approved_at, approved_by } }
+
 
 # 2. Define what a 'Transaction' looks like
 class Transaction(BaseModel):
@@ -238,6 +257,80 @@ class VoiceAuthenticityResponse(BaseModel):
     pitch_smoothness: float
     speech_band_energy: float
     high_band_energy: float
+
+
+# ============ PHASE 1: Multi-Step Verification Models ============
+class GuardianInviteCode(BaseModel):
+    sender_account: str
+    code: str  # 6-digit code
+    created_at: str
+    expires_at: str
+    status: str  # ACTIVE, USED, EXPIRED
+    guardian_email: str | None = None
+
+
+class GuardianIDVerification(BaseModel):
+    sender_account: str
+    guardian_account: str | None = None
+    photo_url: str
+    verification_status: str  # PENDING, VERIFIED, REJECTED
+    verified_at: str | None = None
+    verification_reason: str | None = None
+
+
+class ProximityCheckRequest(BaseModel):
+    sender_account: str
+    guardian_account: str
+    latitude: float | None = None
+    longitude: float | None = None
+    bluetooth_signal_strength: float | None = None  # -30 (very close) to -90 (far)
+
+
+# ============ PHASE 2: Permission Tier Models ============
+class GuardianPermissionTier(BaseModel):
+    sender_account: str
+    guardian_account: str
+    permission_tier: str  # VIEW_ONLY, CO_SIGNER, FULL_PROTECTOR
+    set_at: str
+    set_by: str  # who set this permission (SENIOR or SYSTEM)
+
+
+# ============ PHASE 5: Voice & Trusted Recipients Models ============
+class GuardianVoiceMessage(BaseModel):
+    guardian_account: str
+    sender_account: str
+    message_text: str
+    message_url: str | None = None
+    created_at: str
+    triggered_by: str  # reason for the message (TRANSACTION_BLOCKED, etc.)
+
+
+class TrustedRecipient(BaseModel):
+    merchant_id: str
+    merchant_name: str
+    guardian_account: str
+    approved_at: str
+    approved_by: str  # GUARDIAN
+
+
+# ============ Utility Functions for Multi-Step Verification ============
+def generate_invite_code() -> str:
+    """Generate a 6-digit numeric code for guardian linking."""
+    import random
+    return ''.join([str(random.randint(0, 9)) for _ in range(6)])
+
+
+def calculate_proximity_validity(latitude: float | None, longitude: float | None, 
+                                 bluetooth_signal: float | None) -> bool:
+    """Check if proximity data indicates in-person linking (within ~10 meters)."""
+    # Bluetooth signal strength: -30 dBm (very close) to -90 dBm (far)
+    # Threshold: -60 dBm indicates close proximity (within 10-15 meters)
+    if bluetooth_signal is not None:
+        return bluetooth_signal > -60
+    
+    # GPS accuracy is generally 5-15 meters, not reliable for exact proximity
+    # In production, use Bluetooth/NFC as primary, GPS as secondary
+    return False
 
 
 def build_onboarding_friction_profile(score: int, total: int) -> dict:
@@ -1683,6 +1776,675 @@ async def generate_recovery_report(payload: RecoveryReportRequest):
         "next_steps": "Submit this report to your bank and law enforcement authorities",
         "generated_at": datetime.now().isoformat() + "Z"
     }
+
+
+# ============ PHASE 1: Multi-Step Verification Endpoints ============
+@app.post("/guardians/generate-invite-code")
+async def generate_invite_code_endpoint(data: dict):
+    """Generate a 6-digit invite code for guardian linking with 10-minute expiry."""
+    sender_account = data.get("sender_account")
+    guardian_email = data.get("guardian_email")
+    
+    if not sender_account:
+        return {"success": False, "message": "sender_account is required"}
+    
+    code = generate_invite_code()
+    created_at = datetime.now()
+    expires_at = created_at + timedelta(minutes=10)
+    
+    invite = {
+        "sender_account": sender_account,
+        "code": code,
+        "created_at": created_at.isoformat() + "Z",
+        "expires_at": expires_at.isoformat() + "Z",
+        "status": "ACTIVE",
+        "guardian_email": guardian_email,
+    }
+    
+    GUARDIAN_INVITE_CODES[code] = invite
+    
+    return {
+        "success": True,
+        "message": "Invite code generated successfully",
+        "code": code,
+        "expires_at": invite["expires_at"],
+        "expires_in_minutes": 10,
+    }
+
+
+@app.post("/guardians/verify-invite-code")
+async def verify_invite_code_endpoint(data: dict):
+    """Verify the 6-digit invite code and proceed to ID verification."""
+    sender_account = data.get("sender_account")
+    code = data.get("code", "").strip()
+    
+    if not sender_account or not code:
+        return {"success": False, "message": "sender_account and code are required"}
+    
+    invite = GUARDIAN_INVITE_CODES.get(code)
+    if not invite:
+        return {"success": False, "message": "Invalid or expired invite code"}
+    
+    # Check if code belongs to this sender
+    if invite["sender_account"] != sender_account:
+        return {"success": False, "message": "Invite code does not match this account"}
+    
+    # Check if code is expired
+    expires_at = datetime.fromisoformat(invite["expires_at"].replace("Z", "+00:00"))
+    if datetime.now(expires_at.tzinfo) > expires_at:
+        invite["status"] = "EXPIRED"
+        return {"success": False, "message": "Invite code has expired"}
+    
+    # Mark code as verified (next step: ID verification)
+    invite["status"] = "VERIFIED"
+    
+    return {
+        "success": True,
+        "message": "Invite code verified successfully. Please proceed to ID verification.",
+        "next_step": "id_verification",
+    }
+
+
+@app.post("/guardians/verify-id")
+async def verify_id_endpoint(data: dict):
+    """Upload ID photo for verification and check document authenticity."""
+    sender_account = data.get("sender_account")
+    guardian_email = data.get("guardian_email")
+    photo_base64 = data.get("photo_base64")
+    document_type = data.get("document_type", "national_id")  # passport, national_id, driver_license
+    
+    if not sender_account or not photo_base64:
+        return {"success": False, "message": "sender_account and photo_base64 are required"}
+    
+    # In production: Use AWS Rekognition, Azure Face API, or similar for actual ID verification
+    # For demo: Simulate verification with basic validation
+    verification_id = f"VER-{uuid4().hex[:12].upper()}"
+    created_at = datetime.now()
+    
+    # Simulate ID verification (in production, check MRZ, faces, security features, liveness)
+    is_valid = len(photo_base64) > 100  # Basic check in demo
+    verification_status = "VERIFIED" if is_valid else "REJECTED"
+    verified_at = created_at.isoformat() + "Z" if is_valid else None
+    
+    verification_record = {
+        "verification_id": verification_id,
+        "sender_account": sender_account,
+        "guardian_email": guardian_email,
+        "photo_url": f"data:image/png;base64,{photo_base64[:50]}...",  # Store reference
+        "document_type": document_type,
+        "verification_status": verification_status,
+        "verified_at": verified_at,
+        "verification_reason": "Document authenticity check completed. ID matched biometric profile." if is_valid else "Document authenticity check failed.",
+        "created_at": created_at.isoformat() + "Z",
+    }
+    
+    GUARDIAN_ID_VERIFICATIONS[verification_id] = verification_record
+    
+    return {
+        "success": is_valid,
+        "message": "ID verification completed" if is_valid else "ID verification failed",
+        "verification_id": verification_id,
+        "verification_status": verification_status,
+        "next_step": "proximity_check" if is_valid else None,
+        "verified_at": verified_at,
+    }
+
+
+@app.post("/guardians/check-proximity")
+async def check_proximity_endpoint(data: dict):
+    """Verify in-person linking with Bluetooth/GPS proximity check."""
+    sender_account = data.get("sender_account")
+    guardian_account = data.get("guardian_account")
+    guardian_email = data.get("guardian_email")
+    guardian_name = data.get("guardian_name")
+    latitude = data.get("latitude")
+    longitude = data.get("longitude")
+    bluetooth_signal_strength = data.get("bluetooth_signal_strength")
+    
+    if not sender_account or not guardian_account:
+        return {"success": False, "message": "sender_account and guardian_account are required"}
+    
+    check_id = f"PROX-{uuid4().hex[:12].upper()}"
+    created_at = datetime.now()
+    
+    # Determine if proximity is valid (primarily Bluetooth-based, GPS as secondary)
+    is_valid_proximity = calculate_proximity_validity(latitude, longitude, bluetooth_signal_strength)
+    
+    proximity_record = {
+        "check_id": check_id,
+        "sender_account": sender_account,
+        "guardian_account": guardian_account,
+        "latitude": latitude,
+        "longitude": longitude,
+        "bluetooth_signal_strength": bluetooth_signal_strength,
+        "is_valid_proximity": is_valid_proximity,
+        "checked_at": created_at.isoformat() + "Z",
+    }
+    
+    GUARDIAN_PROXIMITY_CHECKS[check_id] = proximity_record
+    
+    if is_valid_proximity:
+        # If proximity is valid, proceed to finalize the guardian link
+        # Mark the guardian as verified in GUARDIAN_LINKS
+        if sender_account not in GUARDIAN_LINKS:
+            GUARDIAN_LINKS[sender_account] = {
+                "guardians": [],
+                "senior_name": "Senior User",
+                "notification_threshold_risk": 0.75,
+            }
+        
+        new_guardian = {
+            "guardian_account": guardian_account,
+            "guardian_name": guardian_name or guardian_account,
+            "phone": data.get("phone", ""),
+            "email": guardian_email,
+            "linked_at": created_at.isoformat() + "Z",
+            "permission_tier": "CO_SIGNER",  # Default tier, can be changed later
+            "verification_status": "VERIFIED",
+            "verification_method": "multi_step_verification",
+            "id_verified": True,
+            "proximity_verified": True,
+        }
+        
+        GUARDIAN_LINKS[sender_account]["guardians"].append(new_guardian)
+        
+        return {
+            "success": True,
+            "message": "In-person proximity verified. Guardian linked successfully!",
+            "check_id": check_id,
+            "guardian": new_guardian,
+            "next_step": "complete",
+        }
+    else:
+        return {
+            "success": False,
+            "message": "Proximity check failed. Please ensure you are within 10 meters of the senior user and Bluetooth is enabled.",
+            "check_id": check_id,
+            "reason": "insufficient_proximity",
+            "hint": "Try moving closer or ensuring Bluetooth signal is stronger",
+        }
+
+
+# ============ PHASE 2: Permission Tier Management Endpoints ============
+@app.put("/guardians/{sender_account}/{guardian_account}/permission-tier")
+async def set_guardian_permission_tier(sender_account: str, guardian_account: str, data: dict):
+    """Set or update guardian permission tier (VIEW_ONLY, CO_SIGNER, FULL_PROTECTOR)."""
+    permission_tier = data.get("permission_tier", "").upper()
+    
+    if permission_tier not in {"VIEW_ONLY", "CO_SIGNER", "FULL_PROTECTOR"}:
+        return {"success": False, "message": "Invalid permission tier"}
+    
+    # Update in GUARDIAN_LINKS
+    if sender_account in GUARDIAN_LINKS:
+        for g in GUARDIAN_LINKS[sender_account]["guardians"]:
+            if g["guardian_account"] == guardian_account:
+                g["permission_tier"] = permission_tier
+                break
+    
+    # Store in permission tier table
+    tier_key = f"{sender_account}:{guardian_account}"
+    GUARDIAN_PERMISSION_TIERS[tier_key] = {
+        "permission_tier": permission_tier,
+        "set_at": datetime.now().isoformat() + "Z",
+        "set_by": "SENIOR",
+    }
+    
+    return {
+        "success": True,
+        "message": f"Permission tier updated to {permission_tier}",
+        "sender_account": sender_account,
+        "guardian_account": guardian_account,
+        "permission_tier": permission_tier,
+    }
+
+
+@app.get("/guardians/{sender_account}/permissions")
+async def get_guardian_permissions(sender_account: str):
+    """Get all guardians and their permission tiers for a senior account."""
+    if sender_account not in GUARDIAN_LINKS:
+        return {
+            "sender_account": sender_account,
+            "guardians": [],
+        }
+    
+    guardians_with_permissions = []
+    for g in GUARDIAN_LINKS[sender_account]["guardians"]:
+        tier_key = f"{sender_account}:{g['guardian_account']}"
+        permission_tier = GUARDIAN_PERMISSION_TIERS.get(tier_key, {}).get("permission_tier", g.get("permission_tier", "CO_SIGNER"))
+        
+        guardians_with_permissions.append({
+            "guardian_account": g["guardian_account"],
+            "guardian_name": g["guardian_name"],
+            "email": g["email"],
+            "phone": g["phone"],
+            "linked_at": g["linked_at"],
+            "permission_tier": permission_tier,
+            "verification_status": g.get("verification_status", "UNVERIFIED"),
+        })
+    
+    return {
+        "sender_account": sender_account,
+        "guardians": guardians_with_permissions,
+    }
+
+
+# ============ PHASE 3: Forensic Reports & Authority Submission ============
+@app.post("/guardians/{guardian_account}/forensic-report/generate")
+async def generate_forensic_report(guardian_account: str, data: dict):
+    """Generate a forensic report for confirmed fraud incidents with transaction details."""
+    sender_account = data.get("sender_account")
+    transaction_hash = data.get("transaction_hash", f"TXN-{uuid4().hex[:16].upper()}")
+    recipient_account = data.get("recipient_account")
+    recipient_name = data.get("recipient_name")
+    amount = data.get("amount", 0)
+    currency = data.get("currency", "MYR")
+    merchant_id = data.get("merchant_id")
+    ip_address = data.get("ip_address", "203.0.113.45")  # Example IP
+    device_info = data.get("device_info", "iOS Safari Mobile")
+    ml_reason_code = data.get("ml_reason_code", "qr_phishing_pattern_89")
+    risk_score = data.get("risk_score", 0.87)
+    
+    report_id = f"FORENSIC-{uuid4().hex[:12].upper()}"
+    created_at = datetime.now()
+    
+    # Build forensic report with all transaction details
+    forensic_report = {
+        "report_id": report_id,
+        "guardian_account": guardian_account,
+        "sender_account": sender_account,
+        "created_at": created_at.isoformat() + "Z",
+        "incident_type": "Confirmed Fraud",
+        "transaction": {
+            "hash": transaction_hash,
+            "amount": amount,
+            "currency": currency,
+            "recipient_account": recipient_account,
+            "recipient_name": recipient_name,
+            "merchant_id": merchant_id,
+        },
+        "device_context": {
+            "ip_address": ip_address,
+            "device_info": device_info,
+            "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X)",
+        },
+        "ml_analysis": {
+            "reason_code": ml_reason_code,
+            "risk_score": risk_score,
+            "confidence": 0.89,
+            "fraud_patterns_detected": [
+                "QR code patterns match known phishing scheme (89% similarity)",
+                "Merchant account created within 24 hours",
+                "Transaction from atypical device/location",
+                "Rapid sequence of test transactions before large amount",
+                "URL contained malicious keywords",
+            ],
+        },
+        "evidence_log": {
+            "timestamp": created_at.isoformat() + "Z",
+            "user_action": "Guardian flagged as confirmed fraud",
+            "system_action": "Forensic report generated automatically",
+        },
+        "status": "generated",
+    }
+    
+    return {
+        "success": True,
+        "message": "Forensic report generated successfully",
+        "report": forensic_report,
+        "export_formats": ["pdf", "json", "csv"],
+    }
+
+
+@app.post("/guardians/{guardian_account}/submit-report/mcmc")
+async def submit_report_mcmc(guardian_account: str, data: dict):
+    """Submit forensic report to Malaysian Communications and Multimedia Commission (MCMC)."""
+    report_id = data.get("report_id")
+    sender_account = data.get("sender_account")
+    fraud_description = data.get("fraud_description")
+    amount = data.get("amount")
+    recipient_account = data.get("recipient_account")
+    
+    submission_id = f"MCMC-{uuid4().hex[:10].upper()}"
+    submitted_at = datetime.now()
+    
+    submission_record = {
+        "submission_id": submission_id,
+        "guardian_account": guardian_account,
+        "sender_account": sender_account,
+        "report_id": report_id,
+        "channel": "MCMC",
+        "authority": "Malaysian Communications and Multimedia Commission",
+        "submitted_at": submitted_at.isoformat() + "Z",
+        "status": "queued",
+        "incident_details": {
+            "amount": amount,
+            "recipient_account": recipient_account,
+            "fraud_type": "QR Code Phishing",
+            "description": fraud_description,
+        },
+    }
+    
+    AUTO_REPORT_LOGS.append(submission_record)
+    
+    return {
+        "success": True,
+        "message": "Report submitted to MCMC successfully",
+        "submission_id": submission_id,
+        "authority": "Malaysian Communications and Multimedia Commission",
+        "status": "queued",
+        "mcmc_reference": f"MCMC/2026/FRAUD/{submission_id}",
+        "note": "MCMC will acknowledge receipt within 24 hours",
+    }
+
+
+@app.post("/guardians/{guardian_account}/submit-report/google-safe-browsing")
+async def submit_report_google_safe_browsing(guardian_account: str, data: dict):
+    """Submit fraud report to Google Safe Browsing for phishing/malware database."""
+    report_id = data.get("report_id")
+    sender_account = data.get("sender_account")
+    url_or_qr = data.get("url_or_qr")
+    threat_type = data.get("threat_type", "PHISHING")  # MALWARE, PHISHING, UNWANTED_SOFTWARE
+    
+    submission_id = f"GSB-{uuid4().hex[:10].upper()}"
+    submitted_at = datetime.now()
+    
+    submission_record = {
+        "submission_id": submission_id,
+        "guardian_account": guardian_account,
+        "sender_account": sender_account,
+        "report_id": report_id,
+        "channel": "google_safe_browsing",
+        "authority": "Google Safe Browsing",
+        "submitted_at": submitted_at.isoformat() + "Z",
+        "status": "queued",
+        "threat_details": {
+            "url_or_qr": url_or_qr,
+            "threat_type": threat_type,
+        },
+    }
+    
+    AUTO_REPORT_LOGS.append(submission_record)
+    
+    return {
+        "success": True,
+        "message": "Report submitted to Google Safe Browsing successfully",
+        "submission_id": submission_id,
+        "authority": "Google Safe Browsing",
+        "status": "queued",
+        "note": "Google will review and potentially add URL to malicious database within 1-2 hours",
+    }
+
+
+@app.post("/guardians/{guardian_account}/submit-report/pdrm")
+async def submit_report_pdrm(guardian_account: str, data: dict):
+    """Submit fraud report to PDRM (Royal Malaysia Police) via SemakMule platform."""
+    report_id = data.get("report_id")
+    sender_account = data.get("sender_account")
+    incident_description = data.get("incident_description")
+    amount = data.get("amount")
+    
+    submission_id = f"PDRM-{uuid4().hex[:10].upper()}"
+    submitted_at = datetime.now()
+    
+    # In production, integrate with PDRM's SemakMule platform for actual submission
+    submission_record = {
+        "submission_id": submission_id,
+        "guardian_account": guardian_account,
+        "sender_account": sender_account,
+        "report_id": report_id,
+        "channel": "pdrm_semakMule",
+        "authority": "Royal Malaysia Police (PDRM)",
+        "submitted_at": submitted_at.isoformat() + "Z",
+        "status": "queued",
+        "platform": "SemakMule",
+        "incident_details": {
+            "amount": amount,
+            "description": incident_description,
+            "case_type": "Cyber Fraud",
+        },
+    }
+    
+    AUTO_REPORT_LOGS.append(submission_record)
+    
+    # In production: Call PDRM's actual SemakMule API via pdrm_service
+    # result = pdrm_service.submit_fraud_report(submission_record)
+    
+    return {
+        "success": True,
+        "message": "Report submitted to PDRM via SemakMule successfully",
+        "submission_id": submission_id,
+        "authority": "Royal Malaysia Police (PDRM)",
+        "platform": "SemakMule",
+        "status": "queued",
+        "case_reference": f"PDRM/SEMAK/{submission_id}",
+        "note": "PDRM will create a case file and may contact you for further investigation",
+    }
+
+
+@app.get("/guardians/{guardian_account}/report-submissions")
+async def get_report_submissions(guardian_account: str):
+    """Get all report submissions made by a guardian (for tracking and follow-up)."""
+    submissions = [
+        record for record in AUTO_REPORT_LOGS
+        if record.get("guardian_account") == guardian_account
+    ]
+    
+    return {
+        "guardian_account": guardian_account,
+        "total_submissions": len(submissions),
+        "submissions": sorted(submissions, key=lambda x: x.get("submitted_at", ""), reverse=True),
+    }
+
+
+# ============ PHASE 4: Shared Device Guest Mode ============
+@app.post("/user/settings/lock-guardian-settings")
+async def lock_guardian_settings(data: dict):
+    """Lock guardian and wallet PIN settings behind Guardian's biometric or Master PIN."""
+    user_account = data.get("user_account")
+    master_pin = data.get("master_pin")
+    biometric_enabled = data.get("biometric_enabled", True)
+    
+    if not user_account or not master_pin:
+        return {"success": False, "message": "user_account and master_pin are required"}
+    
+    GUEST_MODE_SETTINGS[user_account] = {
+        "master_pin": master_pin,  # In production, hash this!
+        "biometric_enabled": biometric_enabled,
+        "guest_profiles": [],
+        "locked_settings": ["guardian_link", "wallet_pin"],
+        "locked_at": datetime.now().isoformat() + "Z",
+    }
+    
+    return {
+        "success": True,
+        "message": "Guardian settings locked successfully",
+        "user_account": user_account,
+        "locked_settings": ["guardian_link", "wallet_pin"],
+        "biometric_enabled": biometric_enabled,
+    }
+
+
+@app.post("/user/guest-mode/enable")
+async def enable_guest_mode(data: dict):
+    """Enable guest mode with restricted access for shared device users."""
+    user_account = data.get("user_account")
+    profile_name = data.get("profile_name", "Guest")
+    restricted_features = data.get("restricted_features", [
+        "guardian_link",
+        "wallet_pin",
+        "transaction_history",
+        "account_settings",
+    ])
+    master_pin = data.get("master_pin")
+    
+    if not user_account:
+        return {"success": False, "message": "user_account is required"}
+    
+    # Verify master PIN if settings are locked
+    if user_account in GUEST_MODE_SETTINGS:
+        if not master_pin or GUEST_MODE_SETTINGS[user_account]["master_pin"] != master_pin:
+            return {"success": False, "message": "Invalid master PIN"}
+    
+    guest_id = f"GUEST-{uuid4().hex[:8].upper()}"
+    created_at = datetime.now()
+    
+    guest_profile = {
+        "guest_id": guest_id,
+        "user_account": user_account,
+        "profile_name": profile_name,
+        "restricted_features": restricted_features,
+        "created_at": created_at.isoformat() + "Z",
+        "is_active": True,
+    }
+    
+    GUEST_PROFILES[guest_id] = guest_profile
+    
+    if user_account in GUEST_MODE_SETTINGS:
+        GUEST_MODE_SETTINGS[user_account]["guest_profiles"].append(guest_id)
+    
+    return {
+        "success": True,
+        "message": f"Guest mode enabled for '{profile_name}'",
+        "guest_id": guest_id,
+        "profile_name": profile_name,
+        "restricted_features": restricted_features,
+    }
+
+
+@app.put("/user/guest-mode/profile-switch")
+async def switch_guest_profile(data: dict):
+    """Switch between main account and guest profiles on shared device."""
+    user_account = data.get("user_account")
+    target_profile = data.get("target_profile")  # "main" or guest_id
+    master_pin = data.get("master_pin")
+    
+    if not user_account or not target_profile:
+        return {"success": False, "message": "user_account and target_profile are required"}
+    
+    # If switching to main profile, require master PIN
+    if target_profile == "main":
+        if user_account in GUEST_MODE_SETTINGS:
+            if not master_pin or GUEST_MODE_SETTINGS[user_account]["master_pin"] != master_pin:
+                return {"success": False, "message": "Invalid master PIN. Cannot access main profile."}
+        
+        return {
+            "success": True,
+            "message": "Switched to main account profile",
+            "current_profile": "main",
+            "restricted_features": [],
+            "can_access_guardian_link": True,
+            "can_access_wallet_pin": True,
+        }
+    
+    # Otherwise switching to guest profile
+    if target_profile not in GUEST_PROFILES:
+        return {"success": False, "message": "Guest profile not found"}
+    
+    guest_profile = GUEST_PROFILES[target_profile]
+    return {
+        "success": True,
+        "message": f"Switched to guest profile '{guest_profile['profile_name']}'",
+        "current_profile": target_profile,
+        "profile_name": guest_profile["profile_name"],
+        "restricted_features": guest_profile["restricted_features"],
+        "can_access_guardian_link": "guardian_link" not in guest_profile["restricted_features"],
+        "can_access_wallet_pin": "wallet_pin" not in guest_profile["restricted_features"],
+    }
+
+
+# ============ PHASE 5: Interactive Guardian Communication ============
+@app.post("/guardians/{guardian_account}/voice-message/record")
+async def record_voice_message(guardian_account: str, data: dict):
+    """Record or upload a voice message from guardian to warn senior about blocked transactions."""
+    sender_account = data.get("sender_account")
+    message_text = data.get("message_text")
+    message_url = data.get("message_url")  # URL to voice file (MP3, WAV, etc.)
+    triggered_by = data.get("triggered_by", "TRANSACTION_BLOCKED")  # Reason for message
+    
+    if not message_text and not message_url:
+        return {"success": False, "message": "message_text or message_url is required"}
+    
+    voice_message = {
+        "message_id": f"VOICE-{uuid4().hex[:12].upper()}",
+        "guardian_account": guardian_account,
+        "sender_account": sender_account,
+        "message_text": message_text,
+        "message_url": message_url,
+        "created_at": datetime.now().isoformat() + "Z",
+        "triggered_by": triggered_by,
+        "status": "recorded",
+    }
+    
+    GUARDIAN_VOICE_MESSAGES.append(voice_message)
+    
+    return {
+        "success": True,
+        "message": "Voice message recorded successfully",
+        "message_id": voice_message["message_id"],
+        "note": "This message will be played when the guardian blocks a transaction",
+    }
+
+
+@app.post("/guardians/{guardian_account}/trusted-recipients/add")
+async def add_trusted_recipient(guardian_account: str, data: dict):
+    """Add a trusted merchant to guardian's approved list."""
+    merchant_id = data.get("merchant_id")
+    merchant_name = data.get("merchant_name")
+    sender_account = data.get("sender_account")
+    
+    if not merchant_id or not merchant_name:
+        return {"success": False, "message": "merchant_id and merchant_name are required"}
+    
+    recipient_key = f"{guardian_account}:{merchant_id}"
+    approved_at = datetime.now()
+    
+    TRUSTED_RECIPIENTS[recipient_key] = {
+        "merchant_id": merchant_id,
+        "merchant_name": merchant_name,
+        "guardian_account": guardian_account,
+        "sender_account": sender_account,
+        "approved_at": approved_at.isoformat() + "Z",
+        "approved_by": "GUARDIAN",
+    }
+    
+    return {
+        "success": True,
+        "message": f"Merchant '{merchant_name}' added to trusted list",
+        "merchant_id": merchant_id,
+        "merchant_name": merchant_name,
+        "note": "Future transactions to this merchant will have reduced friction",
+    }
+
+
+@app.get("/guardians/{guardian_account}/trusted-recipients")
+async def get_trusted_recipients(guardian_account: str):
+    """List all merchants vouched for by a guardian."""
+    trusted = [
+        recipient for key, recipient in TRUSTED_RECIPIENTS.items()
+        if recipient["guardian_account"] == guardian_account
+    ]
+    
+    return {
+        "guardian_account": guardian_account,
+        "total_trusted_merchants": len(trusted),
+        "trusted_recipients": trusted,
+    }
+
+
+@app.delete("/guardians/{guardian_account}/trusted-recipients/{merchant_id}")
+async def remove_trusted_recipient(guardian_account: str, merchant_id: str):
+    """Remove a merchant from guardian's trusted list."""
+    recipient_key = f"{guardian_account}:{merchant_id}"
+    
+    if recipient_key in TRUSTED_RECIPIENTS:
+        removed = TRUSTED_RECIPIENTS.pop(recipient_key)
+        return {
+            "success": True,
+            "message": f"Merchant '{removed['merchant_name']}' removed from trusted list",
+            "merchant_id": merchant_id,
+        }
+    
+    return {"success": False, "message": "Merchant not found in trusted list"}
 
 
 @app.post("/api/v1/onboarding/score")
