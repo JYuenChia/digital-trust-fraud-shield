@@ -174,7 +174,7 @@ export default defineConfig({
     },
     port: 3000, // Ensure the server uses port 3000
     strictPort: true, // Ensure port 3000 is always used
-    host: true,
+    host: "0.0.0.0",
     allowedHosts: [
       "localhost",
       "127.0.0.1",

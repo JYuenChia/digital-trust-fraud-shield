@@ -1,43 +1,16 @@
-// --- Invisible Shield: Trusted Contacts ---
+import React, { useState, useRef, useEffect } from 'react';
+import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X, PhoneCall, Mic, MicOff, Lock, Smartphone, Send, Globe } from 'lucide-react';
+import { Html5QrcodeScanner } from 'html5-qrcode';
+import { FRAUD_API_BASE_URL } from '@/const';
+import { useFraudEvents } from '@/contexts/FraudEventsContext';
+import { useLanguage } from '@/contexts/LanguageContext';
+
 const TRUSTED_CONTACTS = [
   '+6012-111-2222',
   '+6019-888-9999',
   '+603-1234-5678',
 ];
 
-// --- Invisible Shield: Mock Background Listener ---
-useEffect(() => {
-  const onIncomingCall = (e: CustomEvent<{ number: string }>) => {
-    const { number } = e.detail;
-    console.log('Incoming call detected:', number);
-    if (!TRUSTED_CONTACTS.includes(number)) {
-      setIsCallConsultOpen(true);
-      setIsListeningCall(true);
-      console.log('Call Consultation modal opened in Listening state');
-    }
-  };
-
-  window.addEventListener('incoming-call', onIncomingCall);
-  return () => window.removeEventListener('incoming-call', onIncomingCall);
-}, []);
-
-// --- Invisible Shield: Demo Trigger ---
-useEffect(() => {
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key.toLowerCase() === 's') {
-      console.log('Simulating incoming call...');
-      const mockCallEvent = new CustomEvent('incoming-call', {
-        detail: { number: '+6012-345-6789' },
-      });
-      window.dispatchEvent(mockCallEvent);
-    }
-  };
-
-  document.addEventListener('keydown', handleKeyDown);
-  return () => document.removeEventListener('keydown', handleKeyDown);
-}, []);
-
-// --- Traffic Light Status Config ---
 const statusConfig = [
   {
     min: 0,
@@ -64,46 +37,6 @@ const statusConfig = [
     emoji: '🔴',
   },
 ];
-
-  // --- Invisible Shield: Listen for incoming-call event ---
-  useEffect(() => {
-    function handleIncomingCall(e: CustomEvent<{ number: string }>) {
-      const number = e.detail?.number;
-      console.log('Incoming call event received:', number); // Debugging log
-      if (!number) return;
-      if (!TRUSTED_CONTACTS.includes(number)) {
-        setIsCallConsultOpen(true);
-        console.log('Call Consultation modal opened'); // Debugging log
-        setIsListeningCall(true);
-        console.log('Listening started'); // Debugging log
-      }
-    }
-    window.addEventListener('incoming-call', handleIncomingCall);
-    return () => window.removeEventListener('incoming-call', handleIncomingCall);
-  }, []);
-
-  // --- Invisible Shield: Demo trigger (press S) ---
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'S' || e.key === 's') {
-        console.log('Demo trigger: Dispatching incoming-call event'); // Debugging log
-        window.dispatchEvent(new CustomEvent('incoming-call', { detail: { number: '+6012-345-6789' } }));
-      }
-    }
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, []);
-
-  useEffect(() => {
-    console.log("Transaction component mounted");
-  }, []);
-
-import React, { useState, useRef, useEffect } from 'react';
-import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X, PhoneCall, Mic, MicOff, Lock, Smartphone, Send, Globe } from 'lucide-react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
-import { FRAUD_API_BASE_URL } from '@/const';
-import { useFraudEvents } from '@/contexts/FraudEventsContext';
-import { useLanguage } from '@/contexts/LanguageContext';
 
 const MALAYSIA_BANKS = [
   'Maybank',
@@ -674,6 +607,26 @@ export default function Transaction() {
   const scannerRegionId = 'qr-reader-shield';
 
   useEffect(() => {
+    const handleIncomingCall = (event: Event) => {
+      const customEvent = event as CustomEvent<{ number?: string }>;
+      const incomingNumber = customEvent.detail?.number ?? '';
+      if (!incomingNumber || TRUSTED_CONTACTS.includes(incomingNumber)) {
+        return;
+      }
+
+      setIsCallConsentOpen(false);
+      setIsCallConsultOpen(true);
+      setIsListeningCall(true);
+      setCallError(null);
+    };
+
+    window.addEventListener('incoming-call', handleIncomingCall as EventListener);
+    return () => {
+      window.removeEventListener('incoming-call', handleIncomingCall as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
     callBackendVoiceAssessmentRef.current = callBackendVoiceAssessment;
   }, [callBackendVoiceAssessment]);
 
@@ -1099,7 +1052,7 @@ export default function Transaction() {
       const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) {
         setCallError('Audio analysis is not supported in this browser.');
-        return;
+        return null;
       }
 
       const context = new AudioCtx();
@@ -1728,19 +1681,6 @@ export default function Transaction() {
             <p className="text-[#6B7280] dark:text-[#8A8A8A] text-lg">Transfer funds safely with AI-powered fraud monitoring.</p>
           </div>
 
-          <div className="rounded-2xl border border-[#5DA8FF33] bg-[#0D1624] px-5 py-4 flex flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-[#5DA8FF1A] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[#9ED1FF]">Third-Party Security Layer</span>
-              <span className="rounded-full bg-[#32D74B18] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[#72E18B]">Offline PWA Ready</span>
-            </div>
-            <p className="text-sm text-[#D6E7F7] leading-6">
-              This app sits beside existing PayNet / DuitNow rails as a risk-screening layer. It does not replace the payment network; it checks device, QR, and behavioral signals before money moves.
-            </p>
-            <p className="text-xs text-[#A9C1DA] leading-5">
-              Core screens and scam-detection drafts are cached locally so the demo still works for low-connectivity or shared-device users.
-            </p>
-          </div>
-
           <div className="rounded-2xl border border-[#FF5500]/30 bg-[#FF5500]/10 px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex flex-col">
               <span className="text-xs uppercase tracking-[0.18em] text-orange-700 dark:text-[#FF8A4D]">Quick Payment</span>
@@ -2057,66 +1997,56 @@ export default function Transaction() {
               </button>
             </div>
 
-            {/* --- Traffic Light UI --- */}
-            <div className="rounded-xl border border-white/10 bg-[#0F1520] p-4 flex flex-col gap-2">
+            <div className="rounded-xl border border-[#0B3D91]/35 bg-[#0B3D91]/14 p-4 flex flex-col gap-2">
               {(() => {
-                const status = statusConfig.find(cfg => callRiskScore >= cfg.min && callRiskScore < cfg.max) || statusConfig[0];
+                const status = statusConfig.find((cfg) => callRiskScore >= cfg.min && callRiskScore < cfg.max) || statusConfig[0];
+                const liveRiskPercent = Math.round(callRiskScore * 100);
                 return (
                   <>
                     <div className="flex items-center gap-3">
-                      <span style={{ background: status.bg }} className="inline-flex items-center justify-center w-8 h-8 rounded-full text-white text-lg font-bold">{status.emoji}</span>
+                      <span style={{ background: status.bg }} className="inline-flex items-center justify-center w-8 h-8 rounded-full text-white text-lg font-bold">
+                        {status.emoji}
+                      </span>
                       <div>
-                        <span className="text-white font-bold text-base">Voice Authenticity</span>
-                        <span className="ml-2 text-xs text-[#D8E8FA]">Confidence: {formatPercent(callRiskScore)}</span>
+                        <span className="text-white font-bold text-base">Live Scam Detection</span>
+                        <span className="ml-2 text-xs text-[#D8E8FA]">Live scam-pattern scan</span>
                       </div>
                     </div>
                     <div className="mt-2 text-sm font-semibold" style={{ color: status.bg }}>{status.text}</div>
+                    <div className="mt-2">
+                      <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className="h-full rounded-full transition-all duration-200 ease-out"
+                          style={{ width: `${liveRiskPercent}%`, background: status.bg }}
+                        />
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-[11px] uppercase tracking-[0.14em] text-[#D8E8FA]">
+                        <span>Live risk</span>
+                        <span>{liveRiskPercent}%</span>
+                      </div>
+                    </div>
                   </>
                 );
               })()}
             </div>
 
-            <div className={`rounded-xl border p-4 ${aiVoiceAssessment.suspected ? 'border-[#FF3B3055] bg-[#FF3B3016]' : 'border-[#5DA8FF40] bg-[#102030]'}`}>
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-white">AI Voice Check</p>
-                <span className={`text-xs font-bold uppercase tracking-[0.12em] ${aiVoiceAssessment.suspected ? 'text-[#FFB9B4]' : 'text-[#A4D6FF]'}`}>
-                  {aiVoiceAssessment.suspected ? 'Suspected AI Voice' : 'No AI Voice Pattern'}
+            <div className={`rounded-xl border p-4 ${aiVoiceAssessment.suspected ? 'border-[#FF3B3055] bg-[#FF3B3016]' : 'border-[#32D74B55] bg-[#32D74B14]'}`}>
+              <div className="flex items-center gap-3">
+                <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${aiVoiceAssessment.suspected ? 'bg-[#FF3B3020]' : 'bg-[#32D74B20]'}`}>
+                  {aiVoiceAssessment.suspected ? <AlertTriangle size={16} className="text-[#FFB9B4]" /> : <span className="text-[18px] leading-none">🟢</span>}
                 </span>
+                <div className="flex flex-col">
+                  <p className="text-sm font-semibold text-white">Voice Authenticity</p>
+                  <span className={`text-xs font-bold uppercase tracking-[0.12em] ${aiVoiceAssessment.suspected ? 'text-[#FFB9B4]' : 'text-[#B9F8C6]'}`}>
+                    {aiVoiceAssessment.suspected ? 'Suspected AI Voice' : 'No AI Voice Pattern'}
+                  </span>
+                </div>
               </div>
-              <p className="mt-2 text-xs text-[#C8DBEE]">
+              <p className="mt-3 text-xs text-[#C8DBEE]">
                 {aiVoiceAssessment.suspected
-                  ? 'This call is suspected to use synthetic/AI-generated voice characteristics.'
+                  ? 'This call is suspected to use synthetic or AI-generated voice characteristics.'
                   : 'No strong synthetic voice fingerprints detected yet.'}
               </p>
-              {aiVoiceAssessment.reasons.length > 0 && (
-                <div className="mt-3 flex flex-col gap-1.5">
-                  {aiVoiceAssessment.reasons.slice(0, 3).map((reason) => (
-                    <p key={reason} className="text-[11px] text-[#D7E6F6]">• {reason}</p>
-                  ))}
-                </div>
-              )}
-              <p className="mt-2 text-[11px] text-[#9BB6CF]">Confidence: {aiVoiceAssessment.confidence.toUpperCase()}</p>
-              {callBackendVoiceAssessment && (
-                <div className="mt-3 rounded-lg border border-white/10 bg-black/10 px-3 py-2">
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-[#9BB6CF]">Server audio audit</p>
-                  <p className="mt-1 text-xs text-[#D7E6F6]">
-                    {formatPercent(callBackendVoiceAssessment.score)} risk • {callBackendVoiceAssessment.reasons[0] ?? 'No additional synthetic speech markers.'}
-                  </p>
-                </div>
-              )}
-              {callVoiceAuditMessage && <p className="mt-2 text-[11px] text-[#9BB6CF]">{callVoiceAuditMessage}</p>}
-            </div>
-
-            <div className="rounded-xl border border-[#5DA8FF40] bg-[#0E1624] p-4">
-              <div className="flex items-center gap-2">
-                <Lock size={15} className="text-[#8FC7FF]" />
-                <p className="text-sm font-semibold text-white">Privacy First</p>
-              </div>
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] font-semibold">
-                <div className="rounded-lg border border-[#5DA8FF40] bg-[#5DA8FF1A] px-3 py-2 text-[#CFE7FF]">Voice stays on your phone</div>
-                <div className="rounded-lg border border-[#5DA8FF40] bg-[#5DA8FF1A] px-3 py-2 text-[#CFE7FF]">Personal details hidden</div>
-                <div className="rounded-lg border border-[#5DA8FF40] bg-[#5DA8FF1A] px-3 py-2 text-[#CFE7FF]">End-to-end encrypted</div>
-              </div>
             </div>
 
             {callSignals.length > 0 && (
@@ -2148,19 +2078,20 @@ export default function Transaction() {
                 {isListeningCall ? <MicOff size={16} /> : <Mic size={16} />}
                 {isListeningCall ? 'Stop Listening' : 'Start Listening'}
               </button>
-              {/* --- National Security Reporting Button --- */}
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold bg-[#F59E0B] text-[#101418] hover:bg-[#FFD700] ml-2"
-                onClick={() => {
-                  const number = '+6012-345-6789'; // Replace with actual detected number if available
-                  const score = formatPercent(callRiskScore);
-                  const msg = encodeURIComponent(`Fraud Report: AI Voice Clone detected from ${number}. Risk Score: ${score}. Evidence: Spectral artifacts detected.`);
-                  window.open(`https://wa.me/60162206262?text=${msg}`);
-                }}
-              >
-                Report Scammer to MCMC
-              </button>
+              {(callSignals.length > 0 || aiVoiceAssessment.suspected) && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold bg-[#F59E0B] text-[#101418] hover:bg-[#FFD700] ml-2"
+                  onClick={() => {
+                    const number = '+6012-345-6789'; // Replace with actual detected number if available
+                    const score = formatPercent(callRiskScore);
+                    const msg = encodeURIComponent(`Fraud Report: Scam call detected from ${number}. Risk Score: ${score}. Evidence: ${callSignals.join(', ') || 'AI voice suspicion detected.'}`);
+                    window.open(`https://wa.me/60162206262?text=${msg}`);
+                  }}
+                >
+                  Report Call
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -2598,19 +2529,3 @@ function VoiceTrafficLightBanner({ score }: { score: number }) {
   );
 }
 
-// Manual trigger for demo: Simulate Call button
-const simulateCall = () => {
-  if (!isCallConsultOpen) {
-    setIsCallConsentOpen(false);
-    setIsCallConsultOpen(true);
-  }
-};
-
-<button
-  type="button"
-  onClick={simulateCall}
-  aria-label="Simulate Incoming Call"
-  className="fixed bottom-6 left-6 z-40 inline-flex h-12 w-12 items-center justify-center rounded-full border border-[#FF5500] bg-[#FFF6F0] text-[#FF5500] shadow-lg hover:bg-[#FF5500] hover:text-white transition-all"
->
-  <PhoneCall size={22} />
-</button>
