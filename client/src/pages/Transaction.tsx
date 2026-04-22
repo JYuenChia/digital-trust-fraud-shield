@@ -211,6 +211,13 @@ type QrPayload = {
   is_verified_merchant?: boolean;
 };
 
+type OcrExtractionResult = {
+  accountNumber?: string;
+  amount?: number;
+  currency?: string;
+  recipientName?: string;
+};
+
 type SafetyWeatherState = 'calm' | 'cloudy' | 'storm';
 
 type BoatProfile = {
@@ -522,6 +529,93 @@ function parseQrPayload(raw: string): QrPayload | null {
   }
 }
 
+function normalizeDetectedCurrency(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  const normalized = raw.trim().toUpperCase();
+  if (normalized === 'RM') return 'MYR';
+  if (normalized === 'PHP') return 'PHP';
+  if (normalized === '$') return 'USD';
+  return normalized;
+}
+
+function parseDetectedAmount(rawAmount: string): number | undefined {
+  const cleaned = rawAmount.replace(/,/g, '').trim();
+  const parsed = Number(cleaned);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return parsed;
+}
+
+function extractFinancialDataFromText(text: string): OcrExtractionResult {
+  const normalized = text.replace(/\r/g, '\n');
+
+  const accountMatch = normalized.match(/(?:^|\D)(\d{10,16})(?!\d)/);
+  const amountMatch = normalized.match(/\b(RM|\$|PHP)\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.\d{2})|[0-9]+(?:\.\d{2}))/i);
+  const recipientMatch = normalized.match(/(?:To|Recipient|Payee)\s*[:\-]\s*([A-Za-z][A-Za-z0-9 .,&'\-]{1,80})/i);
+
+  const recipientFallbackLine = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => /^(to|recipient|payee)\b/i.test(line));
+
+  let recipientName = recipientMatch?.[1]?.trim();
+  if (!recipientName && recipientFallbackLine) {
+    recipientName = recipientFallbackLine.replace(/^(to|recipient|payee)\s*[:\-]?\s*/i, '').trim() || undefined;
+  }
+
+  const currency = normalizeDetectedCurrency(amountMatch?.[1]);
+  const amount = amountMatch ? parseDetectedAmount(amountMatch[2]) : undefined;
+
+  return {
+    accountNumber: accountMatch?.[1],
+    amount,
+    currency,
+    recipientName,
+  };
+}
+
+async function preprocessImageForOcr(file: File): Promise<HTMLCanvasElement> {
+  const imageUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Unable to load selected image.'));
+      img.src = imageUrl;
+    });
+
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Canvas context is unavailable.');
+    }
+
+    canvas.width = image.width;
+    canvas.height = image.height;
+    context.drawImage(image, 0, 0);
+
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    // Preprocess for OCR: grayscale -> boost contrast -> threshold to black/white.
+    const contrast = 1.85;
+    const threshold = 150;
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = (0.299 * data[i]) + (0.587 * data[i + 1]) + (0.114 * data[i + 2]);
+      const contrastGray = Math.max(0, Math.min(255, ((gray - 128) * contrast) + 128));
+      const binary = contrastGray >= threshold ? 255 : 0;
+
+      data[i] = binary;
+      data[i + 1] = binary;
+      data[i + 2] = binary;
+    }
+
+    context.putImageData(imageData, 0, 0);
+    return canvas;
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
 // Trusted contacts for mock call simulation
 const trusted_contacts = [
   '+60123456789', // Example trusted number
@@ -562,7 +656,9 @@ export default function Transaction() {
   const [qrScanError, setQrScanError] = useState<string | null>(null);
   const [lastQrPreview, setLastQrPreview] = useState<string>('');
   const [scannedQrPayload, setScannedQrPayload] = useState<QrPayload | null>(null);
-  const [qrScanStatus, setQrScanStatus] = useState<{ tone: 'safe' | 'warn'; message: string } | null>(null);
+  const [qrScanStatus, setQrScanStatus] = useState<{ tone: 'safe' | 'warn' | 'danger'; message: string } | null>(null);
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
+  const [ocrSummary, setOcrSummary] = useState<string | null>(null);
   const [autoReportState, setAutoReportState] = useState<AutoReportState>({
     status: 'idle',
     message: '',
@@ -604,6 +700,7 @@ export default function Transaction() {
   const callLastAnalysisTsRef = useRef(0);
   const callBackendVoiceAssessmentRef = useRef<AIVoiceAssessment | null>(null);
   const callVoiceAuditSessionRef = useRef(0);
+  const ocrInputRef = useRef<HTMLInputElement | null>(null);
   const scannerRegionId = 'qr-reader-shield';
 
   useEffect(() => {
@@ -1392,6 +1489,21 @@ export default function Transaction() {
     }
   };
 
+  const applyExtractedTransferData = (extracted: OcrExtractionResult) => {
+    if (extracted.accountNumber) {
+      setRecipientAccount(extracted.accountNumber);
+    }
+    if (extracted.recipientName) {
+      setRecipientName(extracted.recipientName);
+    }
+    if (typeof extracted.amount === 'number' && extracted.amount > 0) {
+      setAmount(extracted.amount.toFixed(2));
+    }
+    if (extracted.currency) {
+      setSelectedCurrency(extracted.currency);
+    }
+  };
+
   const applyResultModal = (result: FraudResult) => {
     setFraudResult(result);
     if (result.status === 'APPROVED') setModalState('approved');
@@ -1400,7 +1512,7 @@ export default function Transaction() {
     else setModalState('blocked');
   };
 
-  const scanQrThreat = async (decodedText: string) => {
+  const scanQrThreat = async (decodedText: string, extracted?: OcrExtractionResult) => {
     const response = await fetch(`${FRAUD_API_BASE_URL}/scan-qr-threat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1409,6 +1521,9 @@ export default function Transaction() {
         device_id: activeDeviceId,
         ip_profile: activeIpProfile,
         sender_account: SENIOR_ACCOUNT,
+        extracted_recipient_name: extracted?.recipientName,
+        extracted_account_number: extracted?.accountNumber,
+        extracted_amount: extracted?.amount,
       }),
     });
 
@@ -1430,6 +1545,7 @@ export default function Transaction() {
     if (!isQrScannerOpen) return;
 
     setQrScanError(null);
+    setOcrSummary(null);
     const scanner = new Html5QrcodeScanner(
       scannerRegionId,
       {
@@ -1445,28 +1561,48 @@ export default function Transaction() {
       async (decodedText) => {
         setLastQrPreview(decodedText.slice(0, 120));
         try {
-          const threatResult = await scanQrThreat(decodedText);
-
           const parsed = parseQrPayload(decodedText);
+          let extracted: OcrExtractionResult | undefined;
+
           if (parsed && (parsed.merchant_id || parsed.account_name)) {
             setScannedQrPayload(parsed);
             setRecipientAccount(parsed.merchant_id || parsed.account_name || '');
             setRecipientName(parsed.account_name || recipientName);
             if (typeof parsed.amount === 'number' && parsed.amount > 0) {
-              setAmount(String(parsed.amount));
+              setAmount(parsed.amount.toFixed(2));
             }
             if (parsed.provider) {
               setSelectedProvider(parsed.provider);
             }
+            extracted = {
+              accountNumber: parsed.merchant_id,
+              recipientName: parsed.account_name,
+              amount: parsed.amount,
+              currency: parsed.currency,
+            };
           } else {
+            extracted = extractFinancialDataFromText(decodedText);
+            if (extracted.accountNumber || extracted.recipientName || extracted.amount) {
+              applyExtractedTransferData(extracted);
+              setOcrSummary('Financial details were extracted from scanned text. Please verify before confirming.');
+            }
             setScannedQrPayload(null);
           }
 
+          const threatResult = await scanQrThreat(decodedText, extracted);
+
           closeQrScanner();
 
-          if (parsed && threatResult.status === 'APPROVED') {
+          const hasAutoFill = Boolean(
+            extracted?.accountNumber || extracted?.recipientName || extracted?.amount,
+          );
+
+          if (hasAutoFill && threatResult.status === 'APPROVED') {
             setFraudResult(threatResult);
-            setQrScanStatus({ tone: 'safe', message: 'QR checked. Recipient details are filled in for you.' });
+            setQrScanStatus({ tone: 'safe', message: 'Scan complete. Account, recipient, and amount were filled for your verification.' });
+          } else if (threatResult.status === 'BLOCKED') {
+            setQrScanStatus({ tone: 'danger', message: threatResult.reason_code || 'Red alert: this payment destination appears risky.' });
+            applyResultModal(threatResult);
           } else {
             setQrScanStatus({ tone: 'warn', message: threatResult.reason_code || 'This QR needs caution.' });
             applyResultModal(threatResult);
@@ -1485,7 +1621,58 @@ export default function Transaction() {
       scanner.clear().catch(() => undefined);
       scannerRef.current = null;
     };
-  }, [isQrScannerOpen, recipientName]);
+  }, [activeDeviceId, activeIpProfile, isQrScannerOpen, recipientName]);
+
+  const handleOcrImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setQrScanError(null);
+    setIsOcrProcessing(true);
+    setOcrSummary('Pre-processing image and extracting payment details...');
+
+    try {
+      const processedCanvas = await preprocessImageForOcr(file);
+      const tesseract = await import('tesseract.js');
+      const ocrResult = await tesseract.recognize(processedCanvas, 'eng');
+      const extractedText = ocrResult.data.text || '';
+
+      if (!extractedText.trim()) {
+        throw new Error('No readable text found in this image.');
+      }
+
+      setLastQrPreview(extractedText.replace(/\s+/g, ' ').slice(0, 120));
+
+      const extracted = extractFinancialDataFromText(extractedText);
+      if (!extracted.accountNumber && !extracted.recipientName && !extracted.amount) {
+        throw new Error('Could not locate account number, recipient, or amount from OCR text.');
+      }
+
+      applyExtractedTransferData(extracted);
+      setScannedQrPayload(null);
+
+      const threatResult = await scanQrThreat(extractedText, extracted);
+      closeQrScanner();
+
+      if (threatResult.status === 'APPROVED') {
+        setFraudResult(threatResult);
+        setQrScanStatus({ tone: 'safe', message: 'OCR complete. Transfer details are auto-filled. Please verify and confirm.' });
+      } else if (threatResult.status === 'BLOCKED') {
+        setQrScanStatus({ tone: 'danger', message: threatResult.reason_code || 'Red alert: recipient appears in known scam signals.' });
+        applyResultModal(threatResult);
+      } else {
+        setQrScanStatus({ tone: 'warn', message: threatResult.reason_code || 'Recipient needs verification before transfer.' });
+        applyResultModal(threatResult);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to run OCR scan right now. Please try another image.';
+      setQrScanError(message);
+      setOcrSummary(null);
+    } finally {
+      setIsOcrProcessing(false);
+    }
+  };
 
   const handleProcessTransaction = async () => {
     setModalState('processing');
@@ -1697,7 +1884,13 @@ export default function Transaction() {
           </div>
 
           {qrScanStatus && (
-            <div className={`rounded-xl px-4 py-3 border ${qrScanStatus.tone === 'safe' ? 'border-[#32D74B]/40 bg-[#32D74B]/10 text-[#C7FFD0]' : 'border-[#FF9F0A]/40 bg-[#FF9F0A]/10 text-[#FFD7A1]'}`}>
+            <div className={`rounded-xl px-4 py-3 border ${
+              qrScanStatus.tone === 'safe'
+                ? 'border-[#32D74B]/40 bg-[#32D74B]/10 text-[#C7FFD0]'
+                : qrScanStatus.tone === 'danger'
+                  ? 'border-[#FF3B30]/40 bg-[#FF3B30]/10 text-[#FFC9C5]'
+                  : 'border-[#FF9F0A]/40 bg-[#FF9F0A]/10 text-[#FFD7A1]'
+            }`}>
               <span className="text-sm font-medium">{qrScanStatus.message}</span>
             </div>
           )}
@@ -1878,7 +2071,7 @@ export default function Transaction() {
                 </div>
                 <div className="flex flex-col">
                   <h3 className="text-[#111827] dark:text-white text-lg font-bold font-['Sora']">Scan Payment QR</h3>
-                  <p className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Align the QR code within the frame to pay.</p>
+                  <p className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Scan QR live, or upload screenshot/receipt for OCR extraction.</p>
                 </div>
               </div>
               <button
@@ -1894,6 +2087,35 @@ export default function Transaction() {
               <div id={scannerRegionId} className="min-h-[280px] rounded-xl overflow-hidden" />
             </div>
 
+            <div className="rounded-xl border border-black/10 dark:border-white/10 bg-[#FFFFFF] dark:bg-[#111111] px-4 py-3">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <p className="text-xs text-[#6B7280] dark:text-[#A0A0A0]">
+                  OCR mode preprocesses image to grayscale, boosts contrast, and applies thresholding before extraction.
+                </p>
+                <button
+                  type="button"
+                  disabled={isOcrProcessing}
+                  onClick={() => ocrInputRef.current?.click()}
+                  className="inline-flex items-center justify-center rounded-lg bg-[#FF5500] px-3 py-2 text-xs font-bold text-[#111827] dark:text-white hover:bg-[#E04B00] transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {isOcrProcessing ? 'Processing OCR...' : 'Upload Receipt / Screenshot'}
+                </button>
+              </div>
+              <input
+                ref={ocrInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleOcrImageUpload}
+                className="hidden"
+              />
+            </div>
+
+            {ocrSummary && (
+              <div className="rounded-xl border border-[#32D74B]/30 bg-[#32D74B]/10 px-4 py-3 text-xs text-[#C7FFD0]">
+                {ocrSummary}
+              </div>
+            )}
+
             {qrScanError && (
               <div className="rounded-xl border border-[#FF3B30]/40 bg-[#FF3B30]/10 px-4 py-3 text-sm text-[#FFB4AF]">
                 {qrScanError}
@@ -1904,7 +2126,7 @@ export default function Transaction() {
             )}
 
             <p className="text-xs text-[#8A8A8A]">
-              Scan anything: bank payment QR, e-wallet QR, or suspicious links. The shield will risk-check the decoded content.
+              Scan QR or upload a photo. We auto-extract account number, recipient, and amount, then run immediate scam risk checks.
             </p>
           </div>
         </div>

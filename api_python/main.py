@@ -73,6 +73,20 @@ MERCHANT_PROFILES = {
     },
 }
 
+# Demo scam-intelligence signals inspired by complaint feeds.
+KNOWN_SCAM_RECIPIENT_NAMES = {
+    "MCMC CLAIM REWARD",
+    "PHISHTANK PAYMENTS",
+    "DUITNOW SUPPORT TEAM",
+    "EWALLET VERIFY CENTER",
+}
+
+KNOWN_SCAM_ACCOUNT_NUMBERS = {
+    "111122223333",
+    "987654321012",
+    "44556677889900",
+}
+
 # Guardian Link Storage: Senior Account -> Guardian(s)
 GUARDIAN_LINKS = {
     "ALEX8899": {
@@ -149,6 +163,9 @@ class QRThreatScanRequest(BaseModel):
     device_id: str = "demo-web"
     ip_profile: str = "auto"
     sender_account: str = "ALEX8899"
+    extracted_recipient_name: str | None = None
+    extracted_account_number: str | None = None
+    extracted_amount: float | None = None
 
 
 class GuardianLink(BaseModel):
@@ -789,7 +806,15 @@ def evaluate_qr_integrity(payload: QRPayload):
     }
 
 
-def evaluate_generic_qr_threat(raw_qr: str, device_id: str, ip_profile: str, sender_account: str = ""):
+def evaluate_generic_qr_threat(
+    raw_qr: str,
+    device_id: str,
+    ip_profile: str,
+    sender_account: str = "",
+    extracted_recipient_name: str | None = None,
+    extracted_account_number: str | None = None,
+    extracted_amount: float | None = None,
+):
     text = (raw_qr or "").strip()
     compact = "".join(text.split())
 
@@ -884,6 +909,20 @@ def evaluate_generic_qr_threat(raw_qr: str, device_id: str, ip_profile: str, sen
     if ip_profile.strip().lower() == "risky":
         add(0.15, "high_risk_ip", "Network looks risky right now.")
 
+    extracted_name_norm = (extracted_recipient_name or "").strip().upper()
+    extracted_account_norm = "".join(ch for ch in (extracted_account_number or "") if ch.isdigit())
+
+    if extracted_name_norm and extracted_name_norm in KNOWN_SCAM_RECIPIENT_NAMES:
+        add(0.55, "known_scam_recipient_name", "Recipient name matches known scam intelligence.")
+
+    if extracted_account_norm and extracted_account_norm in KNOWN_SCAM_ACCOUNT_NUMBERS:
+        add(0.65, "known_scam_account_number", "Account number matches known scam intelligence.")
+
+    if extracted_amount is not None:
+        safe_extracted_amount = max(float(extracted_amount), 0.0)
+        if safe_extracted_amount >= 50000:
+            add(0.1, "high_value_extracted_amount", "High transfer amount detected from scanned content.")
+
     risk = min(max(risk, 0.0), 0.999)
 
     if risk >= 0.75:
@@ -902,7 +941,15 @@ def evaluate_generic_qr_threat(raw_qr: str, device_id: str, ip_profile: str, sen
         reason_code = "This QR looks safe from known scam signs."
         recommendation = "You can continue, but still confirm recipient details."
 
+    if extracted_name_norm in KNOWN_SCAM_RECIPIENT_NAMES or extracted_account_norm in KNOWN_SCAM_ACCOUNT_NUMBERS:
+        status = "BLOCKED"
+        color = "red"
+        risk = max(risk, 0.95)
+        reason_code = "Red alert: recipient matches known scam reports."
+        recommendation = "Do not proceed. Verify recipient with official bank or trusted contact channels."
+
     pattern_match_percent = int(min(max(round(risk * 100), 1), 99))
+
     if status == "APPROVED":
         pattern_match_message = f"This matches only {pattern_match_percent}% of known scam patterns in ASEAN."
     else:
@@ -945,6 +992,9 @@ def evaluate_generic_qr_threat(raw_qr: str, device_id: str, ip_profile: str, sen
             "raw_preview": text[:120],
             "pattern_match_percent": pattern_match_percent,
             "pattern_match_message": pattern_match_message,
+            "extracted_recipient_name": extracted_recipient_name or "",
+            "extracted_account_number": extracted_account_norm,
+            "extracted_amount": None if extracted_amount is None else round(max(float(extracted_amount), 0.0), 2),
         },
         "score_breakdown": {
             "raw_model_score": 0.0,
@@ -1100,6 +1150,9 @@ async def scan_qr_threat(payload: QRThreatScanRequest):
         device_id=payload.device_id,
         ip_profile=payload.ip_profile,
         sender_account=payload.sender_account,
+        extracted_recipient_name=payload.extracted_recipient_name,
+        extracted_account_number=payload.extracted_account_number,
+        extracted_amount=payload.extracted_amount,
     )
 
 

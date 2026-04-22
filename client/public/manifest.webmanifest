@@ -1,7 +1,7 @@
 {
   "name": "Digital Trust Fraud Shield",
   "short_name": "Fraud Shield",
-  "description": "Third-party security layer for PayNet and DuitNow transactions.",
+  "description": "AI-powered digital fraud protection demo app.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
