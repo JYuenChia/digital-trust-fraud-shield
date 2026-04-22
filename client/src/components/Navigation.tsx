@@ -1,18 +1,21 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
 import { ShieldAlert, Search, Bell , Menu } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useTour } from '@/contexts/TourContext';
 
 export const Navigation: React.FC = () => {
   const [location] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const { startTour } = useTour();
+  const { t } = useLanguage();
   const isProfilePage = location === '/profile';
 
   const navItems = [
-    { label: 'OVERVIEW', href: '/' },
-    { label: 'DASHBOARD', href: '/dashboard' },
-    { label: 'TRANSACTIONS', href: '/transaction' }
+    { label: t('nav.overview'), href: '/' },
+    { label: t('nav.dashboard'), href: '/dashboard' },
+    { label: t('nav.admin'), href: '/admin' },
+    { label: t('nav.transactions'), href: '/transaction' }
   ];
 
   return (
@@ -69,11 +72,11 @@ export const Navigation: React.FC = () => {
             <Search size={18} className="text-[#6B7280] dark:text-[#8A8A8A]" />
             <input 
               type="text" 
-              placeholder="Search here..." 
+              placeholder={t('nav.searchPlaceholder')} 
               className="bg-transparent border-none outline-none text-[#6B7280] dark:text-[#8A8A8A] text-sm font-['Inter'] w-48 placeholder:text-[#6B7280] dark:placeholder:text-[#8A8A8A]"
             />
           </div>
-          
+
           {/* Profile Box */}
           <div className="flex items-center gap-6">
             <button className="text-[#111827] dark:text-white hover:text-[#FF3B30] transition-colors border-none bg-transparent cursor-pointer">
@@ -114,14 +117,14 @@ export const Navigation: React.FC = () => {
             }}
             className="py-3 px-4 rounded-lg cursor-pointer text-[#FF5500] border border-[#FF5500]/30 hover:bg-[#FF5500]/10 text-left"
           >
-            <span className="font-['Inter'] font-bold text-sm tracking-widest">START TOUR</span>
+            <span className="font-['Inter'] font-bold text-sm tracking-widest">{t('nav.startTour')}</span>
           </button>
           <Link href="/profile">
             <div 
               className="py-3 px-4 rounded-lg cursor-pointer text-[#111827] dark:text-white flex items-center justify-between"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              <span className="font-['Inter'] font-bold text-sm tracking-widest">PROFILE / SETTINGS</span>
+              <span className="font-['Inter'] font-bold text-sm tracking-widest">{t('nav.profileSettings')}</span>
               <div className="w-8 h-8 rounded-full bg-[#FF5500] text-white flex items-center justify-center text-xs font-semibold">AT</div>
             </div>
           </Link>

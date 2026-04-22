@@ -168,15 +168,14 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 3000,
-    strictPort: false, // Will find next available port if 3000 is busy
-    host: true,
+    hmr: {
+      protocol: "ws",
+      host: "localhost",
+    },
+    port: 3000, // Ensure the server uses port 3000
+    strictPort: true, // Ensure port 3000 is always used
+    host: "0.0.0.0",
     allowedHosts: [
-      ".manuspre.computer",
-      ".manus.computer",
-      ".manus-asia.computer",
-      ".manuscomputer.ai",
-      ".manusvm.computer",
       "localhost",
       "127.0.0.1",
     ],
