@@ -15,8 +15,13 @@ import os
 import json
 from uuid import uuid4
 import librosa
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from pdrm_service import PDRMService
+import pickle
 
 app = FastAPI(title="Digital Fraud Shield API")
+pdrm_service = PDRMService(demo_mode=True)
 
 # Conservative thresholds for a safer demo policy.
 APPROVE_PROB_THRESHOLD = 0.15
@@ -1731,3 +1736,31 @@ async def submit_google_safe_browsing_report(payload: AutoReportRequest):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
+
+class AccountCheckRequest(BaseModel):
+    account_number: str
+    bank_code: str = None
+
+@app.post("/api/pdrm/check-account")
+async def check_scam_account(request: AccountCheckRequest):
+    """
+    Verify if bank account is linked to scam reports
+    """
+    if not request.account_number or len(request.account_number) < 5:
+        raise HTTPException(status_code=400, detail="Invalid account number")
+    
+    result = await pdrm_service.check_account(request.account_number)
+    
+    # Integrate with your existing fraud model
+    risk_score = result.get('risk_score', 0.5)
+    
+    return {
+        "account_number": request.account_number[-4:].rjust(len(request.account_number), '*'),
+        "verification": result,
+        "recommended_action": "BLOCK" if risk_score > 0.7 else "ALLOW",
+        "friction_level": "HIGH" if risk_score > 0.7 else "LOW"
+    }
+
+@app.get("/api/pdrm/health")
+async def pdrm_health():
+    return {"status": "operational", "mode": "demo" if pdrm_service.demo_mode else "live"}
