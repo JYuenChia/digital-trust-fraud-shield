@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X, PhoneCall, Mic, MicOff, Lock, Smartphone, Send, Globe } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X, PhoneCall, Mic, MicOff, Lock, Smartphone, Send, Globe, Download } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeScanner } from 'html5-qrcode';
 import { FRAUD_API_BASE_URL } from '@/const';
 import { useFraudEvents } from '@/contexts/FraudEventsContext';
@@ -636,7 +636,7 @@ export default function Transaction() {
   const callLastAnalysisTsRef = useRef(0);
   const callBackendVoiceAssessmentRef = useRef<AIVoiceAssessment | null>(null);
   const callVoiceAuditSessionRef = useRef(0);
-  const ocrInputRef = useRef<HTMLInputElement | null>(null);
+  const unifiedInputRef = useRef<HTMLInputElement | null>(null);
   const amountInputRef = useRef<HTMLInputElement | null>(null);
   const scannerRegionId = 'qr-reader-shield';
 
@@ -1580,67 +1580,95 @@ export default function Transaction() {
     };
   }, [activeDeviceId, activeIpProfile, isQrScannerOpen, recipientName]);
 
-  const handleOcrImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUnifiedUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
 
     setQrScanError(null);
+    setOcrSummary('Processing document for risk and details...');
     setIsOcrProcessing(true);
-    setOcrSummary('Pre-processing image and extracting payment details...');
+    let decodedText = '';
+    let extractedDetails: OcrExtractionResult | undefined;
 
+    // Step 1: Detect QR Risk if it's a QR image
     try {
-      const processedCanvas = await preprocessImageForOcr(file);
-      const tesseract = await import('tesseract.js');
-      const ocrResult = await tesseract.recognize(processedCanvas, 'eng');
-      const extractedText = ocrResult.data.text || '';
-
-      if (!extractedText.trim()) {
-        throw new Error('No readable text found in this image.');
+      const html5Qr = new Html5Qrcode(scannerRegionId);
+      decodedText = await html5Qr.scanFile(file, true);
+      
+      // If QR decode succeeded, try to parse its specific financial fields
+      const parsed = parseQrPayload(decodedText);
+      if (parsed) {
+        extractedDetails = {
+          accountNumber: parsed.merchant_id || undefined,
+          recipientName: parsed.account_name || undefined,
+          amount: parsed.amount,
+          currency: parsed.currency
+        };
       }
-
-      setLastQrPreview(extractedText.replace(/\s+/g, ' ').slice(0, 120));
-
-      const extracted = extractFinancialDataFromText(extractedText);
-      if (!extracted.accountNumber && !extracted.recipientName && !extracted.amount) {
-        throw new Error('Could not locate account number, recipient, or amount from OCR text.');
-      }
-
-      applyExtractedTransferData(extracted);
-      setScannedQrPayload(null);
-
-      const threatResult = await scanQrThreat(extractedText, extracted);
-      closeQrScanner();
-      const hasDetectedAmount = typeof extracted.amount === 'number' && extracted.amount > 0;
-
-      if (threatResult.status === 'APPROVED') {
-        setFraudResult(threatResult);
-        setRecipientVerification({ label: 'Verified' });
-        if (hasDetectedAmount) {
-          setQrScanStatus({ tone: 'safe', message: 'OCR complete. Transfer details are auto-filled. Please verify and confirm.' });
-          // Auto-trigger confirmation modal for immediate user verification when amount is available.
-          setModalState('confirming');
-        } else {
-          setQrScanStatus({ tone: 'safe', message: 'OCR complete. Recipient details are auto-filled. Please enter amount to continue.' });
-          setActiveStep('recipient');
-          window.setTimeout(() => amountInputRef.current?.focus(), 0);
-        }
-      } else if (threatResult.status === 'BLOCKED') {
-        setRecipientVerification(null);
-        setQrScanStatus({ tone: 'danger', message: threatResult.reason_code || 'Red alert: recipient appears in known scam signals.' });
-        applyResultModal(threatResult);
-      } else {
-        setRecipientVerification(null);
-        setQrScanStatus({ tone: 'warn', message: threatResult.reason_code || 'Recipient needs verification before transfer.' });
-        applyResultModal(threatResult);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to run OCR scan right now. Please try another image.';
-      setQrScanError(message);
-      setOcrSummary(null);
-    } finally {
-      setIsOcrProcessing(false);
+    } catch (qrErr) {
+      console.log('Not a standard QR or unreadable as QR, falling back to OCR only.');
     }
+
+    // Step 2: Extract Details via OCR (if not already found by QR)
+    if (!extractedDetails) {
+      try {
+        const processedCanvas = await preprocessImageForOcr(file);
+        const tesseract = await import('tesseract.js');
+        const ocrResult = await tesseract.recognize(processedCanvas, 'eng');
+        const extractedText = ocrResult.data.text || '';
+        
+        if (extractedText.trim()) {
+          extractedDetails = extractFinancialDataFromText(extractedText);
+          // Use OCR text as fallback if QR decode failed
+          if (!decodedText) decodedText = extractedText;
+        }
+      } catch (ocrErr) {
+        console.error('OCR failed:', ocrErr);
+      }
+    }
+
+    // Step 3: Run Threat Scan and apply results
+    if (decodedText || extractedDetails) {
+      try {
+        if (extractedDetails) {
+          applyExtractedTransferData(extractedDetails);
+          // Set verify status for UI
+          setRecipientVerification({ label: 'Verified' });
+        }
+        
+        const scanResult = await scanQrThreat(decodedText || 'OCR_ONLY_MODE', extractedDetails);
+        setFraudResult(scanResult);
+        closeQrScanner();
+
+        const hasDetectedAmount = typeof extractedDetails?.amount === 'number' && extractedDetails.amount > 0;
+        
+        if (scanResult.status === 'APPROVED') {
+          setRecipientVerification({ label: 'Verified' });
+          if (hasDetectedAmount) {
+            setQrScanStatus({ tone: 'safe', message: 'Analysis complete. Risk: LOW. Details auto-filled and ready for confirmation.' });
+            setModalState('confirming');
+          } else {
+            setQrScanStatus({ tone: 'safe', message: 'Analysis complete. Risk: LOW. Recipient filled, please enter amount.' });
+            setActiveStep('recipient');
+            window.setTimeout(() => amountInputRef.current?.focus(), 0);
+          }
+        } else {
+          setQrScanStatus({ 
+            tone: scanResult.status === 'BLOCKED' ? 'danger' : 'warn', 
+            message: scanResult.reason_code || 'Caution: Risk signals detected in this document.' 
+          });
+          applyResultModal(scanResult);
+        }
+      } catch (scanErr) {
+        setQrScanError('Details extracted but risk analysis failed. Please verify manually.');
+      }
+    } else {
+      setQrScanError('Could not read any QR or payment details from this image.');
+    }
+    
+    setIsOcrProcessing(false);
+    setOcrSummary(null);
   };
 
   const handleProcessTransaction = async () => {
@@ -1910,7 +1938,7 @@ export default function Transaction() {
                         setRecipientVerification(null);
                       }}
                       placeholder="Enter recipient name"
-                      className="bg-transparent text-[#111827] dark:text-white text-2xl font-bold outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
+                      className="bg-transparent text-[#111827] dark:text-white text-sm font-sans normal-case tracking-normal leading-normal outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
                     />
                   </div>
                   <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
@@ -1924,7 +1952,7 @@ export default function Transaction() {
                         setRecipientVerification(null);
                       }}
                       placeholder="Enter account number"
-                      className="bg-transparent text-[#111827] dark:text-white font-mono text-xl tracking-[0.2em] text-[#FF5500] outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
+                      className="bg-transparent text-[#111827] dark:text-white text-sm font-sans normal-case tracking-normal leading-normal outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
                     />
                   </div>
                   <StyledDropdown
@@ -1957,7 +1985,7 @@ export default function Transaction() {
                         setActiveStep('recipient');
                       }}
                       placeholder="0.00"
-                      className="bg-transparent text-[#111827] dark:text-white font-bold font-['Sora'] text-4xl outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
+                      className="bg-transparent text-[#111827] dark:text-white text-sm font-sans normal-case tracking-normal leading-normal outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
                     />
                   </div>
                   <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
@@ -1966,7 +1994,7 @@ export default function Transaction() {
                       type="text"
                       defaultValue=""
                       placeholder="Enter transfer note"
-                      className="bg-transparent text-[#111827] dark:text-white font-semibold italic opacity-80 outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
+                      className="bg-transparent text-[#111827] dark:text-white text-sm font-sans normal-case tracking-normal leading-normal opacity-80 outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
                     />
                   </div>
                 </div>
@@ -2032,44 +2060,27 @@ export default function Transaction() {
 
             <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-slate-50 dark:bg-[#101010] p-3">
               <div id={scannerRegionId} className="min-h-[280px] rounded-xl overflow-hidden" />
-              <div className="mt-3 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#151515] p-3">
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-[#6B7280] dark:text-[#9EA8B5]">
-                  Upload QR Image
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleQrImageUpload}
-                  disabled={isQrImageDecoding}
-                  className="block w-full text-sm text-[#111827] dark:text-white file:mr-3 file:rounded-md file:border-0 file:bg-[#FF5500] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[#111827] dark:file:text-white hover:file:bg-[#E04B00]"
-                />
-                <p className="mt-2 text-xs text-[#6B7280] dark:text-[#A0A0A0]">
-                  {isQrImageDecoding ? 'Reading image...' : 'Use this if camera scan is unavailable.'}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-black/10 dark:border-white/10 bg-[#FFFFFF] dark:bg-[#111111] px-4 py-3">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <p className="text-xs text-[#6B7280] dark:text-[#A0A0A0]">
-                  OCR mode preprocesses image to grayscale, boosts contrast, and applies thresholding before extraction.
-                </p>
+              <div className="mt-3 flex flex-col gap-3">
                 <button
                   type="button"
-                  disabled={isOcrProcessing}
-                  onClick={() => ocrInputRef.current?.click()}
-                  className="inline-flex items-center justify-center rounded-lg bg-[#FF5500] px-3 py-2 text-xs font-bold text-[#111827] dark:text-white hover:bg-[#E04B00] transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                  disabled={isOcrProcessing || isQrImageDecoding}
+                  onClick={() => unifiedInputRef.current?.click()}
+                  className="w-full py-4 rounded-xl bg-[#FF5500] hover:bg-[#E04B00] text-[#111827] dark:text-white font-bold transition-all shadow-lg flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
                 >
-                  {isOcrProcessing ? 'Processing OCR...' : 'Upload Receipt / Screenshot'}
+                  <Download size={20} className="rotate-180" />
+                  {isOcrProcessing || isQrImageDecoding ? 'Risk Analysis in Progress...' : 'Upload QR or Transaction Record'}
                 </button>
+                <input
+                  ref={unifiedInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleUnifiedUpload}
+                  className="hidden"
+                />
+                <p className="text-center text-xs text-[#6B7280] dark:text-[#A0A0A0]">
+                  Extracts account details & screens for scam risk in one step.
+                </p>
               </div>
-              <input
-                ref={ocrInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleOcrImageUpload}
-                className="hidden"
-              />
             </div>
 
             {ocrSummary && (
