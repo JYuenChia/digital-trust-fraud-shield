@@ -39,6 +39,8 @@ type GuardianAlertsResponse = {
   }>;
 };
 
+type ProfileTab = 'account' | 'cards' | 'guardian-link' | 'guardian-dashboard';
+
 type RecoveryReportResponse = {
   status: string;
   report_id: string;
@@ -102,6 +104,7 @@ export default function Profile() {
   const [showPinSetupModal, setShowPinSetupModal] = useState(false);
   const [newPin, setNewPin] = useState('');
   const [saveMessage, setSaveMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<ProfileTab>('account');
 
   const [cards, setCards] = useState<LinkedCard[]>(() => {
     try {
@@ -386,390 +389,417 @@ export default function Profile() {
     URL.revokeObjectURL(url);
   };
 
-  return (
-    <div className="min-h-screen bg-[#F3F4F6] dark:bg-[#0C0C0C] font-['Inter'] flex flex-col items-center pt-16">
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden flex justify-center">
-        <div className="absolute w-[120%] h-[800px] bg-[#FF5500] opacity-[0.48] blur-[160px] rounded-[100%] bottom-[-420px] left-1/2 -translate-x-1/2" />
-        <div className="absolute w-[80%] h-[600px] bg-[#FF3B30] opacity-[0.09] blur-[140px] rounded-[100%] bottom-[-320px] left-[-20%]" />
-        <div className="absolute w-[80%] h-[600px] bg-[#FF5500] opacity-[0.07] blur-[140px] rounded-[100%] bottom-[-320px] right-[-20%]" />
-      </div>
+  const tabs: Array<{ id: ProfileTab; label: string }> = [
+    { id: 'account', label: 'Account' },
+    { id: 'cards', label: 'Linked Bank Cards' },
+    { id: 'guardian-link', label: 'Guardian Link' },
+    { id: 'guardian-dashboard', label: 'Guardian Dashboard' },
+  ];
 
-      <div className="w-full max-w-[1480px] relative z-10 px-10 py-10 pb-16 flex flex-col gap-8">
+  const primaryButtonClass = 'h-10 rounded-lg px-4 text-sm font-semibold transition-colors';
+
+  return (
+    <div className="min-h-screen bg-background text-foreground font-['Inter'] flex flex-col items-center pt-16">
+      <div className="w-full max-w-[1480px] px-8 py-10 pb-16 flex flex-col gap-8">
         <div data-tour="profile-header" className="flex flex-col gap-2">
-          <h1 className="text-[#111827] dark:text-white font-['Sora'] text-4xl font-bold">{t('profile.title')}</h1>
-          <p className="text-[#6B7280] dark:text-[#8A8A8A] text-lg">{t('profile.subtitle')}</p>
+          <h1 className="font-['Sora'] text-4xl font-bold text-foreground">{t('profile.title')}</h1>
+          <p className="text-muted-foreground text-lg">{t('profile.subtitle')}</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-6">
-          <div data-tour="profile-security" className="bg-[#FFFFFF]/55 dark:bg-[#1A1A1A]/55 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-3xl p-7 flex flex-col gap-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[#111827] dark:text-white text-xl font-bold font-['Sora']">{t('profile.accountDetails')}</h2>
-              <button onClick={persistProfile} className="bg-[#FF5500] hover:bg-[#E04B00] transition-colors px-5 py-2 rounded-lg text-[#111827] dark:text-white font-semibold text-sm">{t('profile.saveChanges')}</button>
-            </div>
+        <div className="flex flex-col lg:flex-row gap-8 bg-card rounded-2xl p-6 md:p-8 border border-border shadow-sm">
+          <aside className="lg:w-64 lg:shrink-0">
+            <nav className="flex lg:flex-col gap-2 overflow-x-auto pb-2 lg:pb-0">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`h-10 rounded-lg px-4 text-sm font-semibold text-left whitespace-nowrap transition-colors ${
+                    activeTab === tab.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-foreground hover:bg-muted'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+          </aside>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
-                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">{t('profile.fullName')}</label>
-                <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="bg-transparent text-[#111827] dark:text-white font-semibold outline-none" />
-              </div>
-              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
-                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">{t('profile.email')}</label>
-                <input value={email} onChange={(e) => setEmail(e.target.value)} className="bg-transparent text-[#111827] dark:text-white font-semibold outline-none" />
-              </div>
-              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
-                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">{t('profile.phoneNumber')}</label>
-                <input value={phone} onChange={(e) => setPhone(e.target.value)} className="bg-transparent text-[#111827] dark:text-white font-semibold outline-none" />
-              </div>
-              <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 p-4 rounded-xl">
-                <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">{t('profile.nationality')}</label>
-                <input value={nationality} onChange={(e) => setNationality(e.target.value)} className="bg-transparent text-[#111827] dark:text-white font-semibold outline-none" />
-              </div>
-            </div>
+          <div className="hidden lg:block w-px bg-border" aria-hidden="true" />
 
-            <div className="rounded-xl border border-black/10 dark:border-white/10 bg-[#F8FAFC] dark:bg-[#141414] p-4 flex flex-col gap-2">
-              <span className="text-[#111827] dark:text-white text-sm font-semibold">{t('profile.languagePreference')}</span>
-              <p className="text-xs text-[#6B7280] dark:text-[#8A8A8A]">{t('profile.languageHint')}</p>
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value as 'en' | 'ms' | 'zh')}
-                className="w-full md:w-72 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-[#0F0F0F] px-3 py-2 text-sm text-[#111827] dark:text-white"
-              >
-                <option value="en">{t('language.english')}</option>
-                <option value="ms">{t('language.malay')}</option>
-                <option value="zh">{t('language.chinese')}</option>
-              </select>
-            </div>
+          <section className="flex-1 flex flex-col gap-6">
+            {activeTab === 'account' && (
+              <>
+                <div className="flex items-center justify-between gap-3" data-tour="profile-security">
+                  <h2 className="text-2xl font-['Sora'] font-bold text-foreground">Account</h2>
+                  <button
+                    onClick={persistProfile}
+                    className={`${primaryButtonClass} bg-primary hover:opacity-90 text-primary-foreground`}
+                  >
+                    {t('profile.saveChanges')}
+                  </button>
+                </div>
 
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">                  <div className="flex items-center justify-between border rounded-xl p-4 transition-colors border-black/10 dark:border-white/10 bg-[#F8FAFC] dark:bg-[#141414]">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-muted">
+                    <label className="text-sm text-muted-foreground">{t('profile.fullName')}</label>
+                    <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="bg-transparent text-foreground font-semibold outline-none" />
+                  </div>
+                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-muted">
+                    <label className="text-sm text-muted-foreground">{t('profile.email')}</label>
+                    <input value={email} onChange={(e) => setEmail(e.target.value)} className="bg-transparent text-foreground font-semibold outline-none" />
+                  </div>
+                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-muted">
+                    <label className="text-sm text-muted-foreground">{t('profile.phoneNumber')}</label>
+                    <input value={phone} onChange={(e) => setPhone(e.target.value)} className="bg-transparent text-foreground font-semibold outline-none" />
+                  </div>
+                  <div className="flex flex-col gap-2 p-4 rounded-xl bg-muted">
+                    <label className="text-sm text-muted-foreground">{t('profile.nationality')}</label>
+                    <input value={nationality} onChange={(e) => setNationality(e.target.value)} className="bg-transparent text-foreground font-semibold outline-none" />
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-muted p-4 flex flex-col gap-2">
+                  <span className="text-foreground text-sm font-semibold">{t('profile.languagePreference')}</span>
+                  <p className="text-xs text-muted-foreground">{t('profile.languageHint')}</p>
+                  <select
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value as 'en' | 'ms' | 'zh')}
+                    className="w-full md:w-72 h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                  >
+                    <option value="en">{t('language.english')}</option>
+                    <option value="ms">{t('language.malay')}</option>
+                    <option value="zh">{t('language.chinese')}</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between rounded-xl p-4 bg-muted">
                     <div className="flex items-center gap-3">
-                      {theme === 'dark' ? <Moon className="text-[#8A8A8A]" size={20} /> : <Sun className="text-[#FF9F0A]" size={20} />}
-                      <span className="text-[#111827] dark:text-white text-sm font-semibold">{t('profile.applicationTheme')}</span>
+                      {theme === 'dark' ? <Moon className="text-muted-foreground" size={20} /> : <Sun className="text-[#F59E0B]" size={20} />}
+                      <span className="text-foreground text-sm font-semibold">{t('profile.applicationTheme')}</span>
                     </div>
                     {toggleTheme && (
-                      <button onClick={toggleTheme} className="bg-[#111827] dark:bg-white text-white dark:text-[#111827] px-4 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                      <button onClick={toggleTheme} className={`${primaryButtonClass} border border-input bg-background text-foreground`}>
                         {theme === 'light' ? t('profile.switchDark') : t('profile.switchLight')}
                       </button>
                     )}
                   </div>
-                </div>
 
-                <div data-tour="profile-wallet-pin" className="flex flex-col gap-2">                <button onClick={() => {
-                  if (walletPinEnabled) {
-                    setWalletPinEnabled(false);
-                    localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin`, 'false');
-                    localStorage.removeItem(`${PROFILE_STORAGE_KEY}-pin-value`);
-                  } else {
-                    setShowPinSetupModal(true);
-                    setNewPin('');
-                  }
-                }} className={`flex items-center justify-between border rounded-xl p-4 transition-colors ${walletPinEnabled ? 'border-[#32D74B55] bg-[#32D74B10]' : 'border-black/10 dark:border-white/10 bg-[#F8FAFC] dark:bg-[#141414]'}`}>
-                  <span className="text-[#111827] dark:text-white text-sm font-semibold">{t('profile.walletPinProtection')}</span>
-                  <span className={`text-xs font-bold px-2 py-1 rounded ${walletPinEnabled ? 'bg-[#32D74B30] text-[#32D74B]' : 'bg-[#FF3B3020] text-[#FF3B30]'}`}>{walletPinEnabled ? 'ON' : 'OFF'}</span>
-                </button>
-                {!walletPinEnabled && (
-                  <p className="text-[#FF9F0A] text-xs px-2">When Wallet PIN is enabled, your PIN will be required to authorize every transaction.</p>
-                )}
-              </div>
-            </div>
-
-            {saveMessage && <div className="text-[#32D74B] text-sm font-semibold">{saveMessage}</div>}
-          </div>
-        </div>
-
-        <div className="bg-[#FFFFFF]/55 dark:bg-[#1A1A1A]/55 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-3xl p-7 flex flex-col gap-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-[#111827] dark:text-white text-xl font-bold font-['Sora']">Linked Bank Cards</h2>
-            <button onClick={() => setShowLinkForm((v) => !v)} className="inline-flex items-center gap-2 bg-[#FF5500] hover:bg-[#E04B00] transition-colors px-4 py-2 rounded-lg text-[#111827] dark:text-white font-semibold text-sm">
-              <Plus size={16} /> Link Bank Card
-            </button>
-          </div>
-
-          {showLinkForm && (
-            <div className="bg-[#F8FAFC] dark:bg-[#141414] border border-black/10 dark:border-white/10 rounded-2xl p-5 flex flex-col gap-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="flex flex-col gap-2">
-                  <label className="text-[#6B7280] dark:text-[#8A8A8A] text-xs">Bank</label>
-                  <select value={newCardBank} onChange={(e) => setNewCardBank(e.target.value)} className="bg-white dark:bg-[#0F0F0F] border border-black/10 dark:border-white/10 rounded-lg px-3 py-2 text-[#111827] dark:text-white">
-                    {MALAYSIA_BANKS.map((bank) => (
-                      <option key={bank} value={bank}>{bank}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-[#6B7280] dark:text-[#8A8A8A] text-xs">Card Number</label>
-                  <input value={newCardNumber} onChange={(e) => setNewCardNumber(e.target.value)} placeholder="4111 1111 1111 1111" className="bg-white dark:bg-[#0F0F0F] border border-black/10 dark:border-white/10 rounded-lg px-3 py-2 text-[#111827] dark:text-white" />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-[#6B7280] dark:text-[#8A8A8A] text-xs">Card Holder</label>
-                  <input value={newCardHolder} onChange={(e) => setNewCardHolder(e.target.value)} placeholder="Name on card" className="bg-white dark:bg-[#0F0F0F] border border-black/10 dark:border-white/10 rounded-lg px-3 py-2 text-[#111827] dark:text-white" />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-[#6B7280] dark:text-[#8A8A8A] text-xs">Card Type</label>
-                  <select value={newCardType} onChange={(e) => setNewCardType(e.target.value as 'debit' | 'credit')} className="bg-white dark:bg-[#0F0F0F] border border-black/10 dark:border-white/10 rounded-lg px-3 py-2 text-[#111827] dark:text-white">
-                    <option value="debit">Debit</option>
-                    <option value="credit">Credit</option>
-                  </select>
-                </div>
-              </div>
-
-              {verificationStep === 'idle' && (
-                <button onClick={submitLinkCard} className="self-start bg-[#FF5500] hover:bg-[#E04B00] px-4 py-2 rounded-lg text-[#111827] dark:text-white font-semibold text-sm">Start Verification</button>
-              )}
-
-              {verificationStep === 'otp' && (
-                <div className="flex flex-wrap items-center gap-3">
-                  <input value={otpCode} onChange={(e) => setOtpCode(e.target.value)} placeholder="Enter 6-digit OTP" className="bg-white dark:bg-[#0F0F0F] border border-black/10 dark:border-white/10 rounded-lg px-3 py-2 text-[#111827] dark:text-white" />
-                  <button onClick={confirmOtp} className="bg-[#32D74B] hover:bg-[#2EC046] px-4 py-2 rounded-lg text-[#0B0B0B] font-semibold text-sm">Confirm OTP</button>
-                </div>
-              )}
-
-              {verificationStep === 'success' && (
-                <div className="inline-flex items-center gap-2 text-[#32D74B] font-semibold text-sm">
-                  <CheckCircle2 size={16} /> Card linked and verified successfully.
-                </div>
-              )}
-
-              {formError && <div className="text-[#FF3B30] text-sm">{formError}</div>}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {cards.map((card) => (
-              <div key={card.id} className="bg-[#F8FAFC] dark:bg-[#141414] border border-black/10 dark:border-white/10 rounded-2xl p-5 flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <CreditCard size={18} className="text-[#FF5500]" />
-                  <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${statusPill(card.status)}`}>{card.status.toUpperCase()}</span>
-                </div>
-                <div className="text-[#111827] dark:text-white font-semibold">{card.bankName}</div>
-                <div className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">{card.type.toUpperCase()} • •••• {card.last4}</div>
-                <div className="text-[#505050] dark:text-[#B8B8B8] text-xs">Card Holder: {card.holderName}</div>
-              </div>
-            ))}
-          </div>
-
-          {cards.length === 0 && (
-            <div className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">No linked cards yet. Add one to enable instant transfers and top-ups.</div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-[#F0F7FF]/70 dark:bg-[#121A24]/70 backdrop-blur-2xl p-7 flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex flex-col">
-                <span className="text-xs uppercase tracking-[0.18em] text-[#005A9E] dark:text-[#7EC8FF]">Guardian Link</span>
-                <span className="text-sm text-[#111827] dark:text-white">Add and manage trusted family guardians.</span>
-              </div>
-              <span className="rounded-full bg-[#7EC8FF44] dark:bg-[#7EC8FF22] px-3 py-1 text-xs font-semibold text-[#004A85] dark:text-[#9DD7FF]">
-                {guardians.length} linked
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <input
-                type="text"
-                value={guardianForm.guardian_name}
-                onChange={(e) => setGuardianForm((prev) => ({ ...prev, guardian_name: e.target.value }))}
-                placeholder="Guardian full name"
-                className="rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-[#0E1420] px-3 py-2 text-sm text-[#111827] dark:text-white outline-none focus:border-blue-400 dark:border-[#7EC8FF]"
-              />
-              <input
-                type="text"
-                value={guardianForm.guardian_account}
-                onChange={(e) => setGuardianForm((prev) => ({ ...prev, guardian_account: e.target.value.toUpperCase() }))}
-                placeholder="Guardian account ID"
-                className="rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-[#0E1420] px-3 py-2 text-sm text-[#111827] dark:text-white outline-none focus:border-blue-400 dark:border-[#7EC8FF]"
-              />
-              <input
-                type="text"
-                value={guardianForm.phone}
-                onChange={(e) => setGuardianForm((prev) => ({ ...prev, phone: e.target.value }))}
-                placeholder="Phone (e.g. +60-12-0000000)"
-                className="rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-[#0E1420] px-3 py-2 text-sm text-[#111827] dark:text-white outline-none focus:border-blue-400 dark:border-[#7EC8FF]"
-              />
-              <input
-                type="email"
-                value={guardianForm.email}
-                onChange={(e) => setGuardianForm((prev) => ({ ...prev, email: e.target.value }))}
-                placeholder="Email"
-                className="rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-[#0E1420] px-3 py-2 text-sm text-[#111827] dark:text-white outline-none focus:border-blue-400 dark:border-[#7EC8FF]"
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={handleLinkGuardian}
-              disabled={isGuardianLoading}
-              className="rounded-lg bg-[#2F83C9] px-4 py-2.5 text-sm font-semibold text-[#111827] dark:text-white hover:bg-[#276FA8] disabled:opacity-60"
-            >
-              {isGuardianLoading ? 'Saving...' : 'Link Guardian'}
-            </button>
-
-            <div className="flex flex-col gap-2 max-h-44 overflow-auto pr-1">
-              {guardians.length === 0 && <p className="text-sm text-slate-600 dark:text-[#94A4B8]">No guardian linked yet.</p>}
-              {guardians.map((g) => (
-                <div key={g.guardian_account} className="rounded-lg border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-3 py-2 flex items-center justify-between gap-3">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-[#111827] dark:text-white">{g.guardian_name}</span>
-                    <span className="text-xs text-slate-500 dark:text-[#A8B4C4]">{g.guardian_account} • {g.phone} • {g.email}</span>
+                  <div data-tour="profile-wallet-pin" className="flex flex-col gap-2">
+                    <button
+                      onClick={() => {
+                        if (walletPinEnabled) {
+                          setWalletPinEnabled(false);
+                          localStorage.setItem(`${PROFILE_STORAGE_KEY}-pin`, 'false');
+                          localStorage.removeItem(`${PROFILE_STORAGE_KEY}-pin-value`);
+                        } else {
+                          setShowPinSetupModal(true);
+                          setNewPin('');
+                        }
+                      }}
+                      className="flex items-center justify-between rounded-xl p-4 bg-muted"
+                    >
+                      <span className="text-foreground text-sm font-semibold">{t('profile.walletPinProtection')}</span>
+                      <span className={`text-xs font-bold px-2 py-1 rounded ${walletPinEnabled ? 'bg-[#DCFCE7] text-[#15803D]' : 'bg-[#FEE2E2] text-[#B91C1C]'}`}>{walletPinEnabled ? 'ON' : 'OFF'}</span>
+                    </button>
+                    {!walletPinEnabled && (
+                      <p className="text-[#D97706] text-xs px-2">When Wallet PIN is enabled, your PIN will be required to authorize every transaction.</p>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveGuardian(g.guardian_account)}
-                    className="text-xs font-semibold text-[#D01A1A] dark:text-[#FF9F9A] hover:text-[#B31A00] dark:text-[#FFD0CC]"
-                  >
-                    Remove
-                  </button>
                 </div>
-              ))}
-            </div>
-          </div>
 
-          <div className="rounded-3xl border border-black/10 dark:border-white/10 bg-[#FFF6F0]/70 dark:bg-[#1E1622]/70 backdrop-blur-2xl p-7 flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex flex-col">
-                <span className="text-xs uppercase tracking-[0.18em] text-[#B34A00] dark:text-[#FFB37A]">Guardian Dashboard</span>
-                <span className="text-sm text-[#111827] dark:text-white">Review high-risk alerts and generate recovery evidence.</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Link href="/guardian-notifications">
-                  <button
-                    type="button"
-                    className="rounded-lg border border-[#7EC8FF66] px-3 py-1.5 text-xs font-semibold text-[#CBE8FF] hover:bg-[#7EC8FF1A]"
-                  >
-                    Open Guardian Notifications
-                  </button>
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => loadGuardianAlerts(selectedGuardianAccount)}
-                  className="rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10"
-                >
-                  Refresh Alerts
-                </button>
-              </div>
-            </div>
-
-            <select
-              value={selectedGuardianAccount}
-              onChange={(e) => setSelectedGuardianAccount(e.target.value)}
-              className="rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-[#120E15] px-3 py-2 text-sm text-[#111827] dark:text-white outline-none"
-            >
-              <option value="">Choose guardian account</option>
-              {guardians.map((g) => (
-                <option key={g.guardian_account} value={g.guardian_account}>
-                  {g.guardian_name} ({g.guardian_account})
-                </option>
-              ))}
-            </select>
-
-            <div className="rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-[#120E15] p-3 max-h-40 overflow-auto">
-              {guardianAlerts.length === 0 && <p className="text-sm text-[#4E3E4D] dark:text-[#B8A9B7]">No high-risk alerts yet.</p>}
-              {guardianAlerts.map((alert, idx) => (
-                <div key={`${alert.timestamp}-${idx}`} className="py-2 border-b border-black/10 dark:border-white/10 last:border-b-0">
-                  <p className="text-sm text-[#111827] dark:text-white font-semibold">{Math.round((alert.risk_score || 0) * 100)}% risk • {alert.sender_name}</p>
-                  <p className="text-xs text-[#5E4E5D] dark:text-[#C9BAC8]">{alert.risk_reason}</p>
-                  <p className="text-[11px] text-orange-900/60 dark:text-[#978A96]">{new Date(alert.timestamp).toLocaleString()}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <input
-                type="text"
-                value={recoveryForm.incident_description}
-                onChange={(e) => setRecoveryForm((prev) => ({ ...prev, incident_description: e.target.value }))}
-                placeholder="Incident summary"
-                className="md:col-span-2 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-[#120E15] px-3 py-2 text-sm text-[#111827] dark:text-white outline-none"
-              />
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={recoveryForm.amount_lost}
-                onChange={(e) => setRecoveryForm((prev) => ({ ...prev, amount_lost: e.target.value }))}
-                placeholder="Amount lost"
-                className="rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-[#120E15] px-3 py-2 text-sm text-[#111827] dark:text-white outline-none"
-              />
-              <input
-                type="date"
-                value={recoveryForm.transaction_date}
-                onChange={(e) => setRecoveryForm((prev) => ({ ...prev, transaction_date: e.target.value }))}
-                className="rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-[#120E15] px-3 py-2 text-sm text-[#111827] dark:text-white outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleGenerateRecoveryReport}
-                disabled={isGuardianLoading}
-                className="rounded-lg bg-[#D8762A] px-4 py-2 text-sm font-semibold text-[#111827] dark:text-white hover:bg-[#BC6623] disabled:opacity-60"
-              >
-                Generate AI Evidence
-              </button>
-            </div>
-
-            {recoveryReportId && (
-              <p className="text-xs font-semibold text-[#9A4200] dark:text-[#FFD3A9]">Recovery report ID: {recoveryReportId}</p>
+                {saveMessage && <div className="text-[#15803D] text-sm font-semibold">{saveMessage}</div>}
+              </>
             )}
 
-            {recoveryReport && (
-              <div className="rounded-xl border border-orange-200 dark:border-[#FFB37A44] bg-[#FFB37A33] dark:bg-[#FFB37A12] p-4 flex flex-col gap-3">
+            {activeTab === 'cards' && (
+              <>
                 <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-[#FFD6B0]">AI Evidence Report Ready</p>
-                    <p className="text-xs text-[#995511] dark:text-[#EAC8A8]">Generated: {new Date(recoveryReport.generated_at).toLocaleString()}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={downloadRecoveryReport}
-                    className="rounded-lg border border-orange-200 dark:border-[#FFD6B0]/50 px-3 py-1.5 text-xs font-semibold text-[#FFD6B0] hover:bg-[#FFFFFF12]"
-                  >
-                    Download JSON
+                  <h2 className="text-2xl font-['Sora'] font-bold text-foreground">Linked Bank Cards</h2>
+                  <button onClick={() => setShowLinkForm((v) => !v)} className={`${primaryButtonClass} inline-flex items-center gap-2 bg-primary hover:opacity-90 text-primary-foreground`}>
+                    <Plus size={16} /> Link Bank Card
                   </button>
                 </div>
 
-                <div className="rounded-lg border border-black/10 dark:border-white/10 bg-orange-50 dark:bg-[#1C1417] p-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-[#7A4B29] dark:text-[#D9B999]">Incident Summary</p>
-                  <p className="mt-1 text-sm text-[#111827] dark:text-white">{recoveryReport.incident_summary.description}</p>
-                  <p className="mt-1 text-xs text-[#725239] dark:text-[#D8C2B0]">
-                    Fraud Type: {recoveryReport.incident_summary.fraud_type} | Confidence: {Math.round(recoveryReport.incident_summary.confidence_level * 100)}%
-                  </p>
+                {showLinkForm && (
+                  <div className="rounded-xl bg-muted p-5 flex flex-col gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-muted-foreground text-xs">Bank</label>
+                        <select value={newCardBank} onChange={(e) => setNewCardBank(e.target.value)} className="h-10 rounded-lg border border-input bg-background px-3 text-foreground">
+                          {MALAYSIA_BANKS.map((bank) => (
+                            <option key={bank} value={bank}>{bank}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <label className="text-muted-foreground text-xs">Card Number</label>
+                        <input value={newCardNumber} onChange={(e) => setNewCardNumber(e.target.value)} placeholder="4111 1111 1111 1111" className="h-10 rounded-lg border border-input bg-background px-3 text-foreground" />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <label className="text-muted-foreground text-xs">Card Holder</label>
+                        <input value={newCardHolder} onChange={(e) => setNewCardHolder(e.target.value)} placeholder="Name on card" className="h-10 rounded-lg border border-input bg-background px-3 text-foreground" />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <label className="text-muted-foreground text-xs">Card Type</label>
+                        <select value={newCardType} onChange={(e) => setNewCardType(e.target.value as 'debit' | 'credit')} className="h-10 rounded-lg border border-input bg-background px-3 text-foreground">
+                          <option value="debit">Debit</option>
+                          <option value="credit">Credit</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {verificationStep === 'idle' && (
+                      <button onClick={submitLinkCard} className={`${primaryButtonClass} self-start bg-primary hover:opacity-90 text-primary-foreground`}>Start Verification</button>
+                    )}
+
+                    {verificationStep === 'otp' && (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <input value={otpCode} onChange={(e) => setOtpCode(e.target.value)} placeholder="Enter 6-digit OTP" className="h-10 rounded-lg border border-input bg-background px-3 text-foreground" />
+                        <button onClick={confirmOtp} className={`${primaryButtonClass} bg-[#16A34A] hover:bg-[#15803D] text-white`}>Confirm OTP</button>
+                      </div>
+                    )}
+
+                    {verificationStep === 'success' && (
+                      <div className="inline-flex items-center gap-2 text-[#15803D] font-semibold text-sm">
+                        <CheckCircle2 size={16} /> Card linked and verified successfully.
+                      </div>
+                    )}
+
+                    {formError && <div className="text-[#B91C1C] text-sm">{formError}</div>}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {cards.map((card) => (
+                    <div key={card.id} className="rounded-xl p-5 bg-muted flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <CreditCard size={18} className="text-foreground" />
+                        <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${statusPill(card.status)}`}>{card.status.toUpperCase()}</span>
+                      </div>
+                      <div className="text-foreground font-semibold">{card.bankName}</div>
+                      <div className="text-muted-foreground text-sm">{card.type.toUpperCase()} • •••• {card.last4}</div>
+                      <div className="text-muted-foreground text-xs">Card Holder: {card.holderName}</div>
+                    </div>
+                  ))}
                 </div>
 
-                <div className="rounded-lg border border-black/10 dark:border-white/10 bg-orange-50 dark:bg-[#1C1417] p-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-[#7A4B29] dark:text-[#D9B999]">Evidence Findings</p>
-                  <div className="mt-2 flex flex-col gap-2">
-                    {recoveryReport.evidence.map((item, idx) => (
-                      <div key={`${item.category}-${idx}`} className="text-xs text-[#724A29] dark:text-[#E9D4C2]">
-                        <p className="font-semibold text-[#111827] dark:text-white">{item.category} ({item.severity})</p>
-                        <p>{item.findings}</p>
+                {cards.length === 0 && (
+                  <div className="text-muted-foreground text-sm">No linked cards yet. Add one to enable instant transfers and top-ups.</div>
+                )}
+              </>
+            )}
+
+            {activeTab === 'guardian-link' && (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-2xl font-['Sora'] font-bold text-foreground">Guardian Link</h2>
+                  <span className="rounded-full bg-[#DBEAFE] px-3 py-1 text-xs font-semibold text-[#1D4ED8]">{guardians.length} linked</span>
+                </div>
+
+                <div className="rounded-xl bg-muted p-5 flex flex-col gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      value={guardianForm.guardian_name}
+                      onChange={(e) => setGuardianForm((prev) => ({ ...prev, guardian_name: e.target.value }))}
+                      placeholder="Guardian full name"
+                      className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                    />
+                    <input
+                      type="text"
+                      value={guardianForm.guardian_account}
+                      onChange={(e) => setGuardianForm((prev) => ({ ...prev, guardian_account: e.target.value.toUpperCase() }))}
+                      placeholder="Guardian account ID"
+                      className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                    />
+                    <input
+                      type="text"
+                      value={guardianForm.phone}
+                      onChange={(e) => setGuardianForm((prev) => ({ ...prev, phone: e.target.value }))}
+                      placeholder="Phone"
+                      className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                    />
+                    <input
+                      type="email"
+                      value={guardianForm.email}
+                      onChange={(e) => setGuardianForm((prev) => ({ ...prev, email: e.target.value }))}
+                      placeholder="Email"
+                      className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleLinkGuardian}
+                    disabled={isGuardianLoading}
+                    className={`${primaryButtonClass} self-start bg-primary hover:opacity-90 text-primary-foreground disabled:opacity-60`}
+                  >
+                    {isGuardianLoading ? 'Saving...' : 'Link Guardian'}
+                  </button>
+                </div>
+
+                <div className="flex flex-col gap-2 max-h-[360px] overflow-auto pr-1">
+                  {guardians.length === 0 && <p className="text-sm text-muted-foreground">No guardian linked yet.</p>}
+                  {guardians.map((g) => (
+                    <div key={g.guardian_account} className="rounded-lg bg-muted px-4 py-3 flex items-center justify-between gap-3">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-foreground">{g.guardian_name}</span>
+                        <span className="text-xs text-muted-foreground">{g.guardian_account} • {g.phone} • {g.email}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveGuardian(g.guardian_account)}
+                        className="text-xs font-semibold text-[#B91C1C] hover:text-[#991B1B]"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {activeTab === 'guardian-dashboard' && (
+              <>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <h2 className="text-2xl font-['Sora'] font-bold text-foreground">Guardian Dashboard</h2>
+                  <div className="flex items-center gap-2">
+                    <Link href="/guardian-notifications">
+                      <button type="button" className={`${primaryButtonClass} border border-input text-foreground bg-background`}>Guardian Notifications</button>
+                    </Link>
+                    <button type="button" onClick={() => loadGuardianAlerts(selectedGuardianAccount)} className={`${primaryButtonClass} border border-input text-foreground bg-background`}>
+                      Refresh Alerts
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-muted p-5 flex flex-col gap-4">
+                  <select
+                    value={selectedGuardianAccount}
+                    onChange={(e) => setSelectedGuardianAccount(e.target.value)}
+                    className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                  >
+                    <option value="">Choose guardian account</option>
+                    {guardians.map((g) => (
+                      <option key={g.guardian_account} value={g.guardian_account}>
+                        {g.guardian_name} ({g.guardian_account})
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="rounded-lg bg-background p-3 max-h-44 overflow-auto border border-border">
+                    {guardianAlerts.length === 0 && <p className="text-sm text-muted-foreground">No high-risk alerts yet.</p>}
+                    {guardianAlerts.map((alert, idx) => (
+                      <div key={`${alert.timestamp}-${idx}`} className="py-2 border-b border-border/60 last:border-b-0">
+                        <p className="text-sm text-foreground font-semibold">{Math.round((alert.risk_score || 0) * 100)}% risk • {alert.sender_name}</p>
+                        <p className="text-xs text-muted-foreground">{alert.risk_reason}</p>
+                        <p className="text-[11px] text-muted-foreground">{new Date(alert.timestamp).toLocaleString()}</p>
                       </div>
                     ))}
                   </div>
-                </div>
 
-                <div className="rounded-lg border border-black/10 dark:border-white/10 bg-orange-50 dark:bg-[#1C1417] p-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-[#7A4B29] dark:text-[#D9B999]">Recovery Steps</p>
-                  <div className="mt-2 flex flex-col gap-1">
-                    {recoveryReport.recovery_recommendations.map((step, idx) => (
-                      <p key={`${step}-${idx}`} className="text-xs text-[#724A29] dark:text-[#E9D4C2]">{idx + 1}. {step}</p>
-                    ))}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input
+                      type="text"
+                      value={recoveryForm.incident_description}
+                      onChange={(e) => setRecoveryForm((prev) => ({ ...prev, incident_description: e.target.value }))}
+                      placeholder="Incident summary"
+                      className="h-10 md:col-span-2 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={recoveryForm.amount_lost}
+                      onChange={(e) => setRecoveryForm((prev) => ({ ...prev, amount_lost: e.target.value }))}
+                      placeholder="Amount lost"
+                      className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                    />
+                    <input
+                      type="date"
+                      value={recoveryForm.transaction_date}
+                      onChange={(e) => setRecoveryForm((prev) => ({ ...prev, transaction_date: e.target.value }))}
+                      className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleGenerateRecoveryReport}
+                      disabled={isGuardianLoading}
+                      className={`${primaryButtonClass} bg-primary hover:opacity-90 text-primary-foreground disabled:opacity-60`}
+                    >
+                      Generate AI Evidence
+                    </button>
                   </div>
-                  <p className="mt-2 text-xs font-semibold text-[#FFD6B0]">Next: {recoveryReport.next_steps}</p>
+
+                  {recoveryReportId && (
+                    <p className="text-xs font-semibold text-[#1D4ED8]">Recovery report ID: {recoveryReportId}</p>
+                  )}
+
+                  {recoveryReport && (
+                    <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-[#1D4ED8]">AI Evidence Report Ready</p>
+                          <p className="text-xs text-muted-foreground">Generated: {new Date(recoveryReport.generated_at).toLocaleString()}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={downloadRecoveryReport}
+                          className={`${primaryButtonClass} border border-input bg-background text-foreground`}
+                        >
+                          Download JSON
+                        </button>
+                      </div>
+
+                      <div className="rounded-lg border border-border bg-background p-3">
+                        <p className="text-xs uppercase tracking-[0.14em] text-foreground">Incident Summary</p>
+                        <p className="mt-1 text-sm text-foreground">{recoveryReport.incident_summary.description}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Fraud Type: {recoveryReport.incident_summary.fraud_type} | Confidence: {Math.round(recoveryReport.incident_summary.confidence_level * 100)}%
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg border border-border bg-background p-3">
+                        <p className="text-xs uppercase tracking-[0.14em] text-foreground">Evidence Findings</p>
+                        <div className="mt-2 flex flex-col gap-2">
+                          {recoveryReport.evidence.map((item, idx) => (
+                            <div key={`${item.category}-${idx}`} className="text-xs text-muted-foreground">
+                              <p className="font-semibold text-foreground">{item.category} ({item.severity})</p>
+                              <p>{item.findings}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border border-border bg-background p-3">
+                        <p className="text-xs uppercase tracking-[0.14em] text-foreground">Recovery Steps</p>
+                        <div className="mt-2 flex flex-col gap-1">
+                          {recoveryReport.recovery_recommendations.map((step, idx) => (
+                            <p key={`${step}-${idx}`} className="text-xs text-muted-foreground">{idx + 1}. {step}</p>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-xs font-semibold text-[#1D4ED8]">Next: {recoveryReport.next_steps}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
+              </>
+            )}
+
+            {guardianStatus && (
+              <div className="rounded-lg border border-border bg-accent px-4 py-3 text-sm text-foreground">
+                {guardianStatus}
               </div>
             )}
-          </div>
-        </div>
 
-        {guardianStatus && (
-          <div className="rounded-xl border border-blue-200 dark:border-[#7EC8FF44] dark:border-blue-200 dark:border-[#7EC8FF44] bg-[#7EC8FF14] px-4 py-3 text-sm text-[#003B73] dark:text-[#CFEBFF]">
-            {guardianStatus}
-          </div>
-        )}
-
-        <div className="flex items-center gap-4 bg-[#FFFFFF06] border border-black/10 dark:border-white/10 rounded-xl p-4">
-          <ShieldAlert size={20} className="text-[#FF9F0A]" />
-          <span className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Profile and card changes are simulated locally for demo mode (no external banking API call).</span>
+            <div className="flex items-center gap-3 rounded-lg bg-muted px-4 py-3">
+              <ShieldAlert size={18} className="text-[#F59E0B]" />
+              <span className="text-muted-foreground text-sm">Profile and card changes are simulated locally for demo mode (no external banking API call).</span>
+            </div>
+          </section>
         </div>
       </div>
 

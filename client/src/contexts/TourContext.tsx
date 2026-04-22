@@ -57,14 +57,14 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     id: 'dashboard-stats',
-    route: '/dashboard',
+    route: '/admin',
     selector: '[data-tour="dashboard-stats"]',
     title: 'Monitor Your Security Overview',
     description: 'Track transaction activity, fraud rate, and blocked threats in one place.',
   },
   {
     id: 'dashboard-alerts',
-    route: '/dashboard',
+    route: '/admin',
     selector: '[data-tour="dashboard-alerts"]',
     title: 'Review Real-Time Alerts',
     description: 'Use this panel to inspect flagged and blocked transactions quickly.',

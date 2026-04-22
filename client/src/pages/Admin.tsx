@@ -115,7 +115,7 @@ export default function Admin() {
           <p className="text-muted-foreground text-base">{t('admin.subtitle')}</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div data-tour="dashboard-stats" className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <div className="rounded-2xl border border-border bg-card/90 backdrop-blur-md p-5 flex flex-col gap-3 shadow-sm">
             <div className="flex items-center justify-between">
               <p className="text-muted-foreground text-xs uppercase tracking-[0.14em] font-semibold">{t('admin.kpiSavings')}</p>
@@ -145,7 +145,7 @@ export default function Admin() {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_1fr] gap-6">
-          <section className="rounded-2xl border border-border bg-card/90 backdrop-blur-md p-6 flex flex-col gap-5 shadow-sm">
+          <section data-tour="dashboard-alerts" className="rounded-2xl border border-border bg-card/90 backdrop-blur-md p-6 flex flex-col gap-5 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="text-foreground font-['Sora'] text-xl font-semibold">{t('admin.heatmapTitle')}</h2>
               <p className="text-muted-foreground text-sm">{t('admin.heatmapSubtitle')}</p>
