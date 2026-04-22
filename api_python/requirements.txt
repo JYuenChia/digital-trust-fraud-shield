@@ -1,10 +1,28 @@
-fastapi
-uvicorn
-joblib
-numpy
-pandas
-scikit-learn
-scipy
-librosa
-soundfile
-python-multipart
+# Requires Python 3.10 or 3.11 (tested on 3.11.7)
+# === FastAPI Core ===
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-multipart==0.0.6
+
+# === ML / Data Science ===
+scikit-learn==1.4.0
+numpy==1.26.3
+pandas==2.2.0
+scipy==1.12.0
+joblib==1.3.2
+
+# === Audio Processing (Call Consultant) ===
+librosa==0.10.1
+soundfile==0.12.1
+# Optional: for faster audio I/O
+# audioread==3.0.1
+
+# === HTTP / Scraping (PDRM Integration) ===
+httpx==0.26.0          # Async HTTP client (better than requests for FastAPI)
+beautifulsoup4==4.12.3
+lxml==5.1.0
+
+# === Utilities ===
+python-dotenv==1.0.1   # Environment variable management
