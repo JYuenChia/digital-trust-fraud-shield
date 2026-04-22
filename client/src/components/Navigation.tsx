@@ -98,21 +98,8 @@ export const Navigation: React.FC = () => {
             </button>
           )}
 
-          {/* Search Box */}
-          <div className="flex items-center gap-3 bg-[#FFFFFF] dark:bg-[#1A1A1A] rounded-lg px-4 py-2.5">
-            <Search size={18} className="text-[#6B7280] dark:text-[#8A8A8A]" />
-            <input 
-              type="text" 
-              placeholder={t('nav.searchPlaceholder')} 
-              className="bg-transparent border-none outline-none text-[#6B7280] dark:text-[#8A8A8A] text-sm font-['Inter'] w-48 placeholder:text-[#6B7280] dark:placeholder:text-[#8A8A8A]"
-            />
-          </div>
-
           {/* Profile Box */}
           <div className="flex items-center gap-6">
-            <button className="text-[#111827] dark:text-white hover:text-[#FF3B30] transition-colors border-none bg-transparent cursor-pointer">
-              <Bell size={20} />
-            </button>
             <Link href="/profile">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[#111827] dark:text-white font-['Inter'] font-semibold text-sm cursor-pointer transition-all ${isProfilePage ? 'bg-[#FF3B30] shadow-[0_0_16px_rgba(255,59,48,0.45)]' : 'bg-[#FF5500] shadow-[0_0_15px_rgba(255,85,0,0.3)] hover:bg-[#FF6A1A]'}`}>
                 AT
