@@ -2544,6 +2544,11 @@ class AccountCheckRequest(BaseModel):
     account_number: str
     bank_code: str = None
 
+class ValidateRecipientRequest(BaseModel):
+    recipient_name: str
+    account_number: str = ""
+    sender_account: str = None
+
 @app.post("/api/pdrm/check-account")
 async def check_scam_account(request: AccountCheckRequest):
     """
@@ -2562,6 +2567,99 @@ async def check_scam_account(request: AccountCheckRequest):
         "verification": result,
         "recommended_action": "BLOCK" if risk_score > 0.7 else "ALLOW",
         "friction_level": "HIGH" if risk_score > 0.7 else "LOW"
+    }
+
+@app.post("/validate-recipient")
+async def validate_recipient(request: ValidateRecipientRequest):
+    """
+    Comprehensive validation of recipient name and account number
+    Checks against PDRM database and known scam patterns
+    """
+    recipient_name = request.recipient_name.strip()
+    account_number = request.account_number.strip()
+    
+    if not recipient_name or len(recipient_name) < 2:
+        return {
+            "status": "INVALID",
+            "message": "Recipient name is too short",
+            "recipient_name_valid": False,
+            "account_number_valid": False,
+            "risk_score": 0.0,
+            "warnings": ["Invalid recipient name format"]
+        }
+    
+    warnings = []
+    risk_adjustments = []
+    
+    # 1. Check recipient name against known scam patterns
+    name_upper = recipient_name.upper()
+    recipient_name_valid = True
+    name_risk = 0.0
+    
+    for scam_name in KNOWN_SCAM_RECIPIENT_NAMES:
+        if scam_name in name_upper:
+            warnings.append(f"Recipient name matches known scam pattern: {scam_name}")
+            risk_adjustments.append({"factor": "scam_recipient_name", "value": 0.8})
+            recipient_name_valid = False
+            name_risk = 0.8
+            break
+    
+    # 2. Check account number against known scam accounts
+    account_number_checked = bool(account_number)
+    account_number_valid = True
+    account_risk = 0.0
+
+    if account_number:
+        if len(account_number) < 5:
+            warnings.append("Invalid account number format")
+            risk_adjustments.append({"factor": "invalid_account_number", "value": 0.35})
+            account_number_valid = False
+            account_risk = 0.35
+        elif account_number in KNOWN_SCAM_ACCOUNT_NUMBERS:
+            warnings.append("Account number is in PDRM scam database")
+            risk_adjustments.append({"factor": "known_scam_account", "value": 0.9})
+            account_number_valid = False
+            account_risk = 0.9
+        else:
+            # 3. Check account with PDRM service
+            pdrm_result = await pdrm_service.check_account(account_number)
+
+            if pdrm_result.get("found_in_database"):
+                warnings.append(f"Account has {pdrm_result.get('report_count', 1)} fraud report(s) in PDRM database")
+                account_risk = pdrm_result.get("risk_score", 0.85)
+                risk_adjustments.append({"factor": "pdrm_database_match", "value": account_risk})
+                account_number_valid = False
+    
+    # Calculate final risk score
+    final_risk = max(name_risk, account_risk)
+    
+    # Determine overall status
+    if not recipient_name_valid:
+        overall_status = "HIGH_RISK"
+    elif not account_number_checked:
+        overall_status = "NAME_VERIFIED"
+    elif not account_number_valid:
+        overall_status = "HIGH_RISK"
+    else:
+        overall_status = "VERIFIED"
+    
+    return {
+        "status": overall_status,
+        "recipient_name": recipient_name,
+        "account_number": account_number[-4:].rjust(len(account_number), '*') if account_number else None,
+        "account_number_checked": account_number_checked,
+        "recipient_name_valid": recipient_name_valid,
+        "account_number_valid": account_number_valid,
+        "risk_score": round(final_risk, 2),
+        "warnings": warnings,
+        "risk_adjustments": risk_adjustments,
+        "recommended_action": (
+            "BLOCK" if final_risk > 0.7 else (
+                "FLAG" if final_risk > 0.3 else (
+                    "CONTINUE_WITH_ACCOUNT_CHECK" if not account_number_checked else "ALLOW"
+                )
+            )
+        ),
     }
 
 @app.get("/api/pdrm/health")
