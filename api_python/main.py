@@ -99,15 +99,24 @@ GUARDIAN_LINKS = {
             {
                 "guardian_account": "GUARDIAN001",
                 "guardian_name": "Sarah Tan (Daughter)",
-                "phone": "+60-12-3456789",
+                "phone": "+60102109332",
                 "email": "sarah.tan@email.com",
                 "linked_at": "2026-01-15T10:00:00Z",
-                "permission_tier": "CO_SIGNER",  # Phase 2: Permission tiers
-                "verification_status": "VERIFIED",  # Phase 1: Multi-step verification
-            }
+                "permission_tier": "CO_SIGNER",
+                "verification_status": "VERIFIED",
+            },
+            {
+                "guardian_account": "GUARDIAN002",
+                "guardian_name": "Guardian (Self)",
+                "phone": "+601154166891",
+                "email": "",
+                "linked_at": "2026-04-23T22:00:00Z",
+                "permission_tier": "CO_SIGNER",
+                "verification_status": "VERIFIED",
+            },
         ],
         "senior_name": "Alex Tan",
-        "notification_threshold_risk": 0.75,  # Guardian notified when risk >= this
+        "notification_threshold_risk": 0.75,
     }
 }
 
@@ -257,6 +266,13 @@ class VoiceAuthenticityResponse(BaseModel):
     pitch_smoothness: float
     speech_band_energy: float
     high_band_energy: float
+
+
+class GuardianVerifyRequest(BaseModel):
+    token: str
+    action: str  # ACCEPT or REJECT
+    guardian_name: str | None = None
+    guardian_account: str | None = None
 
 
 # ============ PHASE 1: Multi-Step Verification Models ============
@@ -633,35 +649,21 @@ def resolve_expired_guardian_approvals():
 
 
 def send_guardian_notification(sender_account: str, sender_name: str, risk_score: float, reason: str):
-    """Send email and SMS notifications to all guardians of a senior account."""
+    """Send email alerts to all guardians of a senior account."""
     if sender_account not in GUARDIAN_LINKS:
         return
-    
+
     guardian_data = GUARDIAN_LINKS[sender_account]
     guardians = guardian_data.get("guardians", [])
-    
+
     if not guardians:
         return
-    
-    # Prepare notification message
+
     risk_level = "CRITICAL" if risk_score >= 0.8 else "HIGH"
-    message_body = f"""
-HIGH-RISK TRANSACTION ALERT
 
-Senior Account: {sender_name}
-Risk Level: {risk_level} ({int(risk_score * 100)}%)
-Reason: {reason}
-Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-This appears to be a potential scam or fraudulent transaction. The account holder may need your guidance.
-
-Please log in to the Digital Fraud Shield app to review full details and generate a recovery report if needed.
-"""
-    
     for guardian in guardians:
         guardian_email = guardian.get("email")
-        guardian_phone = guardian.get("phone")
-        guardian_name = guardian.get("guardian_name", "Guardian")
+        guardian_name  = guardian.get("guardian_name", "Guardian")
         guardian_account = guardian.get("guardian_account", "")
 
         GUARDIAN_ALERT_LOGS.append({
@@ -674,120 +676,23 @@ Please log in to the Digital Fraud Shield app to review full details and generat
             "risk_reason": reason,
             "timestamp": datetime.now().isoformat() + "Z",
         })
-        
-        # Send email
+
+        # Send email alert
         if guardian_email:
             try:
-                send_guardian_email(
-                    to_email=guardian_email,
+                from guardian_email import send_guardian_alert_email
+                send_guardian_alert_email(
+                    guardian_email=guardian_email,
                     guardian_name=guardian_name,
                     senior_name=sender_name,
                     risk_level=risk_level,
                     risk_score=risk_score,
-                    reason=reason
+                    reason=reason,
                 )
             except Exception as e:
-                print(f"[NOTIFICATION] Email send failed for {guardian_email}: {str(e)}")
-        
-        # Send SMS
-        if guardian_phone:
-            try:
-                send_guardian_sms(
-                    phone=guardian_phone,
-                    guardian_name=guardian_name,
-                    senior_name=sender_name,
-                    risk_level=risk_level,
-                    risk_score=risk_score
-                )
-            except Exception as e:
-                print(f"[NOTIFICATION] SMS send failed for {guardian_phone}: {str(e)}")
-
-
-def send_guardian_email(to_email: str, guardian_name: str, senior_name: str, risk_level: str, risk_score: float, reason: str):
-    """Send email notification to guardian."""
-    # Check if real SMTP credentials are available
-    smtp_server = os.getenv("SMTP_SERVER", "")
-    smtp_user = os.getenv("SMTP_USER", "")
-    smtp_password = os.getenv("SMTP_PASSWORD", "")
-    
-    if smtp_server and smtp_user and smtp_password:
-        # Real email sending
-        try:
-            msg = MIMEMultipart()
-            msg["From"] = smtp_user
-            msg["To"] = to_email
-            msg["Subject"] = f"[URGENT] High-Risk Transaction Alert - {senior_name}"
-            
-            body = f"""
-Hello {guardian_name},
-
-A HIGH-RISK transaction has been detected on {senior_name}'s account.
-
-**Risk Level:** {risk_level} ({int(risk_score * 100)}%)
-**Reason:** {reason}
-**Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-Please contact {senior_name} immediately to verify this transaction. This may be a scam attempt.
-
-As a linked guardian, you can:
-1. Log into Digital Fraud Shield
-2. Review the full fraud analysis
-3. Generate recovery documentation if fraud occurred
-4. Report to relevant authorities
-
-Do not share this email with unknown persons.
-
-Best regards,
-Digital Fraud Shield Team
-"""
-            
-            msg.attach(MIMEText(body, "plain"))
-            
-            with smtplib.SMTP(smtp_server, 587) as server:
-                server.starttls()
-                server.login(smtp_user, smtp_password)
-                server.send_message(msg)
-            
-            print(f"[EMAIL-SENT] To {to_email}: Risk alert for {senior_name}")
-        except Exception as e:
-            print(f"[EMAIL-FAILED] Could not send to {to_email}: {str(e)}")
-    else:
-        # Demo mode: just log it
-        print(f"\n[EMAIL-DEMO] Would send to: {to_email}")
-        print(f"  For: {guardian_name} (Guardian of {senior_name})")
-        print(f"  Risk Level: {risk_level} ({int(risk_score * 100)}%)")
-        print(f"  Reason: {reason}\n")
-
-
-def send_guardian_sms(phone: str, guardian_name: str, senior_name: str, risk_level: str, risk_score: float):
-    """Send SMS notification to guardian."""
-    # Check if Twilio credentials are available
-    twilio_account_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
-    twilio_auth_token = os.getenv("TWILIO_AUTH_TOKEN", "")
-    twilio_phone = os.getenv("TWILIO_PHONE_NUMBER", "")
-    
-    if twilio_account_sid and twilio_auth_token and twilio_phone:
-        # Real SMS sending via Twilio
-        try:
-            twilio_rest = __import__("twilio.rest", fromlist=["Client"])
-            client = twilio_rest.Client(twilio_account_sid, twilio_auth_token)
-            
-            message_text = f"ALERT: {senior_name}'s account has a {risk_level} risk transaction ({int(risk_score * 100)}%). Check the Digital Fraud Shield app for details."
-            
-            message = client.messages.create(
-                body=message_text,
-                from_=twilio_phone,
-                to=phone
-            )
-            
-            print(f"[SMS-SENT] To {phone}: Risk alert for {senior_name}")
-        except Exception as e:
-            print(f"[SMS-FAILED] Could not send to {phone}: {str(e)}")
-    else:
-        # Demo mode: just log it
-        print(f"\n[SMS-DEMO] Would send to: {phone}")
-        print(f"  For: {guardian_name} (Guardian of {senior_name})")
-        print(f"  Message: ALERT: {senior_name}'s account has a {risk_level} risk transaction ({int(risk_score * 100)}%). Check the app for details.\n")
+                print(f"[EMAIL-ALERT-FAILED] {guardian_email}: {str(e)}")
+        else:
+            print(f"[EMAIL-DEMO] Guardian {guardian_name} has no email configured.")
 
 
 def build_context_data(
@@ -1574,21 +1479,41 @@ async def predict_fraud(txn: Transaction, allow_guardian_approval: bool = True):
 
 @app.get("/guardians/{sender_account}")
 async def get_guardians(sender_account: str):
-    """Get all guardians linked to a senior account."""
-    if sender_account not in GUARDIAN_LINKS:
-        return {
-            "sender_account": sender_account,
-            "senior_name": "Unknown",
-            "guardians": [],
-            "message": "No guardians linked to this account yet."
-        }
+    """Get all guardians linked to a senior account, including pending invitations."""
+    # Start with accepted guardians
+    guardians_list = []
+    senior_name = "Unknown"
     
-    data = GUARDIAN_LINKS[sender_account]
+    if sender_account in GUARDIAN_LINKS:
+        data = GUARDIAN_LINKS[sender_account]
+        senior_name = data.get("senior_name", "")
+        for g in data.get("guardians", []):
+            guardians_list.append({
+                **g,
+                "status": "ACCEPTED"
+            })
+            
+    # Add pending/rejected invites from GUARDIAN_INVITE_CODES
+    for token, invite in GUARDIAN_INVITE_CODES.items():
+        if invite.get("sender_account") == sender_account:
+            # Avoid duplicates if already accepted (though logic should prevent this)
+            is_already_accepted = any(g["email"] == invite["guardian_email"] for g in guardians_list if g.get("status") == "ACCEPTED")
+            if not is_already_accepted:
+                guardians_list.append({
+                    "guardian_account": invite.get("guardian_account", "PENDING"),
+                    "guardian_name": invite["guardian_name"],
+                    "email": invite["guardian_email"],
+                    "phone": "",
+                    "linked_at": invite["created_at"],
+                    "status": invite["status"],
+                    "token": token
+                })
+    
     return {
         "sender_account": sender_account,
-        "senior_name": data.get("senior_name", ""),
-        "guardians": data.get("guardians", []),
-        "notification_threshold_risk": data.get("notification_threshold_risk", 0.75),
+        "senior_name": senior_name,
+        "guardians": guardians_list,
+        "notification_threshold_risk": 0.75 if sender_account not in GUARDIAN_LINKS else GUARDIAN_LINKS[sender_account].get("notification_threshold_risk", 0.75),
     }
 
 
@@ -1629,23 +1554,41 @@ async def link_guardian(payload: GuardianLink):
     }
 
 
-@app.post("/guardians/{sender_account}/remove/{guardian_account}")
-async def remove_guardian(sender_account: str, guardian_account: str):
-    """Remove a guardian from a senior account."""
-    if sender_account not in GUARDIAN_LINKS:
-        return {"success": False, "message": "Account not found."}
+@app.post("/guardians/{sender_account}/remove/{guardian_id}")
+async def remove_guardian(sender_account: str, guardian_id: str):
+    """Remove a guardian or cancel a pending invitation."""
+    removed = False
+    message = "Guardian not found."
+
+    # 1. Check verified guardians
+    if sender_account in GUARDIAN_LINKS:
+        guardians = GUARDIAN_LINKS[sender_account]["guardians"]
+        initial_count = len(guardians)
+        # Try to match by account ID or email
+        GUARDIAN_LINKS[sender_account]["guardians"] = [
+            g for g in guardians if g.get("guardian_account") != guardian_id and g.get("email") != guardian_id
+        ]
+        if len(GUARDIAN_LINKS[sender_account]["guardians"]) < initial_count:
+            removed = True
+            message = "Guardian removed successfully."
+
+    # 2. Check pending invitations
+    tokens_to_remove = []
+    for token, invite in GUARDIAN_INVITE_CODES.items():
+        if invite.get("sender_account") == sender_account:
+            if invite.get("guardian_email") == guardian_id or invite.get("guardian_account") == guardian_id:
+                tokens_to_remove.append(token)
     
-    guardians = GUARDIAN_LINKS[sender_account]["guardians"]
-    initial_count = len(guardians)
-    
-    GUARDIAN_LINKS[sender_account]["guardians"] = [
-        g for g in guardians if g["guardian_account"] != guardian_account
-    ]
-    
-    if len(GUARDIAN_LINKS[sender_account]["guardians"]) < initial_count:
-        return {"success": True, "message": f"Guardian {guardian_account} removed."}
-    else:
-        return {"success": False, "message": "Guardian not found."}
+    if tokens_to_remove:
+        for t in tokens_to_remove:
+            if t in GUARDIAN_INVITE_CODES:
+                del GUARDIAN_INVITE_CODES[t]
+        removed = True
+        message = "Invitation cancelled."
+
+    if removed:
+        return {"success": True, "message": message}
+    return {"success": False, "message": "Guardian or invitation not found."}
 
 
 @app.get("/guardian-notifications/{guardian_account}")
@@ -1851,6 +1794,147 @@ async def generate_invite_code_endpoint(data: dict):
         "expires_at": invite["expires_at"],
         "expires_in_minutes": 10,
     }
+
+
+@app.post("/guardians/send-email-invite")
+async def send_email_invite_endpoint(data: dict):
+    """Generate a token-based invite and send via email."""
+    sender_account = data.get("sender_account", "ALEX8899")
+    guardian_email = data.get("guardian_email")
+    guardian_name = data.get("guardian_name", "Guardian")
+    
+    if not guardian_email:
+        raise HTTPException(status_code=400, detail="guardian_email is required")
+    
+    # Generate a unique token
+    token = uuid4().hex
+    created_at = datetime.now()
+    expires_at = created_at + timedelta(hours=24)
+    
+    invite = {
+        "sender_account": sender_account,
+        "token": token,
+        "created_at": created_at.isoformat() + "Z",
+        "expires_at": expires_at.isoformat() + "Z",
+        "status": "PENDING",
+        "guardian_email": guardian_email,
+        "guardian_name": guardian_name,
+    }
+    
+    # Store by token for easy lookup
+    GUARDIAN_INVITE_CODES[token] = invite
+    
+    try:
+        from guardian_email import send_guardian_invite_email
+        sender_name = SENDER_PROFILES.get(sender_account, {}).get("name", "Digital Fraud Shield User")
+        
+        send_guardian_invite_email(
+            guardian_email=guardian_email,
+            token=token,
+            senior_name=sender_name,
+            guardian_name=guardian_name
+        )
+        
+        return {
+            "success": True,
+            "message": f"Invitation email sent to {guardian_email}",
+            "token": token
+        }
+    except Exception as e:
+        print(f"[EMAIL-ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+
+
+@app.get("/api/guardian/verify")
+async def get_verification_details(token: str):
+    """Fetch invitation details for the verification page."""
+    invite = GUARDIAN_INVITE_CODES.get(token)
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invalid or expired invitation token")
+        
+    # Check expiry
+    expires_at = datetime.fromisoformat(invite["expires_at"].replace("Z", "+00:00"))
+    if datetime.now(expires_at.tzinfo) > expires_at:
+        invite["status"] = "EXPIRED"
+        raise HTTPException(status_code=400, detail="Invitation has expired")
+        
+    sender_name = SENDER_PROFILES.get(invite["sender_account"], {}).get("name", "Digital Fraud Shield User")
+    
+    return {
+        "success": True,
+        "sender_name": sender_name,
+        "guardian_email": invite["guardian_email"],
+        "guardian_name": invite["guardian_name"],
+        "status": invite["status"]
+    }
+
+
+@app.post("/api/guardian/verify")
+async def process_verification(req: GuardianVerifyRequest):
+    """Handle Accept/Reject from the verification page."""
+    invite = GUARDIAN_INVITE_CODES.get(req.token)
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invalid invitation token")
+        
+    if invite["status"] != "PENDING":
+        return {"success": False, "message": f"Invitation is already {invite['status']}"}
+        
+    sender_account = invite["sender_account"]
+    senior_name = SENDER_PROFILES.get(sender_account, {}).get("name", "Alex Tan")
+    guardian_email = invite["guardian_email"]
+    guardian_name = req.guardian_name or invite["guardian_name"]
+    
+    try:
+        from guardian_email import (
+            send_guardian_accepted_confirmation,
+            send_guardian_rejected_confirmation
+        )
+        
+        # Hardcoded senior email fallback since it was removed from .env
+        senior_email = "24004611@siswa.um.edu.my" # Using the user's email as senior for demo
+        
+        if req.action.upper() == "ACCEPT":
+            invite["status"] = "ACCEPTED"
+            
+            # Add to GUARDIAN_LINKS
+            if sender_account not in GUARDIAN_LINKS:
+                GUARDIAN_LINKS[sender_account] = {"guardians": [], "senior_name": senior_name}
+            
+            new_guardian = {
+                "guardian_account": req.guardian_account or f"G-{uuid4().hex[:8].upper()}",
+                "guardian_name": guardian_name,
+                "phone": "",
+                "email": guardian_email,
+                "linked_at": datetime.now().isoformat() + "Z",
+                "permission_tier": "CO_SIGNER",
+                "verification_status": "VERIFIED",
+            }
+            GUARDIAN_LINKS[sender_account]["guardians"].append(new_guardian)
+            
+            send_guardian_accepted_confirmation(
+                guardian_email=guardian_email,
+                senior_email=senior_email,
+                senior_name=senior_name,
+                guardian_name=guardian_name,
+                token=req.token
+            )
+            
+            return {"success": True, "message": "Guardian successfully linked"}
+            
+        else:
+            invite["status"] = "REJECTED"
+            send_guardian_rejected_confirmation(
+                guardian_email=guardian_email,
+                senior_email=senior_email,
+                senior_name=senior_name,
+                guardian_name=guardian_name,
+                token=req.token
+            )
+            return {"success": True, "message": "Invitation declined"}
+            
+    except Exception as e:
+        print(f"[VERIFY-ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Operation failed: {str(e)}")
 
 
 @app.post("/guardians/verify-invite-code")

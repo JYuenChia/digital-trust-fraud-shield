@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'wouter';
-import { ShieldAlert, RefreshCw, ArrowLeft } from 'lucide-react';
+import { ShieldAlert, RefreshCw, ArrowLeft, User } from 'lucide-react';
 import { FRAUD_API_BASE_URL } from '@/const';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { toast } from 'sonner';
 
 type GuardianContact = {
   guardian_account: string;
@@ -10,6 +11,7 @@ type GuardianContact = {
   phone: string;
   email: string;
   linked_at: string;
+  status?: string;
 };
 
 type GuardianAlertsResponse = {
@@ -74,7 +76,16 @@ export default function GuardianDemo() {
     const nextGuardians: GuardianContact[] = data.guardians ?? [];
     setGuardians(nextGuardians);
     if (nextGuardians.length > 0) {
-      setSelectedGuardianAccount((prev) => prev || nextGuardians[0].guardian_account);
+      // Prioritize an accepted guardian if one is already selected or default to the first accepted one
+      const accepted = nextGuardians.filter(g => g.status === 'ACCEPTED');
+      if (accepted.length > 0) {
+        setSelectedGuardianAccount(prev => {
+          const stillExists = accepted.find(g => g.guardian_account === prev);
+          return stillExists ? prev : accepted[0].guardian_account;
+        });
+      } else {
+        setSelectedGuardianAccount(nextGuardians[0].guardian_account);
+      }
     }
   };
 
@@ -118,11 +129,11 @@ export default function GuardianDemo() {
       if (!response.ok || data.success === false) {
         throw new Error(data.message || t('guardian.errorRecordDecision'));
       }
-      setStatus(decision === 'APPROVE' ? t('guardian.approvedByGuardian') : t('guardian.rejectedByGuardian'));
+      toast.success(decision === 'APPROVE' ? t('guardian.approvedByGuardian') : t('guardian.rejectedByGuardian'));
       await loadPendingApprovals(selectedGuardianAccount);
       await loadAlerts(selectedGuardianAccount);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : t('guardian.errorRecordDecision'));
+    } catch (error: any) {
+      toast.error(error.message || t('guardian.errorRecordDecision'));
     } finally {
       setDecisionBusyId(null);
     }
@@ -220,8 +231,8 @@ export default function GuardianDemo() {
                   >
                     <option value="">{t('guardian.chooseGuardian')}</option>
                     {guardians.map((g) => (
-                      <option key={g.guardian_account} value={g.guardian_account}>
-                        {g.guardian_name} ({g.guardian_account})
+                      <option key={g.guardian_account + g.email} value={g.guardian_account}>
+                        {g.guardian_name} ({g.status})
                       </option>
                     ))}
                   </select>
@@ -230,14 +241,24 @@ export default function GuardianDemo() {
                 {/* Current Guardian Details */}
                 <div className="rounded-[8px] border border-[#F3F4F6] bg-[#F9FAFB] p-6 shadow-sm flex flex-col gap-4">
                   <div className="flex items-center gap-3 border-b border-[#E5E7EB] pb-3">
-                    <ShieldAlert size={18} className="text-orange-500" />
-                    <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wide">Current Guardian</h3>
+                    <User size={18} className="text-orange-500" />
+                    <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wide">Selected Guardian</h3>
                   </div>
                   <div>
-                    <p className="text-lg font-bold text-gray-900">{selectedGuardian?.guardian_name || t('guardian.notSelected')}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-lg font-bold text-gray-900">{selectedGuardian?.guardian_name || t('guardian.notSelected')}</p>
+                      {selectedGuardian && (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          selectedGuardian.status === 'ACCEPTED' ? 'bg-green-50 text-green-600 border-green-100' :
+                          selectedGuardian.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100' :
+                          'bg-orange-50 text-orange-600 border-orange-100'
+                        }`}>
+                          {selectedGuardian.status}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex flex-col gap-1 mt-2">
                       <p className="text-sm text-gray-500 font-medium">{selectedGuardian?.email || t('guardian.noEmail')}</p>
-                      <p className="text-sm text-gray-500 font-medium">{selectedGuardian?.phone || t('guardian.noPhone')}</p>
                     </div>
                   </div>
                 </div>

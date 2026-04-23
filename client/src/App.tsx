@@ -15,6 +15,7 @@ import SwipeShield from "./pages/SwipeShield";
 import Profile from "./pages/Profile";
 import GuardianDemo from "./pages/GuardianDemo";
 import Admin from "./pages/Admin";
+import VerifyGuardian from "./pages/VerifyGuardian";
 
 
 function Router() {
@@ -27,6 +28,7 @@ function Router() {
       <Route path={"/profile"} component={Profile} />
       <Route path={"/guardian-notifications"} component={GuardianDemo} />
       <Route path={"/guardian-demo"} component={GuardianDemo} />
+      <Route path={"/verify-guardian"} component={VerifyGuardian} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

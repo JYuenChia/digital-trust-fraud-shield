@@ -1,0 +1,224 @@
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Shield, CheckCircle, XCircle, Loader2, Mail, User } from "lucide-react";
+import { toast } from "sonner";
+import { FRAUD_API_BASE_URL } from "@/const";
+
+export default function VerifyGuardian() {
+  const [location] = useLocation();
+  const searchParams = new URLSearchParams(window.location.search);
+  const token = searchParams.get("token");
+  const initialAction = searchParams.get("action");
+
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [inviteData, setInviteData] = useState<any>(null);
+  const [status, setStatus] = useState<"pending" | "accepted" | "rejected" | "error">("pending");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    if (!token) {
+      setLoading(false);
+      setStatus("error");
+      setErrorMsg("Missing invitation token.");
+      return;
+    }
+
+    const fetchInvite = async () => {
+      try {
+        const response = await fetch(`${FRAUD_API_BASE_URL}/api/guardian/verify?token=${token}`);
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.detail || "Failed to fetch invitation details.");
+        }
+        const data = await response.json();
+        setInviteData(data);
+        
+        if (data.status === "ACCEPTED") setStatus("accepted");
+        else if (data.status === "REJECTED") setStatus("rejected");
+        
+        // If there's an action in the URL, auto-process it
+        if (initialAction && data.status === "PENDING") {
+          handleAction(initialAction.toUpperCase() === "ACCEPT" ? "ACCEPT" : "REJECT");
+        }
+      } catch (err: any) {
+        setStatus("error");
+        setErrorMsg(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInvite();
+  }, [token]);
+
+  const handleAction = async (action: "ACCEPT" | "REJECT") => {
+    setProcessing(true);
+    try {
+      const response = await fetch(`${FRAUD_API_BASE_URL}/api/guardian/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          action,
+          guardian_name: inviteData?.guardian_name
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || "Failed to process request.");
+      }
+
+      setStatus(action === "ACCEPT" ? "accepted" : "rejected");
+      toast.success(action === "ACCEPT" ? "Guardian access granted!" : "Invitation declined.");
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
+        <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground animate-pulse">Verifying invitation...</p>
+      </div>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-4">
+        <Card className="w-full max-w-md border-destructive/20 shadow-xl">
+          <CardHeader className="text-center pb-2">
+            <div className="mx-auto bg-destructive/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+              <Shield className="w-8 h-8 text-destructive" />
+            </div>
+            <CardTitle className="text-2xl text-destructive">Invalid Invitation</CardTitle>
+            <CardDescription>{errorMsg}</CardDescription>
+          </CardHeader>
+          <CardFooter className="flex justify-center">
+            <Button variant="outline" onClick={() => window.location.href = "/"}>
+              Return to Homepage
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+  if (status === "accepted") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-4">
+        <Card className="w-full max-w-md border-green-200 shadow-2xl animate-in zoom-in-95 duration-300">
+          <CardHeader className="text-center pb-2">
+            <div className="mx-auto bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mb-4 shadow-inner">
+              <CheckCircle className="w-10 h-10 text-green-600" />
+            </div>
+            <CardTitle className="text-3xl font-bold text-green-700">Link Successful!</CardTitle>
+            <CardDescription className="text-lg">
+              You are now a guardian for <strong>{inviteData?.sender_name}</strong>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center text-muted-foreground py-6">
+            <p>You will receive real-time fraud alerts via email if suspicious activity is detected.</p>
+            <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-100 flex items-start gap-3 text-left">
+              <Shield className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
+              <p className="text-sm text-green-800">Your protection is now active. You can close this window at any time.</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (status === "rejected") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-4">
+        <Card className="w-full max-w-md border-slate-200 shadow-xl">
+          <CardHeader className="text-center pb-2">
+            <div className="mx-auto bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+              <XCircle className="w-8 h-8 text-slate-500" />
+            </div>
+            <CardTitle className="text-2xl text-slate-700">Invitation Declined</CardTitle>
+            <CardDescription>
+              You have declined the request from <strong>{inviteData?.sender_name}</strong>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center text-muted-foreground">
+            <p>The user has been notified of your decision. No further action is required.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+      <div className="absolute top-8 flex items-center gap-2">
+        <Shield className="w-6 h-6 text-primary" />
+        <span className="font-bold text-xl tracking-tight">Digital Fraud Shield</span>
+      </div>
+
+      <Card className="w-full max-w-lg border-none shadow-2xl overflow-hidden">
+        <div className="h-2 bg-primary" />
+        <CardHeader className="text-center pt-8">
+          <CardTitle className="text-3xl font-bold text-slate-800">Guardian Invitation</CardTitle>
+          <CardDescription className="text-lg mt-2">
+            <strong>{inviteData?.sender_name}</strong> wants you to be their guardian
+          </CardDescription>
+        </CardHeader>
+        
+        <CardContent className="space-y-6 px-8 py-4">
+          <div className="space-y-6">
+            <div className="flex flex-col items-center gap-4 p-6 rounded-xl bg-orange-50 border border-orange-100">
+              <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
+                <User size={32} />
+              </div>
+              <div className="text-center">
+                <h3 className="text-2xl font-bold text-gray-900">{inviteData?.guardian_name}</h3>
+                <p className="text-sm text-gray-500 font-medium">{inviteData?.guardian_email}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-amber-50 p-5 rounded-xl border border-amber-100 space-y-3">
+            <h4 className="font-bold text-amber-900 flex items-center gap-2">
+              <Shield className="w-4 h-4" /> What is a Guardian?
+            </h4>
+            <p className="text-sm text-amber-800 leading-relaxed">
+              As a guardian, you'll receive instant alerts if {inviteData?.sender_name} is targeted by a scam. 
+              You can help them review suspicious payments and provide a second layer of security for their account.
+            </p>
+          </div>
+        </CardContent>
+
+        <CardFooter className="flex flex-col gap-3 px-8 pb-10 pt-4">
+          <Button 
+            className="w-full h-14 text-lg font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] transition-transform" 
+            onClick={() => handleAction("ACCEPT")}
+            disabled={processing}
+          >
+            {processing ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "Accept Invitation"}
+          </Button>
+          <Button 
+            variant="ghost" 
+            className="w-full h-12 text-slate-500 hover:text-destructive hover:bg-destructive/5" 
+            onClick={() => handleAction("REJECT")}
+            disabled={processing}
+          >
+            No thanks, decline request
+          </Button>
+        </CardFooter>
+      </Card>
+      
+      <p className="mt-8 text-sm text-slate-400">
+        &copy; 2026 Digital Fraud Shield. All rights reserved.
+      </p>
+    </div>
+  );
+}
