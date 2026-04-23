@@ -857,7 +857,39 @@ def parse_iso_datetime(value: str | None):
 
 
 def evaluate_qr_integrity(payload: QRPayload):
-    merchant_id = normalize_name_dest(payload.merchant_id or payload.account_name or "")
+    """Extract QR integrity details including recipient account information.
+    
+    Returns recipient_account as the actual bank account number if encoded in QR.
+    Does NOT return merchant_id as account number. Provider is excluded to allow 
+    frontend manual selection.
+    """
+    # Extract recipient account: only use if it looks like a real bank account number
+    # (contains digits, reasonable length, not just text)
+    recipient_account = None
+    if payload.account_name:
+        account_str = payload.account_name.strip()
+        # Check if it looks like a bank account (contains digits, 8-20 chars typical for bank accounts)
+        digit_count = sum(1 for c in account_str if c.isdigit())
+        if digit_count >= 8 and len(account_str) >= 8 and len(account_str) <= 30:
+            recipient_account = account_str
+    
+    # Extract recipient name: use account_name if it's NOT an account number,
+    # otherwise derive from merchant_id or use empty string
+    recipient_name = ""
+    if payload.account_name:
+        account_str = payload.account_name.strip()
+        digit_count = sum(1 for c in account_str if c.isdigit())
+        # If it looks like a name (has letters, not mostly digits), use it as recipient_name
+        if digit_count < len(account_str) * 0.7:  # Less than 70% digits
+            recipient_name = account_str
+    
+    # Fallback: use merchant_id for display purposes only if no recipient_name
+    if not recipient_name and payload.merchant_id:
+        recipient_name = payload.merchant_id.strip()
+    
+    # Normalize merchant_id from payload for lookup
+    merchant_id_raw = payload.merchant_id or payload.account_name or ""
+    merchant_id = normalize_name_dest(merchant_id_raw)
     merchant_profile = MERCHANT_PROFILES.get(merchant_id, {})
 
     is_verified_merchant = (
@@ -892,10 +924,14 @@ def evaluate_qr_integrity(payload: QRPayload):
     if not signature_valid:
         warnings.append("This QR code could not be verified.")
 
+    # Determine account display name (for UI/notifications)
+    account_display_name = recipient_name or payload.account_name or merchant_profile.get("account_name", "Unknown Merchant")
+    
     return {
         "merchant_id": merchant_id,
-        "account_name": payload.account_name or merchant_profile.get("account_name", "Unknown Merchant"),
-        "provider": payload.provider or merchant_profile.get("provider", "Unknown Provider"),
+        "recipient_name": recipient_name,
+        "recipient_account": recipient_account,
+        "account_name": account_display_name,
         "is_verified_merchant": is_verified_merchant,
         "merchant_age_hours": round(merchant_age_hours, 2),
         "high_error_balance_ratio": round(float(error_balance_ratio), 4),
@@ -1008,7 +1044,9 @@ def evaluate_generic_qr_threat(
         add(0.15, "high_risk_ip", "Network looks risky right now.")
 
     extracted_name_norm = (extracted_recipient_name or "").strip().upper()
-    extracted_account_norm = "".join(ch for ch in (extracted_account_number or "") if ch.isdigit())
+    # For account number: extract digits, but only return if it looks like a valid account (8+ digits)
+    extracted_account_digits = "".join(ch for ch in (extracted_account_number or "") if ch.isdigit())
+    extracted_account_norm = extracted_account_digits if len(extracted_account_digits) >= 8 else ""
 
     if extracted_name_norm and extracted_name_norm in KNOWN_SCAM_RECIPIENT_NAMES:
         add(0.55, "known_scam_recipient_name", "Recipient name matches known scam intelligence.")
@@ -1077,10 +1115,11 @@ def evaluate_generic_qr_threat(
         "reason_code": reason_code,
         "isVerifiedMerchant": False,
         "notify_guardian": notify_guardian,
+        "recipient_name": extracted_recipient_name or None,
+        "recipient_account": extracted_account_norm if extracted_account_norm else None,
         "qr_integrity": {
             "merchant_id": "",
-            "account_name": "",
-            "provider": "",
+            "account_name": extracted_recipient_name or "",
             "is_verified_merchant": False,
             "merchant_age_hours": 0.0,
             "high_error_balance_ratio": 0.0,
@@ -1091,7 +1130,7 @@ def evaluate_generic_qr_threat(
             "pattern_match_percent": pattern_match_percent,
             "pattern_match_message": pattern_match_message,
             "extracted_recipient_name": extracted_recipient_name or "",
-            "extracted_account_number": extracted_account_norm,
+            "extracted_account_number": extracted_account_norm if extracted_account_norm else None,
             "extracted_amount": None if extracted_amount is None else round(max(float(extracted_amount), 0.0), 2),
         },
         "score_breakdown": {
@@ -1128,7 +1167,7 @@ async def predict_qr_fraud(payload: QRTransferRequest, request: Request):
     qr_integrity = evaluate_qr_integrity(payload.qr)
     context_data = build_context_data(
         sender_account=payload.sender_account,
-        recipient_account=qr_integrity["merchant_id"],
+        recipient_account=qr_integrity["recipient_account"] or qr_integrity["merchant_id"],
         amount=payload.qr.amount,
         device_id=payload.device_id,
         ip_profile=payload.ip_profile,
@@ -1213,8 +1252,8 @@ async def predict_qr_fraud(payload: QRTransferRequest, request: Request):
             transaction_summary={
                 "amount": payload.qr.amount,
                 "currency": payload.qr.currency,
-                "recipient": qr_integrity.get("account_name") or qr_integrity.get("merchant_id") or "Unknown",
-                "provider": payload.qr.provider or qr_integrity.get("provider") or "Unknown",
+                "recipient": qr_integrity.get("recipient_name") or qr_integrity.get("account_name") or "Unknown",
+                "account": qr_integrity.get("recipient_account") or "",
                 "merchant_id": qr_integrity.get("merchant_id") or "",
             },
             source="QR_PAYMENT",
@@ -1229,6 +1268,8 @@ async def predict_qr_fraud(payload: QRTransferRequest, request: Request):
         "risk_score": round(risk_score, 4),
         "reason_code": reason_code,
         "recommendation": recommendation,
+        "recipient_name": qr_integrity.get("recipient_name"),
+        "recipient_account": qr_integrity.get("recipient_account"),
         "isVerifiedMerchant": qr_integrity["is_verified_merchant"],
         "guardian_approval_required": guardian_approval is not None,
         "guardian_approval_id": guardian_approval.get("approval_id") if guardian_approval else None,
