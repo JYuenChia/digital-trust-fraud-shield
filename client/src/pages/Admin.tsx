@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Building2, PiggyBank, ShieldAlert, TrendingUp } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useFraudEvents } from '@/contexts/FraudEventsContext';
+import ScamHeatmap from '@/components/ScamHeatmap';
 
 type HeatCell = {
   count: number;
@@ -49,13 +50,56 @@ const formatCurrency = (amount: number) => {
 export default function Admin() {
   const { events } = useFraudEvents();
   const { t } = useLanguage();
+  const [blockedCount, setBlockedCount] = useState<number>(10);
+  const [animatedSavings, setAnimatedSavings] = useState<number>(0);
+
+  useEffect(() => {
+    const readBlockedCount = () => {
+      const raw = localStorage.getItem('scamsBlocked');
+      const parsed = Number(raw ?? '10');
+      setBlockedCount(Number.isFinite(parsed) && parsed >= 0 ? parsed : 10);
+    };
+
+    readBlockedCount();
+    window.addEventListener('storage', readBlockedCount);
+    window.addEventListener('focus', readBlockedCount);
+
+    return () => {
+      window.removeEventListener('storage', readBlockedCount);
+      window.removeEventListener('focus', readBlockedCount);
+    };
+  }, []);
 
   const blockedEvents = events.filter((evt) => evt.status === 'BLOCKED');
   const flaggedEvents = events.filter((evt) => evt.status === 'FLAGGED');
 
   const preventedLoss = blockedEvents.reduce((sum, evt) => sum + evt.amount, 0) * BLOCKED_LOSS_RECOVERY_RATE;
-  const savedOpsCost = (blockedEvents.length + flaggedEvents.length) * MANUAL_REVIEW_COST_PER_CASE;
+  const savedOpsCost = (blockedCount + flaggedEvents.length) * MANUAL_REVIEW_COST_PER_CASE;
   const estimatedAgencySavings = preventedLoss + savedOpsCost;
+
+  useEffect(() => {
+    const target = Math.max(0, estimatedAgencySavings);
+    let animationFrame = 0;
+    let startTimestamp = 0;
+    const startValue = animatedSavings;
+    const distance = target - startValue;
+    const duration = 900;
+
+    const tick = (timestamp: number) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const elapsed = Math.min(duration, timestamp - startTimestamp);
+      const progress = elapsed / duration;
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setAnimatedSavings(startValue + (distance * eased));
+
+      if (elapsed < duration) {
+        animationFrame = window.requestAnimationFrame(tick);
+      }
+    };
+
+    animationFrame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [estimatedAgencySavings]);
 
   const heatmap: HeatCell[][] = Array.from({ length: TIME_BUCKETS.length }, () =>
     Array.from({ length: WEEKDAY_LABELS.length }, () => ({ count: 0, blockedAmount: 0 })),
@@ -121,7 +165,7 @@ export default function Admin() {
               <p className="text-muted-foreground text-xs uppercase tracking-[0.14em] font-semibold">{t('admin.kpiSavings')}</p>
               <PiggyBank size={18} className="text-[#22C55E]" />
             </div>
-            <p className="text-foreground font-['Sora'] text-3xl font-bold">{formatCurrency(estimatedAgencySavings)}</p>
+            <p className="text-foreground font-['Sora'] text-3xl font-bold">{formatCurrency(animatedSavings)}</p>
             <p className="text-muted-foreground text-sm leading-6">{t('admin.kpiSavingsDesc')}</p>
           </div>
 
@@ -130,7 +174,7 @@ export default function Admin() {
               <p className="text-muted-foreground text-xs uppercase tracking-[0.14em] font-semibold">{t('admin.kpiBlocked')}</p>
               <ShieldAlert size={18} className="text-[#FF7A1A]" />
             </div>
-            <p className="text-foreground font-['Sora'] text-3xl font-bold">{blockedEvents.length}</p>
+            <p className="text-foreground font-['Sora'] text-3xl font-bold">{blockedCount}</p>
             <p className="text-muted-foreground text-sm leading-6">{t('admin.kpiBlockedDesc')}</p>
           </div>
 
@@ -150,39 +194,14 @@ export default function Admin() {
               <h2 className="text-foreground font-['Sora'] text-xl font-semibold">{t('admin.heatmapTitle')}</h2>
               <p className="text-muted-foreground text-sm">{t('admin.heatmapSubtitle')}</p>
             </div>
+            <ScamHeatmap />
 
-            <div className="grid grid-cols-[90px_repeat(7,minmax(0,1fr))] gap-2 text-xs">
-              <div />
-              {WEEKDAY_LABELS.map((day) => (
-                <div key={day} className="text-muted-foreground text-center font-semibold">{day}</div>
-              ))}
-
-              {TIME_BUCKETS.map((bucket, row) => (
-                <React.Fragment key={bucket.label}>
-                  <div className="text-muted-foreground flex items-center justify-start font-semibold">{bucket.label}</div>
-                  {WEEKDAY_LABELS.map((_, col) => {
-                    const cell = heatmap[row][col];
-                    const tone = getHeatCellTone(cell.count, maxHeatCount);
-                    return (
-                      <div
-                        key={`${bucket.label}-${col}`}
-                        className={`h-16 rounded-lg border p-2 ${tone} flex flex-col justify-between`}
-                        title={`${cell.count} incident(s), ${formatCurrency(cell.blockedAmount)} blocked amount`}
-                      >
-                        <span className="text-white text-sm font-bold leading-none">{cell.count}</span>
-                        <span className="text-white/80 text-[10px] leading-tight">{formatCurrency(cell.blockedAmount)}</span>
-                      </div>
-                    );
-                  })}
-                </React.Fragment>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="font-semibold">{t('admin.intensity')}</span>
-              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#2A3A4A]" /> {t('admin.intensityLow')}</span>
-              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#FFB84D]" /> {t('admin.intensityMedium')}</span>
-              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#FF3B30]" /> {t('admin.intensityHigh')}</span>
+            <div className="mt-1 flex items-center justify-between px-4 py-2 bg-card rounded-lg border border-border text-xs">
+              <div className="flex items-center gap-4">
+                <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-500 rounded-full" /> Critical Risk</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-400 rounded-full" /> Emerging Hotspot</span>
+              </div>
+              <span className="text-muted-foreground">Source: OpenDOSM Commercial Crime 2023/24</span>
             </div>
           </section>
 

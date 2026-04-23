@@ -1,0 +1,8 @@
+[
+  { "state": "Kuala Lumpur", "lat": 3.139, "lng": 101.686, "count": 12500 },
+  { "state": "Selangor", "lat": 3.073, "lng": 101.518, "count": 15200 },
+  { "state": "Penang", "lat": 5.414, "lng": 100.328, "count": 8400 },
+  { "state": "Johor", "lat": 1.485, "lng": 103.761, "count": 9100 },
+  { "state": "Sarawak", "lat": 1.553, "lng": 110.359, "count": 4200 },
+  { "state": "Sabah", "lat": 5.978, "lng": 116.072, "count": 3900 }
+]

@@ -481,32 +481,202 @@ function parseDetectedAmount(rawAmount: string): number | undefined {
   return parsed;
 }
 
-function extractFinancialDataFromText(text: string): OcrExtractionResult {
-  const normalized = text.replace(/\r/g, '\n');
+function normalizeCandidateName(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  const cleaned = raw.replace(/\s+/g, ' ').replace(/[|]/g, ' ').trim();
+  if (!cleaned) return undefined;
+  if (cleaned.length < 3 || cleaned.length > 90) return undefined;
+  if (/^\d+$/.test(cleaned)) return undefined;
+  return cleaned;
+}
 
-  const accountMatch = normalized.match(/(?:^|\D)(\d{10,16})(?!\d)/);
-  const amountMatch = normalized.match(/\b(RM|\$|PHP)\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.\d{2})|[0-9]+(?:\.\d{2}))/i);
-  const recipientMatch = normalized.match(/(?:To|Recipient|Payee)\s*[:\-]\s*([A-Za-z][A-Za-z0-9 .,&'\-]{1,80})/i);
+function stripRecipientTailNoise(raw: string): string {
+  const stopPatterns = [
+    /\b(?:invoice\s*no\.?|order\s*id|date|handled\s*by|email|contact|payment\s*method|remarks|account\s*(?:no\.?|number)|swift\s*code|bank)\b/i,
+    /\b\d{2,}[:\/-]\d{2,}[:\/-]\d{2,}\b/, // likely date fragments
+  ];
 
-  const recipientFallbackLine = normalized
-    .split('\n')
-    .map((line) => line.trim())
-    .find((line) => /^(to|recipient|payee)\b/i.test(line));
-
-  let recipientName = recipientMatch?.[1]?.trim();
-  if (!recipientName && recipientFallbackLine) {
-    recipientName = recipientFallbackLine.replace(/^(to|recipient|payee)\s*[:\-]?\s*/i, '').trim() || undefined;
+  let candidate = raw;
+  for (const pattern of stopPatterns) {
+    const match = pattern.exec(candidate);
+    if (match && match.index > 0) {
+      candidate = candidate.slice(0, match.index).trim();
+    }
   }
 
-  const currency = normalizeDetectedCurrency(amountMatch?.[1]);
-  const amount = amountMatch ? parseDetectedAmount(amountMatch[2]) : undefined;
+  return candidate.replace(/[,:;\-\s]+$/g, '').trim();
+}
+
+function detectRecipientNameFromLines(lines: string[], normalizedText: string): string | undefined {
+  const accountNameRegex = /(?:account\s*name|a\/c\s*name)\s*[:\-]?\s*([A-Za-z0-9 .,&'()\/-]{3,100}?)(?=\s+(?:account\s*(?:no\.?|number)|swift\s*code|payment\s*method|remarks|invoice\s*no\.?|order\s*id|date|email|bank)\b|$)/i;
+  const accountNameGlobalMatch = normalizedText.match(accountNameRegex);
+  if (accountNameGlobalMatch?.[1]) {
+    const candidate = normalizeCandidateName(stripRecipientTailNoise(accountNameGlobalMatch[1]));
+    if (candidate) return candidate;
+  }
+
+  const rules: RegExp[] = [
+    /(?:account\s*name|a\/c\s*name)\s*[:\-]?\s*(.+)$/i,
+    /(?:bill\s*to|recipient|payee|beneficiary|to)\s*[:\-]?\s*(.+)$/i,
+  ];
+
+  for (const line of lines) {
+    for (const rule of rules) {
+      const match = line.match(rule);
+      if (match?.[1]) {
+        const candidate = normalizeCandidateName(stripRecipientTailNoise(match[1]));
+        if (candidate) return candidate;
+      }
+    }
+  }
+
+  // Fallback for cases like:
+  // Bill to : Universiti Malaya
+  // Vaethenee Balaguru
+  for (let i = 0; i < lines.length; i++) {
+    const current = lines[i];
+    if (/bill\s*to\s*[:\-]?/i.test(current)) {
+      const tail = stripRecipientTailNoise(current.replace(/.*bill\s*to\s*[:\-]?\s*/i, '').trim());
+      const tailName = normalizeCandidateName(tail);
+      if (tailName) return tailName;
+
+      const next = normalizeCandidateName(stripRecipientTailNoise(lines[i + 1] || ''));
+      if (next) return next;
+    }
+  }
+
+  return undefined;
+}
+
+function detectAccountNumberFromText(text: string): string | undefined {
+  const preferred = text.match(/(?:account\s*(?:no|number|#)?|a\/c\s*(?:no|number)?)\s*[:\-\.]?\s*([0-9][0-9\s.\-]{7,24}\d)/i);
+  if (preferred?.[1]) {
+    const normalized = normalizeLikelyAccountNumber(preferred[1]);
+    if (normalized) return normalized;
+  }
+
+  const genericCandidates = text.match(/(?:\d[\s.\-]?){10,16}\d/g) || [];
+  for (const candidate of genericCandidates) {
+    const normalized = normalizeLikelyAccountNumber(candidate);
+    if (normalized) return normalized;
+  }
+
+  return undefined;
+}
+
+function detectAmountFromLines(lines: string[]): { amount?: number; currency?: string } {
+  const keyAmountRegex = /(?:total\s*(?:payment|amount|due)|grand\s*total|amount\s*due|invoice\s*total)\s*[:\-]?\s*(?:(RM|MYR|\$|PHP)\s*)?([0-9]{1,3}(?:,[0-9]{3})*(?:\.\d{2})|[0-9]+(?:\.\d{2}))/i;
+  const inlineAmountRegex = /\b(RM|MYR|\$|PHP)\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.\d{2})|[0-9]+(?:\.\d{2}))/i;
+  const plainAmountRegex = /\b([0-9]{1,3}(?:,[0-9]{3})*(?:\.\d{2})|[0-9]+(?:\.\d{2}))\b/;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const keyMatch = line.match(keyAmountRegex);
+    if (keyMatch) {
+      return {
+        amount: parseDetectedAmount(keyMatch[2]),
+        currency: normalizeDetectedCurrency(keyMatch[1] || 'RM'),
+      };
+    }
+
+    if (/(?:total\s*(?:payment|amount|due)|grand\s*total|amount\s*due|invoice\s*total)/i.test(line)) {
+      const nextLine = lines[i + 1] || '';
+      const nextWithCurrency = nextLine.match(inlineAmountRegex);
+      if (nextWithCurrency) {
+        return {
+          amount: parseDetectedAmount(nextWithCurrency[2]),
+          currency: normalizeDetectedCurrency(nextWithCurrency[1]),
+        };
+      }
+
+      const nextPlain = nextLine.match(plainAmountRegex);
+      if (nextPlain) {
+        return {
+          amount: parseDetectedAmount(nextPlain[1]),
+          currency: 'MYR',
+        };
+      }
+    }
+  }
+
+  // Fallback: first currency amount found in text.
+  for (const line of lines) {
+    const inline = line.match(inlineAmountRegex);
+    if (inline) {
+      return {
+        amount: parseDetectedAmount(inline[2]),
+        currency: normalizeDetectedCurrency(inline[1]),
+      };
+    }
+  }
+
+  return {};
+}
+
+function extractFinancialDataFromText(text: string): OcrExtractionResult {
+  const normalized = text.replace(/\r/g, '\n');
+  const lines = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const recipientName = detectRecipientNameFromLines(lines, normalized);
+  const accountNumber = detectAccountNumberFromText(normalized);
+  const amountInfo = detectAmountFromLines(lines);
 
   return {
-    accountNumber: accountMatch?.[1],
-    amount,
-    currency,
+    accountNumber,
+    amount: amountInfo.amount,
+    currency: amountInfo.currency,
     recipientName,
   };
+}
+
+async function extractTextFromPdf(file: File): Promise<string> {
+  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
+  pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+
+  const buffer = await file.arrayBuffer();
+  const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+  const textChunks: string[] = [];
+
+  for (let pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber++) {
+    const page = await pdfDoc.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const pageText = content.items
+      .map((item: any) => ('str' in item ? item.str : ''))
+      .filter(Boolean)
+      .join(' ');
+    if (pageText.trim()) {
+      textChunks.push(pageText);
+    }
+  }
+
+  return textChunks.join('\n');
+}
+
+async function renderFirstPdfPageToCanvas(file: File): Promise<HTMLCanvasElement> {
+  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
+  pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+
+  const buffer = await file.arrayBuffer();
+  const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+  const firstPage = await pdfDoc.getPage(1);
+  const viewport = firstPage.getViewport({ scale: 2.1 });
+
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Canvas context is unavailable for PDF rendering.');
+  }
+
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+
+  await firstPage.render({ canvasContext: context, viewport, canvas }).promise;
+  return canvas;
 }
 
 async function preprocessImageForOcr(file: File): Promise<HTMLCanvasElement> {
@@ -585,7 +755,17 @@ export default function Transaction() {
   const [amount, setAmount] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [recipientAccount, setRecipientAccount] = useState('');
+  const [recipientValidation, setRecipientValidation] = useState<{
+    status: string;
+    risk_score: number;
+    warnings: string[];
+    recipient_name_valid: boolean;
+    account_number_valid: boolean;
+    account_number_checked?: boolean;
+  } | null>(null);
+  const [isValidatingRecipient, setIsValidatingRecipient] = useState(false);
   const [fraudResult, setFraudResult] = useState<FraudResult | null>(null);
+  const [isQrActionPickerOpen, setIsQrActionPickerOpen] = useState(false);
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [qrScanError, setQrScanError] = useState<string | null>(null);
   const [lastQrPreview, setLastQrPreview] = useState<string>('');
@@ -607,6 +787,26 @@ export default function Transaction() {
     const token = Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     return `EMR-${token}`;
   };
+
+  const markBlockedScamForAdminDemo = () => {
+    const currentRaw = localStorage.getItem('scamsBlocked');
+    const currentVal = Number(currentRaw ?? '10');
+    const safeCurrent = Number.isFinite(currentVal) && currentVal >= 0 ? currentVal : 10;
+
+    // Avoid double increments when user re-clicks for the same blocked incident.
+    if (currentEventId) {
+      const lastEventId = localStorage.getItem('scamsBlockedLastEventId');
+      if (lastEventId === currentEventId) {
+        setModalState('idle');
+        return;
+      }
+      localStorage.setItem('scamsBlockedLastEventId', currentEventId);
+    }
+
+    localStorage.setItem('scamsBlocked', String(safeCurrent + 1));
+    setModalState('idle');
+  };
+
   const [isCallConsentOpen, setIsCallConsentOpen] = useState(false);
   const [isCallConsultOpen, setIsCallConsultOpen] = useState(false);
   const [isListeningCall, setIsListeningCall] = useState(false);
@@ -697,6 +897,45 @@ export default function Transaction() {
       window.speechSynthesis.speak(utterance);
     }
   };
+
+  const validateRecipient = async (name: string, account: string) => {
+    if (!name.trim()) {
+      setRecipientValidation(null);
+      return;
+    }
+
+    setIsValidatingRecipient(true);
+    try {
+      const response = await fetch(`${FRAUD_API_BASE_URL}/validate-recipient`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient_name: name,
+          account_number: account,
+          sender_account: SENIOR_ACCOUNT,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setRecipientValidation(data);
+      }
+    } catch (error) {
+      console.error('Recipient validation error:', error);
+    } finally {
+      setIsValidatingRecipient(false);
+    }
+  };
+
+  useEffect(() => {
+    const validationTimer = setTimeout(() => {
+      if (recipientName.trim()) {
+        validateRecipient(recipientName, recipientAccount);
+      }
+    }, 800);
+
+    return () => clearTimeout(validationTimer);
+  }, [recipientName, recipientAccount]);
 
   const buildAutoReportPayload = (channel: AutoReportChannel) => {
     const riskScore = fraudResult?.risk_score ?? 0;
@@ -1590,36 +1829,65 @@ export default function Transaction() {
     setIsOcrProcessing(true);
     let decodedText = '';
     let extractedDetails: OcrExtractionResult | undefined;
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
-    // Step 1: Detect QR Risk if it's a QR image
-    try {
-      const html5Qr = new Html5Qrcode(scannerRegionId);
-      decodedText = await html5Qr.scanFile(file, true);
-      
-      // If QR decode succeeded, try to parse its specific financial fields
-      const parsed = parseQrPayload(decodedText);
-      if (parsed) {
-        extractedDetails = {
-          accountNumber: parsed.merchant_id || undefined,
-          recipientName: parsed.account_name || undefined,
-          amount: parsed.amount,
-          currency: parsed.currency
-        };
+    if (!isPdf) {
+      // Step 1A: Detect QR Risk if it's a QR image
+      try {
+        const html5Qr = new Html5Qrcode(scannerRegionId);
+        decodedText = await html5Qr.scanFile(file, true);
+
+        // If QR decode succeeded, try to parse its specific financial fields
+        const parsed = parseQrPayload(decodedText);
+        if (parsed) {
+          extractedDetails = {
+            accountNumber: parsed.merchant_id || undefined,
+            recipientName: parsed.account_name || undefined,
+            amount: parsed.amount,
+            currency: parsed.currency,
+          };
+        }
+      } catch {
+        console.log('Not a standard QR or unreadable as QR, falling back to OCR only.');
       }
-    } catch (qrErr) {
-      console.log('Not a standard QR or unreadable as QR, falling back to OCR only.');
+    } else {
+      // Step 1B: PDF pipeline (quotation/invoice/documents)
+      try {
+        setOcrSummary('Reading PDF text for recipient, account, and amount...');
+        const pdfText = await extractTextFromPdf(file);
+        if (pdfText.trim()) {
+          decodedText = pdfText;
+          extractedDetails = extractFinancialDataFromText(pdfText);
+        }
+      } catch (pdfErr) {
+        console.error('PDF text extraction failed:', pdfErr);
+      }
     }
 
-    // Step 2: Extract Details via OCR (if not already found by QR)
-    if (!extractedDetails) {
+    // Step 2: Extract Details via OCR (if not already found by QR/PDF text)
+    if (!extractedDetails || (!extractedDetails.accountNumber && !extractedDetails.recipientName && !extractedDetails.amount)) {
       try {
-        const processedCanvas = await preprocessImageForOcr(file);
+        const processedCanvas = isPdf
+          ? await renderFirstPdfPageToCanvas(file)
+          : await preprocessImageForOcr(file);
+
+        if (isPdf) {
+          setOcrSummary('Running OCR on PDF page for extraction...');
+        }
+
         const tesseract = await import('tesseract.js');
         const ocrResult = await tesseract.recognize(processedCanvas, 'eng');
         const extractedText = ocrResult.data.text || '';
-        
+
         if (extractedText.trim()) {
-          extractedDetails = extractFinancialDataFromText(extractedText);
+          const ocrExtracted = extractFinancialDataFromText(extractedText);
+          extractedDetails = {
+            accountNumber: extractedDetails?.accountNumber || ocrExtracted.accountNumber,
+            recipientName: extractedDetails?.recipientName || ocrExtracted.recipientName,
+            amount: extractedDetails?.amount ?? ocrExtracted.amount,
+            currency: extractedDetails?.currency || ocrExtracted.currency,
+          };
+
           // Use OCR text as fallback if QR decode failed
           if (!decodedText) decodedText = extractedText;
         }
@@ -1822,7 +2090,7 @@ export default function Transaction() {
 
           <button
             type="button"
-            onClick={() => setIsQrScannerOpen(true)}
+            onClick={() => setIsQrActionPickerOpen(true)}
             className="w-full rounded-2xl bg-[#FF5500] px-6 py-6 text-left hover:bg-[#E04B00] transition-colors cursor-pointer shadow-[0_16px_40px_rgba(255,85,0,0.35)]"
           >
             <div className="flex items-center justify-between gap-3">
@@ -1838,6 +2106,14 @@ export default function Transaction() {
               <span className="hidden md:inline text-white/90 text-sm font-semibold">Tap to start</span>
             </div>
           </button>
+
+          <input
+            ref={unifiedInputRef}
+            type="file"
+            accept="image/*,.pdf,application/pdf"
+            onChange={handleUnifiedUpload}
+            className="hidden"
+          />
 
           {qrScanStatus && (
             <div className={`rounded-2xl px-5 py-5 ${
@@ -1924,10 +2200,25 @@ export default function Transaction() {
                   <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
                     <div className="flex items-center justify-between gap-2">
                       <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Recipient Name</label>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[#1F9D55] px-2.5 py-0.5 text-[10px] font-bold text-white">
-                        <CheckCircle size={11} />
-                        Verified
-                      </span>
+                      {isValidatingRecipient ? (
+                        <span className="text-[10px] text-[#FF5500] font-semibold animate-pulse">Validating...</span>
+                      ) : recipientValidation ? (
+                        recipientValidation.recipient_name_valid ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#1F9D55] px-2.5 py-0.5 text-[10px] font-bold text-white">
+                            <CheckCircle size={11} />
+                            Name Verified
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#FF3B30] px-2.5 py-0.5 text-[10px] font-bold text-white">
+                            <ShieldAlert size={11} />
+                            Name Flagged
+                          </span>
+                        )
+                      ) : recipientName.trim() ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-black/10 dark:bg-white/10 px-2.5 py-0.5 text-[10px] font-bold text-[#6B7280] dark:text-[#A2A2A2]">
+                          Pending PDRM Check
+                        </span>
+                      ) : null}
                     </div>
                     <input
                       type="text"
@@ -1936,13 +2227,39 @@ export default function Transaction() {
                       onChange={(e) => {
                         setRecipientName(e.target.value);
                         setRecipientVerification(null);
+                        setRecipientValidation(null);
                       }}
                       placeholder="Enter recipient name"
                       className="bg-transparent text-[#111827] dark:text-white text-sm font-sans normal-case tracking-normal leading-normal outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
                     />
                   </div>
                   <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
-                    <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Account Number</label>
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="text-[#6B7280] dark:text-[#8A8A8A] text-sm cursor-text group-focus-within:text-[#FF5500] transition-colors">Account Number</label>
+                      {!recipientAccount.trim() ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-black/10 dark:bg-white/10 px-2.5 py-0.5 text-[10px] font-bold text-[#6B7280] dark:text-[#A2A2A2]">
+                          Enter account to verify
+                        </span>
+                      ) : isValidatingRecipient ? (
+                        <span className="text-[10px] text-[#FF5500] font-semibold animate-pulse">Validating...</span>
+                      ) : recipientValidation && recipientValidation.account_number_checked ? (
+                        recipientValidation.account_number_valid ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#1F9D55] px-2.5 py-0.5 text-[10px] font-bold text-white">
+                            <CheckCircle size={11} />
+                            Verified
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#FF3B30] px-2.5 py-0.5 text-[10px] font-bold text-white">
+                            <ShieldAlert size={11} />
+                            Flagged
+                          </span>
+                        )
+                      ) : recipientAccount.trim() ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-black/10 dark:bg-white/10 px-2.5 py-0.5 text-[10px] font-bold text-[#6B7280] dark:text-[#A2A2A2]">
+                          Pending PDRM Check
+                        </span>
+                      ) : null}
+                    </div>
                     <input
                       type="text"
                       value={recipientAccount}
@@ -1950,6 +2267,7 @@ export default function Transaction() {
                       onChange={(e) => {
                         setRecipientAccount(e.target.value);
                         setRecipientVerification(null);
+                        setRecipientValidation(null);
                       }}
                       placeholder="Enter account number"
                       className="bg-transparent text-[#111827] dark:text-white text-sm font-sans normal-case tracking-normal leading-normal outline-none w-full placeholder:text-[#9CA3AF] dark:placeholder:text-[#525252]"
@@ -1971,6 +2289,28 @@ export default function Transaction() {
                     ]}
                   />
                 </div>
+
+                {recipientValidation && recipientValidation.warnings.length > 0 && (
+                  <div className={`rounded-lg border px-4 py-3 ${
+                    recipientValidation.status === 'HIGH_RISK'
+                      ? 'border-[#FF3B30]/40 bg-[#FF3B30]/10'
+                      : 'border-[#FF9F0A]/40 bg-[#FF9F0A]/10'
+                  }`}>
+                    <div className="flex items-start gap-3">
+                      <ShieldAlert size={18} className={recipientValidation.status === 'HIGH_RISK' ? 'text-[#FF3B30]' : 'text-[#FF9F0A]'} />
+                      <div className="flex flex-col gap-1">
+                        <p className={`text-sm font-bold ${recipientValidation.status === 'HIGH_RISK' ? 'text-[#FF3B30]' : 'text-[#FF9F0A]'}`}>
+                          {recipientValidation.status === 'HIGH_RISK' ? 'High Risk Detected' : 'Verification Warning'}
+                        </p>
+                        {recipientValidation.warnings.map((warning, idx) => (
+                          <p key={idx} className="text-xs text-[#6B7280] dark:text-[#A2A2A2]">
+                            • {warning}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="flex flex-col gap-2 bg-[#F8FAFC] dark:bg-[#141414] border border-black/5 dark:border-white/5 focus-within:border-[#FF5500] focus-within:shadow-[0_0_20px_rgba(255,85,0,0.2)] transition-all p-4 rounded-xl group">
@@ -2036,6 +2376,57 @@ export default function Transaction() {
         </div>
       </div>
 
+      {isQrActionPickerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-[520px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-6 md:p-8 flex flex-col gap-5 shadow-[0_0_40px_rgba(255,85,0,0.18)]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#FF5500]/15 flex items-center justify-center">
+                  <ScanLine size={20} className="text-orange-700 dark:text-[#FF8A4D]" />
+                </div>
+                <div className="flex flex-col">
+                  <h3 className="text-[#111827] dark:text-white text-lg font-bold font-['Sora']">Choose QR Input</h3>
+                  <p className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">One tap to continue with your preferred method.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQrActionPickerOpen(false)}
+                className="w-9 h-9 rounded-lg border border-black/10 dark:border-white/10 text-[#6B7280] dark:text-[#8A8A8A] hover:text-[#111827] dark:hover:text-white hover:border-black/20 dark:hover:border-white/20 flex items-center justify-center cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsQrActionPickerOpen(false);
+                  setIsQrScannerOpen(true);
+                }}
+                className="rounded-xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-[#0F0F0F] px-4 py-4 text-left hover:border-[#FF5500]/50 hover:bg-[#FF5500]/10 transition-colors cursor-pointer"
+              >
+                <p className="text-sm font-bold text-[#111827] dark:text-white">Use Camera Scanner</p>
+                <p className="mt-1 text-xs text-[#6B7280] dark:text-[#A2A2A2]">Live scan for banking QR and fraud checks.</p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsQrActionPickerOpen(false);
+                  unifiedInputRef.current?.click();
+                }}
+                className="rounded-xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-[#0F0F0F] px-4 py-4 text-left hover:border-[#FF5500]/50 hover:bg-[#FF5500]/10 transition-colors cursor-pointer"
+              >
+                <p className="text-sm font-bold text-[#111827] dark:text-white">Upload File</p>
+                <p className="mt-1 text-xs text-[#6B7280] dark:text-[#A2A2A2]">Select QR image, receipt photo, or quotation/invoice PDF.</p>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isQrScannerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="w-full max-w-[560px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-black/20 dark:border-white/20 rounded-3xl p-6 md:p-8 flex flex-col gap-5 shadow-[0_0_40px_rgba(255,85,0,0.18)]">
@@ -2070,15 +2461,8 @@ export default function Transaction() {
                   <Download size={20} className="rotate-180" />
                   {isOcrProcessing || isQrImageDecoding ? 'Risk Analysis in Progress...' : 'Upload QR or Transaction Record'}
                 </button>
-                <input
-                  ref={unifiedInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleUnifiedUpload}
-                  className="hidden"
-                />
                 <p className="text-center text-xs text-[#6B7280] dark:text-[#A0A0A0]">
-                  Extracts account details & screens for scam risk in one step.
+                  Extracts recipient, account, and amount from images/PDF and screens scam risk in one step.
                 </p>
               </div>
             </div>
@@ -2614,55 +2998,55 @@ export default function Transaction() {
                 </>
               ) : null}
 
-              <div className="w-full rounded-2xl border border-[#FF3B3040] bg-[#FF3B3010] p-5 flex flex-col gap-4">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-[#FF3B30] font-bold">{t('tx.autoReport.title')}</p>
-                <p className="text-sm text-[#F0B6B0] leading-6">
-                  {t('tx.autoReport.descBlocked')}
-                </p>
-                {autoReportState.status !== 'sent' && (
+              {/* Simplified Auto-Report Pipeline */}
+              <button
+                type="button"
+                onClick={markBlockedScamForAdminDemo}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-[#FF3B3040] bg-[#FF3B3010] px-4 py-3 text-sm font-bold text-[#FF3B30] hover:bg-[#FF3B301A] transition-colors"
+              >
+                Cancel Transfer
+              </button>
+
+              {autoReportState.status === 'idle' && (
+                <button
+                  type="button"
+                  onClick={() => void submitAutoReport()}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#FF3B30] px-4 py-3 text-sm font-bold text-white hover:bg-[#E6352B] transition-colors shadow-lg"
+                >
+                  <Send size={16} />
+                  {t('tx.autoReport.button')}
+                </button>
+              )}
+              {autoReportState.status === 'sending' && (
+                <div className="w-full rounded-lg bg-[#FF3B3010] border border-[#FF3B3040] px-4 py-3 flex items-center justify-center gap-2">
+                  <Loader size={16} className="text-[#FF3B30] animate-spin" />
+                  <span className="text-sm font-semibold text-[#FF3B30]">{t('tx.autoReport.submitting')}</span>
+                </div>
+              )}
+              {autoReportState.status === 'sent' && (
+                <div className="w-full rounded-lg bg-[#32D74B15] border border-[#32D74B40] px-4 py-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle size={18} className="text-[#32D74B]" />
+                    <p className="text-sm font-bold text-[#32D74B]">{t('tx.autoReport.caseReported')}</p>
+                  </div>
+                  <p className="text-xs text-[#32D74B] mb-1">Reported to MCMC Malaysia & Google Safe Browsing</p>
+                  {autoReportState.externalReportId && (
+                    <p className="text-xs text-[#32D74B] opacity-80">ID: {autoReportState.externalReportId}</p>
+                  )}
                   <button
                     type="button"
-                    onClick={() => void submitAutoReport()}
-                    disabled={autoReportState.status === 'sending'}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FF3B30] px-3 py-2.5 text-xs font-semibold text-white hover:bg-[#E6352B] disabled:opacity-60"
+                    onClick={dismissReportedCase}
+                    className="mt-2 w-full rounded-lg bg-[#32D74B25] hover:bg-[#32D74B35] px-3 py-2 text-xs font-semibold text-[#32D74B] transition-colors"
                   >
-                    <Globe size={14} />
-                    <Send size={14} />
-                    {autoReportState.status === 'sending' ? t('tx.autoReport.submitting') : t('tx.autoReport.button')}
+                    {t('tx.autoReport.close')}
                   </button>
-                )}
-                {autoReportState.status !== 'idle' && (
-                  <div className="text-sm text-[#D9E6F4] leading-7">
-                    {autoReportState.status === 'sent' ? (
-                      <div className="text-[#D7FFE1] space-y-2">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle size={16} className="text-[#32D74B]" />
-                          <p className="text-sm font-bold">{t('tx.autoReport.caseReported')}</p>
-                        </div>
-                        <p className="mt-2">{t('tx.autoReport.successLine1')}</p>
-                        <p className="mt-2">{t('tx.autoReport.reportedTo')}</p>
-                        <ul className="mt-2 space-y-1 list-disc list-inside">
-                          <li>Google Safe Browsing</li>
-                          <li>MCMC Malaysia</li>
-                        </ul>
-                        <p className="mt-2">{t('tx.autoReport.thankYou')}</p>
-                        {autoReportState.externalReportId && (
-                          <p className="mt-2 font-semibold">Report ID: {autoReportState.externalReportId}</p>
-                        )}
-                        <button
-                          type="button"
-                          onClick={dismissReportedCase}
-                          className="mt-3 inline-flex items-center justify-center rounded-lg border border-[#32D74B55] bg-[#32D74B18] px-3 py-2 text-xs font-semibold text-[#D7FFE1] hover:bg-[#32D74B25]"
-                        >
-                          {t('tx.autoReport.close')}
-                        </button>
-                      </div>
-                    ) : (
-                      <p>{autoReportState.message}</p>
-                    )}
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
+              {autoReportState.status === 'error' && (
+                <div className="w-full rounded-lg bg-[#FF3B3010] border border-[#FF3B3040] px-4 py-3">
+                  <p className="text-sm text-[#FF3B30] font-semibold">{autoReportState.message}</p>
+                </div>
+              )}
             </div>
           )}
 
