@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ShieldCheck, ShieldAlert, Plus, CreditCard, CheckCircle2, Landmark, Smartphone, X } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Plus, CreditCard, CheckCircle2, Landmark, Smartphone, X, User, Mail } from 'lucide-react';
 import { FRAUD_API_BASE_URL } from '@/const';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { toast } from 'sonner';
 import { Link } from 'wouter';
 
 type VerificationState = 'verified' | 'pending' | 'action_required';
@@ -21,6 +22,7 @@ type GuardianContact = {
   phone: string;
   email: string;
   linked_at: string;
+  status?: string;
 };
 
 type GuardianAlertsResponse = {
@@ -137,9 +139,7 @@ export default function Profile() {
   const [selectedGuardianAccount, setSelectedGuardianAccount] = useState('');
   const [isGuardianLoading, setIsGuardianLoading] = useState(false);
   const [guardianForm, setGuardianForm] = useState({
-    guardian_account: '',
     guardian_name: '',
-    phone: '',
     email: '',
   });
   const [recoveryForm, setRecoveryForm] = useState({
@@ -228,7 +228,9 @@ export default function Profile() {
     const contacts: GuardianContact[] = data.guardians ?? [];
     setGuardians(contacts);
     if (contacts.length > 0) {
-      setSelectedGuardianAccount((prev) => prev || contacts[0].guardian_account);
+      // Find first accepted guardian to select by default for alerts
+      const firstAccepted = contacts.find(g => g.status === 'ACCEPTED');
+      setSelectedGuardianAccount(prev => prev || firstAccepted?.guardian_account || contacts[0].guardian_account);
     } else {
       setSelectedGuardianAccount('');
       setGuardianAlerts([]);
@@ -270,36 +272,33 @@ export default function Profile() {
   }, [selectedGuardianAccount]);
 
   const handleLinkGuardian = async () => {
-    if (!guardianForm.guardian_account || !guardianForm.guardian_name || !guardianForm.phone || !guardianForm.email) {
-      setGuardianStatus('Please complete all guardian fields.');
+    if (!guardianForm.guardian_name || !guardianForm.email) {
+      toast.error('Please complete both guardian name and email.');
       return;
     }
 
     try {
       setIsGuardianLoading(true);
-      setGuardianStatus(null);
-      const response = await fetch(`${FRAUD_API_BASE_URL}/guardians/link`, {
+      const response = await fetch(`${FRAUD_API_BASE_URL}/guardians/send-email-invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sender_account: SENIOR_ACCOUNT,
-          ...guardianForm,
+          guardian_name: guardianForm.guardian_name,
+          guardian_email: guardianForm.email,
         }),
       });
 
       const data = await response.json();
       if (!response.ok || data.success === false) {
-        throw new Error(data.message || 'Unable to link guardian.');
+        throw new Error(data.message || 'Unable to send invitation.');
       }
 
-      setGuardianStatus(data.message || 'Guardian linked successfully.');
-      setGuardianForm({ guardian_account: '', guardian_name: '', phone: '', email: '' });
+      toast.success(`Invitation email sent to ${guardianForm.email}`);
+      setGuardianForm({ guardian_name: '', email: '' });
       await loadGuardians();
-      if (selectedGuardianAccount) {
-        await loadGuardianAlerts(selectedGuardianAccount);
-      }
-    } catch (error) {
-      setGuardianStatus(error instanceof Error ? error.message : 'Unable to link guardian.');
+    } catch (error: any) {
+      toast.error(error.message || 'Unable to send invitation.');
     } finally {
       setIsGuardianLoading(false);
     }
@@ -308,7 +307,6 @@ export default function Profile() {
   const handleRemoveGuardian = async (guardianAccount: string) => {
     try {
       setIsGuardianLoading(true);
-      setGuardianStatus(null);
       const response = await fetch(`${FRAUD_API_BASE_URL}/guardians/${SENIOR_ACCOUNT}/remove/${guardianAccount}`, {
         method: 'POST',
       });
@@ -317,10 +315,10 @@ export default function Profile() {
         throw new Error(data.message || 'Unable to remove guardian.');
       }
 
-      setGuardianStatus(data.message || 'Guardian removed.');
+      toast.success(data.message || 'Guardian removed.');
       await loadGuardians();
-    } catch (error) {
-      setGuardianStatus(error instanceof Error ? error.message : 'Unable to remove guardian.');
+    } catch (error: any) {
+      toast.error(error.message || 'Unable to remove guardian.');
     } finally {
       setIsGuardianLoading(false);
     }
@@ -563,46 +561,32 @@ export default function Profile() {
                 </div>
 
                 <div className="rounded-[8px] bg-[#F9FAFB] p-6 flex flex-col gap-6 shadow-sm border border-[#E5E7EB]">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-gray-500 text-xs font-semibold uppercase">Guardian Name</label>
-                      <input
-                        type="text"
-                        value={guardianForm.guardian_name}
-                        onChange={(e) => setGuardianForm((prev) => ({ ...prev, guardian_name: e.target.value }))}
-                        placeholder="Guardian full name"
-                        className="h-11 rounded-[8px] border border-[#D1D5DB] bg-white px-4 text-sm text-gray-900"
-                      />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Guardian Name</label>
+                      <div className="relative">
+                        <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          value={guardianForm.guardian_name}
+                          onChange={(e) => setGuardianForm((prev) => ({ ...prev, guardian_name: e.target.value }))}
+                          placeholder="Full Name"
+                          className="h-12 w-full rounded-[8px] border border-[#D1D5DB] bg-white pl-11 pr-4 text-sm text-gray-900 focus:ring-2 focus:ring-orange-500/20 outline-none transition-all"
+                        />
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-gray-500 text-xs font-semibold uppercase">Guardian Account ID</label>
-                      <input
-                        type="text"
-                        value={guardianForm.guardian_account}
-                        onChange={(e) => setGuardianForm((prev) => ({ ...prev, guardian_account: e.target.value.toUpperCase() }))}
-                        placeholder="Guardian account ID"
-                        className="h-11 rounded-[8px] border border-[#D1D5DB] bg-white px-4 text-sm text-gray-900"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-gray-500 text-xs font-semibold uppercase">Phone Number</label>
-                      <input
-                        type="text"
-                        value={guardianForm.phone}
-                        onChange={(e) => setGuardianForm((prev) => ({ ...prev, phone: e.target.value }))}
-                        placeholder="Phone"
-                        className="h-11 rounded-[8px] border border-[#D1D5DB] bg-white px-4 text-sm text-gray-900"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-gray-500 text-xs font-semibold uppercase">Email Address</label>
-                      <input
-                        type="email"
-                        value={guardianForm.email}
-                        onChange={(e) => setGuardianForm((prev) => ({ ...prev, email: e.target.value }))}
-                        placeholder="Email"
-                        className="h-11 rounded-[8px] border border-[#D1D5DB] bg-white px-4 text-sm text-gray-900"
-                      />
+                    <div className="flex flex-col gap-2">
+                      <label className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Guardian Email Address</label>
+                      <div className="relative">
+                        <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="email"
+                          value={guardianForm.email}
+                          onChange={(e) => setGuardianForm((prev) => ({ ...prev, email: e.target.value }))}
+                          placeholder="email@example.com"
+                          className="h-12 w-full rounded-[8px] border border-[#D1D5DB] bg-white pl-11 pr-4 text-sm text-gray-900 focus:ring-2 focus:ring-orange-500/20 outline-none transition-all"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -610,31 +594,40 @@ export default function Profile() {
                     type="button"
                     onClick={handleLinkGuardian}
                     disabled={isGuardianLoading}
-                    className={`${primaryButtonClass} self-start bg-[#FF5500] hover:bg-[#E64D00] text-white disabled:opacity-60`}
+                    className="h-12 self-start rounded-[8px] bg-[#FF5500] px-8 text-sm font-bold text-white hover:bg-[#E64D00] shadow-lg shadow-orange-500/20 active:scale-95 transition-all disabled:opacity-60"
                   >
-                    {isGuardianLoading ? 'Linking...' : 'Link Guardian'}
+                    {isGuardianLoading ? 'Sending Invite...' : 'Send Invitation Email'}
                   </button>
                 </div>
 
                 <div className="flex flex-col gap-3 max-h-[400px] overflow-auto pr-2 custom-scrollbar">
-                  {guardians.length === 0 && <p className="text-sm text-gray-400 italic bg-gray-50 p-6 rounded-[8px] border border-dashed border-gray-200">No guardian linked yet.</p>}
+                  {guardians.length === 0 && <p className="text-sm text-gray-400 italic bg-gray-50 p-6 rounded-[8px] border border-dashed border-gray-200">No invitations sent yet.</p>}
                   {guardians.map((g) => (
-                    <div key={g.guardian_account} className="rounded-[8px] bg-white px-5 py-4 flex items-center justify-between gap-4 shadow-sm border border-[#E5E7EB]">
+                    <div key={g.email} className="rounded-[8px] bg-white px-5 py-4 flex items-center justify-between gap-4 shadow-sm border border-[#E5E7EB]">
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 font-bold">
                           {g.guardian_name.charAt(0)}
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-sm font-bold text-gray-900">{g.guardian_name}</span>
-                          <span className="text-xs text-gray-500 font-medium">{g.guardian_account} • {g.phone} • {g.email}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-gray-900">{g.guardian_name}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              g.status === 'ACCEPTED' ? 'bg-green-50 text-green-600 border-green-100' :
+                              g.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100' :
+                              'bg-orange-50 text-orange-600 border-orange-100'
+                            }`}>
+                              {g.status}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500 font-medium">{g.email}</span>
                         </div>
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleRemoveGuardian(g.guardian_account)}
+                        onClick={() => handleRemoveGuardian(g.status === 'ACCEPTED' ? g.guardian_account : g.email)}
                         className="text-xs font-bold text-red-500 hover:text-red-700 bg-red-50 px-3 py-1.5 rounded-[6px] transition-colors"
                       >
-                        Remove
+                        {g.status === 'ACCEPTED' ? 'Remove' : 'Cancel Invite'}
                       </button>
                     </div>
                   ))}
