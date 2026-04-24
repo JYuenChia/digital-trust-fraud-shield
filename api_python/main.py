@@ -32,12 +32,7 @@ GUARDIAN_APPROVAL_RISK_THRESHOLD = 0.45
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000", 
-        "http://127.0.0.1:3000", 
-        "http://localhost:5173", 
-        "http://127.0.0.1:5173"
-    ],
+    allow_origins=["*"], # Allow all origins for local development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -98,32 +93,7 @@ KNOWN_SCAM_ACCOUNT_NUMBERS = {
 }
 
 # Guardian Link Storage: Senior Account -> Guardian(s)
-GUARDIAN_LINKS = {
-    "ALEX8899": {
-        "guardians": [
-            {
-                "guardian_account": "GUARDIAN001",
-                "guardian_name": "Sarah Tan (Daughter)",
-                "phone": "+60102109332",
-                "email": "sarah.tan@email.com",
-                "linked_at": "2026-01-15T10:00:00Z",
-                "permission_tier": "CO_SIGNER",
-                "verification_status": "VERIFIED",
-            },
-            {
-                "guardian_account": "GUARDIAN002",
-                "guardian_name": "Guardian (Self)",
-                "phone": "+601154166891",
-                "email": "",
-                "linked_at": "2026-04-23T22:00:00Z",
-                "permission_tier": "CO_SIGNER",
-                "verification_status": "VERIFIED",
-            },
-        ],
-        "senior_name": "Alex Tan",
-        "notification_threshold_risk": 0.75,
-    }
-}
+GUARDIAN_LINKS = {}
 
 # In-memory alert history for guardian dashboard (no database required).
 GUARDIAN_ALERT_LOGS = []
@@ -1214,6 +1184,39 @@ async def voice_authenticity(audio_file: UploadFile = File(...)):
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Unable to analyze the audio sample.") from exc
 
+def send_guardian_notification(sender_account: str, sender_name: str, risk_score: float, reason: str, amount: float = 0):
+    """Log a high-risk alert for the senior's incident history and optionally email linked guardians."""
+    alert_id = f"ALERT-{str(uuid4())[:8].upper()}"
+    timestamp = datetime.now().isoformat() + "Z"
+    GUARDIAN_ALERT_LOGS.append({
+        "alert_id": alert_id,
+        "sender_account": sender_account,
+        "sender_name": sender_name,
+        "type": "HIGH_RISK_TRANSACTION",
+        "risk_score": round(risk_score, 4),
+        "risk_reason": reason,
+        "amount": round(amount, 2),
+        "timestamp": timestamp,
+        "status": "FLAGGED"
+    })
+    print(f"[ALERT-LOGGED] {alert_id} | {sender_name} | risk={risk_score:.2f}")
+    try:
+        from guardian_email import send_guardian_alert_email
+        for g in GUARDIAN_LINKS.get(sender_account, {}).get("guardians", []):
+            if g.get("email"):
+                send_guardian_alert_email(
+                    guardian_email=g["email"],
+                    guardian_name=g.get("guardian_name", "Guardian"),
+                    senior_name=sender_name,
+                    risk_level="HIGH",
+                    risk_score=risk_score,
+                    reason=reason
+                )
+    except Exception as e:
+        print(f"[EMAIL-WARN] {e}")
+    return alert_id
+
+
 @app.post("/predict")
 async def predict_fraud(txn: Transaction, allow_guardian_approval: bool = True):
     # Prepare the data exactly like the training step
@@ -1385,7 +1388,6 @@ async def predict_fraud(txn: Transaction, allow_guardian_approval: bool = True):
 
     hard_floor = 0.0
     hard_floor_reason = None
-    status_floor = 0.0
 
     if insufficient_funds or extreme_amount or contextual_block:
         hard_floor = 0.75
@@ -1408,20 +1410,21 @@ async def predict_fraud(txn: Transaction, allow_guardian_approval: bool = True):
 
     effective_risk = min(max(effective_risk, 0.0), 0.999)
 
-    # Guardian notification: If risk score is very high for normal transactions
+    # Guardian notification: always log high-risk alerts for the senior's own history
     notify_guardian = False
-    if txn.sender_account and txn.sender_account in GUARDIAN_LINKS:
-        guardian_threshold = GUARDIAN_LINKS[txn.sender_account].get("notification_threshold_risk", 0.75)
-        if effective_risk >= guardian_threshold:
-            notify_guardian = True
-            # Send real-time notifications to guardians
-            senior_name = GUARDIAN_LINKS[txn.sender_account].get("senior_name", txn.sender_account)
-            send_guardian_notification(
-                sender_account=txn.sender_account,
-                sender_name=senior_name,
-                risk_score=effective_risk,
-                reason=reason
-            )
+    if txn.sender_account and effective_risk >= 0.70:
+        notify_guardian = True
+        senior_name = GUARDIAN_LINKS.get(txn.sender_account, {}).get("senior_name", txn.sender_account)
+        if senior_name == txn.sender_account:
+            # Fallback: look up from SENDER_PROFILES
+            senior_name = SENDER_PROFILES.get(txn.sender_account, {}).get("name", txn.sender_account)
+        send_guardian_notification(
+            sender_account=txn.sender_account,
+            sender_name=senior_name,
+            risk_score=effective_risk,
+            reason=reason,
+            amount=txn.amount
+        )
 
     guardian_approval = None
     requires_user_verification = status == "FLAGGED"
@@ -1556,9 +1559,40 @@ async def link_guardian(payload: GuardianLink):
     }
 
 
+@app.get("/api/guardians/seniors/{guardian_email}")
+async def get_seniors_for_guardian(guardian_email: str):
+    """Get all senior accounts that have linked this email as a guardian."""
+    linked_seniors = []
+    
+    for senior_account, data in GUARDIAN_LINKS.items():
+        # Ensure data is a dict
+        if not isinstance(data, dict): continue
+        
+        guardians = data.get("guardians", [])
+        for g in guardians:
+            if g.get("email") == guardian_email:
+                linked_seniors.append({
+                    "senior_account": senior_account,
+                    "senior_name": data.get("senior_name", "Senior User"),
+                    "linked_at": g.get("linked_at")
+                })
+    
+    return {"seniors": linked_seniors}
+
+
 @app.post("/guardians/{sender_account}/remove/{guardian_id}")
 async def remove_guardian(sender_account: str, guardian_id: str):
-    """Remove a guardian or cancel a pending invitation."""
+    """Remove a guardian from a senior account."""
+    if sender_account in GUARDIAN_LINKS:
+        initial_count = len(GUARDIAN_LINKS[sender_account]["guardians"])
+        GUARDIAN_LINKS[sender_account]["guardians"] = [
+            g for g in GUARDIAN_LINKS[sender_account]["guardians"] 
+            if g.get("guardian_account") != guardian_id
+        ]
+        if len(GUARDIAN_LINKS[sender_account]["guardians"]) < initial_count:
+            return {"success": True, "message": "Guardian removed successfully."}
+    
+    raise HTTPException(status_code=404, detail="Guardian not found.")
     removed = False
     message = "Guardian not found."
 
@@ -1605,6 +1639,19 @@ async def get_guardian_notifications(guardian_account: str):
     
     return {
         "guardian_account": guardian_account,
+        "notification_count": len(notifications),
+        "notifications": notifications,
+    }
+@app.get("/api/senior-notifications/{sender_account}")
+async def get_senior_notifications(sender_account: str):
+    """Get all high-risk alerts for a specific senior user."""
+    notifications = [
+        item for item in GUARDIAN_ALERT_LOGS
+        if item.get("sender_account") == sender_account
+    ]
+    notifications.sort(key=lambda item: item.get("timestamp", ""), reverse=True)
+    return {
+        "sender_account": sender_account,
         "notification_count": len(notifications),
         "notifications": notifications,
     }
@@ -1698,14 +1745,25 @@ async def decide_guardian_approval(approval_id: str, payload: GuardianApprovalDe
     }
 
 
-@app.post("/recovery-report/generate")
-async def generate_recovery_report(payload: RecoveryReportRequest):
-    """Generate AI evidence and recovery report for scam incidents."""
-    sender_account = payload.sender_account
-    guardian_account = payload.guardian_account
-    incident_description = payload.incident_description
-    amount_lost = payload.amount_lost
-    transaction_date = payload.transaction_date
+@app.post("/api/recovery-report/generate")
+async def generate_recovery_report(payload: dict):
+    """Generate AI evidence and recovery report for scam incidents, linked to an alert."""
+    alert_id = payload.get("alert_id")
+    sender_account = payload.get("sender_account")
+    
+    # Auto-fill from alert if provided
+    incident_description = payload.get("incident_description", "Suspicious transaction detected")
+    amount_lost = payload.get("amount_lost", 0)
+    transaction_date = payload.get("transaction_date", datetime.now().isoformat())
+    
+    if alert_id:
+        # Search for alert in logs
+        alert = next((a for a in GUARDIAN_ALERT_LOGS if a.get("alert_id") == alert_id), None)
+        if alert:
+            incident_description = alert.get("risk_reason", incident_description)
+            amount_lost = alert.get("amount", amount_lost)
+            transaction_date = alert.get("timestamp", transaction_date)
+            sender_account = alert.get("sender_account", sender_account)
     
     # Generate AI-powered evidence document
     evidence_points = [
@@ -1986,7 +2044,7 @@ async def verify_guardian_code_endpoint(data: dict):
     }
     
     if sender_account not in GUARDIAN_LINKS:
-        GUARDIAN_LINKS[sender_account] = {"guardians": [], "senior_name": sender_name}
+        GUARDIAN_LINKS[sender_account] = {"guardians": [], "senior_name": "Senior User"}
     
     # Ensure it's a dict structure if it was initialized differently
     if isinstance(GUARDIAN_LINKS[sender_account], list):

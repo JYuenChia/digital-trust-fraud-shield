@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ShieldCheck, ShieldAlert, Plus, CreditCard, CheckCircle2, Landmark, Smartphone, X, User, Mail } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Plus, CreditCard, CheckCircle2, Landmark, Smartphone, X, User, Mail, FileText } from 'lucide-react';
 import { FRAUD_API_BASE_URL } from '@/const';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'sonner';
@@ -29,6 +29,7 @@ type GuardianAlertsResponse = {
   guardian_account: string;
   notification_count: number;
   notifications: Array<{
+    alert_id: string;
     sender_account: string;
     sender_name: string;
     guardian_account: string;
@@ -36,6 +37,7 @@ type GuardianAlertsResponse = {
     type: string;
     risk_score: number;
     risk_reason: string;
+    amount?: number;
     timestamp: string;
   }>;
 };
@@ -152,6 +154,7 @@ export default function Profile() {
   });
   const [recoveryReportId, setRecoveryReportId] = useState<string | null>(null);
   const [recoveryReport, setRecoveryReport] = useState<RecoveryReportResponse | null>(null);
+  const [activeReportId, setActiveReportId] = useState<string | null>(null);
 
   const verification = useMemo(() => {
     const fullyVerified = cards.some((c) => c.status === 'verified');
@@ -240,39 +243,32 @@ export default function Profile() {
     }
   };
 
-  const loadGuardianAlerts = async (guardianAccount: string) => {
-    if (!guardianAccount) {
-      setGuardianAlerts([]);
-      return;
+  const loadSeniorAlerts = async () => {
+    try {
+      const response = await fetch(`${FRAUD_API_BASE_URL}/api/senior-notifications/${SENIOR_ACCOUNT}`);
+      if (!response.ok) throw new Error('Failed to load alerts');
+      const data: GuardianAlertsResponse = await response.json();
+      setGuardianAlerts(data.notifications ?? []);
+    } catch (err) {
+      toast.error('Could not load incident history.');
     }
-
-    const response = await fetch(`${FRAUD_API_BASE_URL}/guardian-notifications/${guardianAccount}`);
-    if (!response.ok) throw new Error('Failed to load guardian alerts');
-    const data: GuardianAlertsResponse = await response.json();
-    setGuardianAlerts(data.notifications ?? []);
   };
 
   useEffect(() => {
-    const bootstrapGuardians = async () => {
+    const bootstrap = async () => {
       try {
         setIsGuardianLoading(true);
-        await loadGuardians();
+        await Promise.all([loadGuardians(), loadSeniorAlerts()]);
       } catch {
-        setGuardianStatus('Could not load guardian data right now.');
+        // Handled in individual functions
       } finally {
         setIsGuardianLoading(false);
       }
     };
 
-    bootstrapGuardians();
+    bootstrap();
   }, []);
 
-  useEffect(() => {
-    if (!selectedGuardianAccount) return;
-    loadGuardianAlerts(selectedGuardianAccount).catch(() => {
-      setGuardianStatus('Could not load guardian alerts.');
-    });
-  }, [selectedGuardianAccount]);
 
   const handleLinkGuardian = async () => {
     if (!guardianForm.guardian_name || !guardianForm.email) {
@@ -362,43 +358,38 @@ export default function Profile() {
     }
   };
 
-  const handleGenerateRecoveryReport = async () => {
-    if (!selectedGuardianAccount) {
-      setGuardianStatus('Please choose a guardian first.');
-      return;
-    }
-
-    const amountLost = Number(recoveryForm.amount_lost || 0);
-    if (!Number.isFinite(amountLost) || amountLost < 0) {
-      setGuardianStatus('Enter a valid amount lost (0 or higher).');
-      return;
-    }
-
+  const handleGenerateRecoveryReport = async (alert?: any) => {
     try {
       setIsGuardianLoading(true);
-      setRecoveryReportId(null);
       setRecoveryReport(null);
-      setGuardianStatus(null);
-      const response = await fetch(`${FRAUD_API_BASE_URL}/recovery-report/generate`, {
+
+      const payload = alert ? {
+        alert_id: alert.alert_id,
+        sender_account: SENIOR_ACCOUNT,
+        incident_description: alert.risk_reason,
+        amount_lost: alert.amount || 0,
+        transaction_date: alert.timestamp
+      } : {
+        incident_description: recoveryForm.incident_description,
+        amount_lost: recoveryForm.amount_lost,
+        transaction_date: recoveryForm.transaction_date,
+        sender_account: SENIOR_ACCOUNT
+      };
+
+      const response = await fetch(`${FRAUD_API_BASE_URL}/api/recovery-report/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sender_account: SENIOR_ACCOUNT,
-          guardian_account: selectedGuardianAccount,
-          incident_description: recoveryForm.incident_description,
-          amount_lost: amountLost,
-          transaction_date: recoveryForm.transaction_date,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) throw new Error('Unable to generate recovery report.');
       const data: RecoveryReportResponse = await response.json();
       setRecoveryReportId(data.report_id || null);
       setRecoveryReport(data);
-      setGuardianStatus('Recovery report generated. Share it with bank and authorities.');
-      await loadGuardianAlerts(selectedGuardianAccount);
-    } catch {
-      setGuardianStatus('Unable to generate recovery report right now.');
+      if (alert) setActiveReportId(alert.alert_id);
+      toast.success('AI Evidence Generated!');
+    } catch (err: any) {
+      toast.error(err.message || 'Unable to generate report.');
     } finally {
       setIsGuardianLoading(false);
     }
@@ -421,7 +412,7 @@ export default function Profile() {
     { id: 'account', label: 'Account' },
     { id: 'cards', label: 'Linked Bank Cards' },
     { id: 'guardian-link', label: 'Guardian Link' },
-    { id: 'guardian-dashboard', label: 'Guardian Dashboard' },
+    { id: 'guardian-dashboard', label: 'Incident Report' },
   ];
 
   const primaryButtonClass = 'h-10 rounded-[8px] px-6 text-sm font-semibold transition-all shadow-sm active:scale-95';
@@ -442,11 +433,10 @@ export default function Profile() {
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`h-11 rounded-[8px] px-4 text-sm font-medium text-left transition-all ${
-                    activeTab === tab.id
+                  className={`h-11 rounded-[8px] px-4 text-sm font-medium text-left transition-all ${activeTab === tab.id
                       ? 'bg-orange-50 text-orange-600'
                       : 'text-gray-600 hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   {tab.label}
                 </button>
@@ -615,7 +605,14 @@ export default function Profile() {
                         </div>
                       </div>
                       <div className="flex flex-col gap-2">
-                        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Guardian Email Address</label>
+                        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wider flex items-center justify-between">
+                          Guardian Email Address
+                          {guardianForm.email.includes('@') && (
+                            <span className="text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-200 flex items-center gap-1 animate-in fade-in zoom-in duration-300">
+                              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> User Found & Online
+                            </span>
+                          )}
+                        </label>
                         <div className="relative">
                           <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                           <input
@@ -682,11 +679,10 @@ export default function Profile() {
                         <div className="flex flex-col">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-bold text-gray-900">{g.guardian_name}</span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                              g.status === 'VERIFIED' || g.status === 'ACCEPTED' ? 'bg-green-50 text-green-600 border-green-100' :
-                              g.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100' :
-                              'bg-orange-50 text-orange-600 border-orange-100'
-                            }`}>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${g.status === 'VERIFIED' || g.status === 'ACCEPTED' ? 'bg-green-50 text-green-600 border-green-100' :
+                                g.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100' :
+                                  'bg-orange-50 text-orange-600 border-orange-100'
+                              }`}>
                               {g.status}
                             </span>
                           </div>
@@ -709,150 +705,114 @@ export default function Profile() {
             {activeTab === 'guardian-dashboard' && (
               <>
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <h2 className="text-2xl font-['Sora'] font-bold text-gray-900">Guardian Hub</h2>
+                  <h2 className="text-2xl font-['Sora'] font-bold text-gray-900">Incident Report</h2>
                   <div className="flex items-center gap-3">
-                    <Link href="/guardian-notifications">
-                      <button type="button" className={`${primaryButtonClass} bg-white border border-[#D1D5DB] text-gray-700 hover:bg-gray-50`}>Alert History</button>
-                    </Link>
-                    <button type="button" onClick={() => loadGuardianAlerts(selectedGuardianAccount)} className={`${primaryButtonClass} bg-white border border-[#D1D5DB] text-gray-700 hover:bg-gray-50`}>
-                      Refresh
+                    <button type="button" onClick={loadSeniorAlerts} className={`${primaryButtonClass} bg-white border border-[#D1D5DB] text-gray-700 hover:bg-gray-50`}>
+                      Refresh Alerts
                     </button>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                  {/* Left Column: Management */}
+                  {/* Left Column: Alert History */}
                   <div className="flex flex-col gap-6">
-                    <div className="flex flex-col gap-2">
-                        <label className="text-xs font-semibold uppercase tracking-wider text-gray-400">Select Guardian Account</label>
-                        <select
-                        value={selectedGuardianAccount}
-                        onChange={(e) => setSelectedGuardianAccount(e.target.value)}
-                        className="h-11 rounded-[8px] border border-[#D1D5DB] bg-white px-4 text-sm text-gray-900 shadow-sm outline-none focus:ring-2 focus:ring-orange-500/20"
-                        >
-                        <option value="">Choose guardian account...</option>
-                        {guardians.map((g) => (
-                            <option key={g.guardian_account} value={g.guardian_account}>
-                            {g.guardian_name} ({g.status})
-                            </option>
-                        ))}
-                        </select>
-                    </div>
-
                     <div className="rounded-[8px] bg-[#F9FAFB] p-6 border border-[#E5E7EB] flex flex-col gap-5 shadow-sm">
-                        <div className="flex items-center gap-2 border-b border-[#E5E7EB] pb-3">
-                            <ShieldAlert size={18} className="text-orange-500" />
-                            <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wide">Risk Alerts</h3>
+                      <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
+                        <div className="flex items-center gap-2">
+                          <ShieldAlert size={18} className="text-orange-500" />
+                          <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wide">Incident Alert History</h3>
                         </div>
-                        <div className="max-h-64 overflow-auto pr-2 custom-scrollbar flex flex-col gap-3">
-                            {guardianAlerts.length === 0 && (
-                                <div className="text-center py-8">
-                                    <p className="text-sm text-gray-400 italic">No threats monitored yet.</p>
-                                </div>
-                            )}
-                            {guardianAlerts.map((alert, idx) => (
-                                <div key={`${alert.timestamp}-${idx}`} className="p-4 bg-white rounded-[8px] border border-[#F3F4F6] shadow-sm">
-                                    <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded uppercase tracking-tighter">
-                                            {Math.round((alert.risk_score || 0) * 100)}% risk
-                                        </span>
-                                        <span className="text-[10px] text-gray-400 font-medium">{new Date(alert.timestamp).toLocaleTimeString()}</span>
-                                    </div>
-                                    <p className="text-sm text-gray-900 font-bold">{alert.sender_name}</p>
-                                    <p className="text-xs text-gray-500 mt-1 leading-relaxed">{alert.risk_reason}</p>
-                                </div>
-                            ))}
-                        </div>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Select alert to generate evidence</span>
+                      </div>
+                      <div className="max-h-[600px] overflow-auto pr-2 custom-scrollbar flex flex-col gap-4">
+                        {guardianAlerts.length === 0 && (
+                          <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
+                            <p className="text-sm text-gray-400 italic">No threats monitored yet. Run a suspicious transaction to see alerts here.</p>
+                          </div>
+                        )}
+                        {guardianAlerts.map((alert, idx) => (
+                          <div
+                            key={`${alert.timestamp}-${idx}`}
+                            className={`p-5 bg-white rounded-xl border transition-all duration-300 ${activeReportId === alert.alert_id ? 'border-[#FF5500] shadow-md shadow-orange-500/5' : 'border-[#F3F4F6] shadow-sm hover:shadow-md'}`}
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-[6px] uppercase tracking-tight">
+                                  {Math.round((alert.risk_score || 0) * 100)}% {t('guardian.risk')}
+                                </span>
+                                {alert.amount && (
+                                  <span className="text-[11px] font-bold text-gray-900 bg-gray-100 px-2.5 py-1 rounded-[6px]">
+                                    RM {alert.amount}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{new Date(alert.timestamp).toLocaleDateString()}</span>
+                            </div>
+                            <p className="text-sm text-gray-900 font-bold mb-1">{alert.type?.replaceAll('_', ' ') || 'SUSPICIOUS TRANSACTION'}</p>
+                            <p className="text-xs text-gray-500 leading-relaxed font-medium mb-4 italic">"{alert.risk_reason}"</p>
+                            <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
+                              <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                                ID: {alert.alert_id?.slice(0, 8) || 'N/A'}
+                              </div>
+                              <button
+                                onClick={() => handleGenerateRecoveryReport(alert)}
+                                disabled={isGuardianLoading}
+                                className="h-9 rounded-lg bg-[#FF5500] px-4 text-[11px] font-bold text-white hover:bg-[#E64D00] shadow-sm transition-all active:scale-[0.98] disabled:opacity-50 flex items-center gap-2"
+                              >
+                                <Smartphone size={14} />
+                                {activeReportId === alert.alert_id ? 'Regenerate Report' : 'Generate Evidence'}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Right Column: AI Recovery */}
+                  {/* Right Column: AI Evidence Report View */}
                   <div className="flex flex-col gap-6">
-                    <div className="rounded-[8px] bg-white p-6 border border-[#E5E7EB] flex flex-col gap-6 shadow-sm">
-                        <div className="flex items-center gap-2 border-b border-[#F3F4F6] pb-3">
-                            <CheckCircle2 size={18} className="text-orange-500" />
-                            <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wide">AI Evidence Generation</h3>
+                    {!recoveryReport ? (
+                      <div className="h-full min-h-[400px] rounded-2xl border-2 border-dashed border-gray-100 flex flex-col items-center justify-center p-12 text-center bg-gray-50/50">
+                        <div className="w-16 h-16 rounded-full bg-white shadow-sm flex items-center justify-center mb-4">
+                          <FileText size={32} className="text-gray-300" />
                         </div>
-                        
-                        <div className="grid grid-cols-1 gap-4">
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-bold text-gray-400 uppercase">Incident Summary</label>
-                                <textarea
-                                    value={recoveryForm.incident_description}
-                                    onChange={(e) => setRecoveryForm((prev) => ({ ...prev, incident_description: e.target.value }))}
-                                    placeholder="Describe the suspicious activity..."
-                                    className="h-24 rounded-[8px] border border-[#D1D5DB] bg-white p-4 text-sm text-gray-900 resize-none outline-none focus:ring-2 focus:ring-orange-500/20"
-                                />
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">No Report Generated</h3>
+                        <p className="text-sm text-gray-500 max-w-xs">Select a suspicious alert from the left and click "Generate Evidence" to compile your official dossier.</p>
+                      </div>
+                    ) : (
+                      <div className="animate-in fade-in zoom-in-95 duration-500 rounded-[12px] border-2 border-orange-100 bg-orange-50/30 p-6 flex flex-col gap-5 shadow-inner">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
+                              <Smartphone size={20} className="text-orange-600" />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-[11px] font-bold text-gray-400 uppercase">Amount (RM)</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={recoveryForm.amount_lost}
-                                        onChange={(e) => setRecoveryForm((prev) => ({ ...prev, amount_lost: e.target.value }))}
-                                        placeholder="0.00"
-                                        className="h-11 rounded-[8px] border border-[#D1D5DB] bg-white px-4 text-sm text-gray-900"
-                                    />
-                                </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-[11px] font-bold text-gray-400 uppercase">Incident Date</label>
-                                    <input
-                                        type="date"
-                                        value={recoveryForm.transaction_date}
-                                        onChange={(e) => setRecoveryForm((prev) => ({ ...prev, transaction_date: e.target.value }))}
-                                        className="h-11 rounded-[8px] border border-[#D1D5DB] bg-white px-4 text-sm text-gray-900"
-                                    />
-                                </div>
+                            <div>
+                              <p className="text-sm font-bold text-gray-900">AI Recovery Dossier Ready</p>
+                              <p className="text-[10px] text-gray-500 font-medium">Verified Evidence • {new Date(recoveryReport.generated_at).toLocaleDateString()}</p>
                             </div>
-                            <button
-                                type="button"
-                                onClick={handleGenerateRecoveryReport}
-                                disabled={isGuardianLoading}
-                                className={`${primaryButtonClass} bg-[#FF5500] hover:bg-[#E64D00] text-white disabled:opacity-60 mt-2`}
-                            >
-                                {isGuardianLoading ? 'Processing AI...' : 'Generate Evidence Report'}
-                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={downloadRecoveryReport}
+                            className="h-9 rounded-[8px] bg-white border border-[#D1D5DB] px-4 text-xs font-bold text-gray-700 hover:bg-gray-50 shadow-sm"
+                          >
+                            JSON EXPORT
+                          </button>
                         </div>
-                    </div>
-
-                    {recoveryReport && (
-                        <div className="rounded-[12px] border-2 border-orange-100 bg-orange-50/30 p-6 flex flex-col gap-5 shadow-inner">
-                            <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
-                                        <Smartphone size={20} className="text-orange-600" />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-gray-900">AI Recovery Dossier Ready</p>
-                                        <p className="text-[10px] text-gray-500 font-medium">Verified Evidence • {new Date(recoveryReport.generated_at).toLocaleDateString()}</p>
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={downloadRecoveryReport}
-                                    className="h-9 rounded-[8px] bg-white border border-[#D1D5DB] px-4 text-xs font-bold text-gray-700 hover:bg-gray-50 shadow-sm"
-                                >
-                                    JSON EXPORT
-                                </button>
+                        <div className="grid grid-cols-1 gap-3">
+                          <div className="bg-white p-4 rounded-[8px] shadow-sm border border-orange-50">
+                            <h4 className="text-[10px] font-bold text-orange-600 uppercase mb-2">Findings</h4>
+                            <p className="text-xs text-gray-700 leading-relaxed font-medium">{recoveryReport.incident_summary.description}</p>
+                          </div>
+                          <div className="bg-white p-4 rounded-[8px] shadow-sm border border-orange-50">
+                            <h4 className="text-[10px] font-bold text-orange-600 uppercase mb-2">Confidence Level</h4>
+                            <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden mb-1">
+                              <div className="bg-orange-500 h-full" style={{ width: `${recoveryReport.incident_summary.confidence_level * 100}%` }} />
                             </div>
-
-                            <div className="grid grid-cols-1 gap-3">
-                                <div className="bg-white p-4 rounded-[8px] shadow-sm border border-orange-50">
-                                    <h4 className="text-[10px] font-bold text-orange-600 uppercase mb-2">Findings</h4>
-                                    <p className="text-xs text-gray-700 leading-relaxed font-medium">{recoveryReport.incident_summary.description}</p>
-                                </div>
-                                <div className="bg-white p-4 rounded-[8px] shadow-sm border border-orange-50">
-                                    <h4 className="text-[10px] font-bold text-orange-600 uppercase mb-2">Confidence Level</h4>
-                                    <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden mb-1">
-                                        <div className="bg-orange-500 h-full" style={{ width: `${recoveryReport.incident_summary.confidence_level * 100}%` }} />
-                                    </div>
-                                    <p className="text-[10px] text-gray-500 font-bold uppercase">{Math.round(recoveryReport.incident_summary.confidence_level * 100)}% Certainty</p>
-                                </div>
-                            </div>
+                            <p className="text-[10px] text-gray-500 font-bold uppercase">{Math.round(recoveryReport.incident_summary.confidence_level * 100)}% Certainty</p>
+                          </div>
                         </div>
+                      </div>
                     )}
                   </div>
                 </div>

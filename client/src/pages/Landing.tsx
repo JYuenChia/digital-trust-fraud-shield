@@ -2,11 +2,22 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'wouter';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTour } from '@/contexts/TourContext';
+import { 
+  ShieldCheck, 
+  UserPlus, 
+  Smartphone, 
+  ArrowRight, 
+  CheckCircle2, 
+  Fingerprint, 
+  Search, 
+  MessageSquare,
+  ChevronRight
+} from 'lucide-react';
 
 const LESSON_STORAGE_KEY = 'fraud-shield-lesson-v1';
 const LESSON_POINTS_STORAGE_KEY = 'fraud-shield-lesson-points-v1';
 
-const LESSON_CARDS 
+const LESSON_CARDS = [
   {
     title: 'What Is Fraud?',
     desc: 'Fraud means someone lies or hides the truth to get your money, goods, or personal details.',
@@ -267,11 +278,24 @@ export default function Landing() {
       num: '4',
       title: t('landing.hiw.s4Title'),
       desc: t('landing.hiw.s4Desc')
+    }
+  ];
+
+  const guideSteps = [
+    {
+      icon: <UserPlus className="text-orange-500" size={24} />,
+      title: t('landing.guide.step1Title'),
+      desc: t('landing.guide.step1Desc')
     },
     {
-      num: '5',
-      title: t('landing.hiw.s5Title'),
-      desc: t('landing.hiw.s5Desc')
+      icon: <ShieldCheck className="text-orange-500" size={24} />,
+      title: t('landing.guide.step2Title'),
+      desc: t('landing.guide.step2Desc')
+    },
+    {
+      icon: <Smartphone className="text-orange-500" size={24} />,
+      title: t('landing.guide.step3Title'),
+      desc: t('landing.guide.step3Desc')
     }
   ];
 
@@ -483,21 +507,53 @@ export default function Landing() {
           </div>
 
           {/* Carousel */}
-          <div data-tour="landing-features" className="grid grid-cols-1 md:grid-cols-4 gap-8 w-full">
+          <div data-tour="landing-features" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 w-full">
             {features.map((feat, i) => (
               <div 
                 key={i} 
-                className="group p-10 rounded-2xl flex flex-col gap-4 aspect-square justify-center transition-all duration-300 bg-[#FFFFFF]/80 dark:bg-[#1A1A1A]/80 border border-black/10 dark:border-white/10 hover:bg-[#FF5500] hover:shadow-[0_0_40px_rgba(255,85,0,0.3)] hover:scale-[1.02]"
+                className="group p-8 rounded-2xl flex flex-col gap-4 min-h-[280px] justify-start transition-all duration-300 bg-white dark:bg-[#1A1A1A] border border-black/5 dark:border-white/5 shadow-sm hover:border-[#FF5500]/50 hover:shadow-xl hover:shadow-orange-500/10 hover:-translate-y-1"
               >
-                <div className="font-['Sora'] text-2xl font-bold text-[#FF5500] group-hover:text-[#1A1A1A]">
+                <div className="w-12 h-12 rounded-xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center text-[#FF5500] font-['Sora'] text-xl font-bold">
                   {feat.num}
                 </div>
-                <h3 className="font-['Sora'] text-xl font-bold mt-4 text-[#111827] dark:text-white group-hover:text-[#111111]">
+                <h3 className="font-['Sora'] text-xl font-bold mt-2 text-[#111827] dark:text-white">
                   {feat.title}
                 </h3>
-                <p className="font-['Inter'] text-sm leading-[1.6] text-[#6B7280] dark:text-[#8A8A8A] group-hover:text-[#333333] group-hover:font-medium">
+                <p className="font-['Inter'] text-sm leading-[1.6] text-[#6B7280] dark:text-[#8A8A8A]">
                   {feat.desc}
                 </p>
+                <div className="mt-auto pt-4 flex items-center gap-2 text-[#FF5500] text-xs font-bold uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">
+                  Learn More <ChevronRight size={14} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </ScrollReveal>
+
+        {/* User Guide Section */}
+        <ScrollReveal className="flex flex-col gap-[40px] py-[80px] w-full">
+          <div className="text-center space-y-3">
+            <h2 className="text-[#111827] dark:text-white font-['Sora'] text-[32px] md:text-[40px] font-bold">
+              {t('landing.guide.title')}
+            </h2>
+            <div className="w-20 h-1.5 bg-[#FF5500] mx-auto rounded-full" />
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-10 w-full mt-8">
+            {guideSteps.map((step, idx) => (
+              <div key={idx} className="relative flex flex-col items-center text-center gap-6 group">
+                <div className="w-20 h-20 rounded-full bg-white dark:bg-[#1A1A1A] shadow-xl shadow-orange-500/5 flex items-center justify-center border border-orange-100 dark:border-orange-500/20 group-hover:scale-110 transition-transform duration-500">
+                  {step.icon}
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-[#111827] dark:text-white font-['Sora'] text-xl font-bold">{step.title}</h3>
+                  <p className="text-[#6B7280] dark:text-[#8A8A8A] font-['Inter'] text-[15px] leading-relaxed max-w-[280px] mx-auto">
+                    {step.desc}
+                  </p>
+                </div>
+                {idx < guideSteps.length - 1 && (
+                  <div className="hidden md:block absolute top-10 left-[70%] w-[60%] border-t-2 border-dashed border-orange-200 dark:border-orange-500/20 z-[-1]" />
+                )}
               </div>
             ))}
           </div>
