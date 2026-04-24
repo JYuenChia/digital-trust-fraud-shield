@@ -21,9 +21,9 @@ from pdrm_service import PDRMService
 import pickle
 
 app = FastAPI(title="Digital Fraud Shield API")
-pdrm_service = PDRMService(demo_mode=True)
+pdrm_service = PDRMService()
 
-# Conservative thresholds for a safer demo policy.
+# Risk thresholds for policy decisions.
 APPROVE_PROB_THRESHOLD = 0.15
 FLAG_PROB_THRESHOLD = 0.45
 FLAG_AMOUNT_THRESHOLD = 10000
@@ -63,7 +63,7 @@ DEVICE_TRUST_SCORES = {
 
 MERCHANT_PROFILES = {
     "M77889": {
-        "account_name": "Demo Merchant",
+        "account_name": "Official Merchant",
         "provider": "Touch n Go eWallet",
         "created_at": "2026-01-01T12:00:00Z",
         "is_verified_merchant": True,
@@ -78,7 +78,7 @@ MERCHANT_PROFILES = {
     },
 }
 
-# Demo scam-intelligence signals inspired by complaint feeds.
+# Global scam-intelligence signals inspired by complaint feeds.
 KNOWN_SCAM_RECIPIENT_NAMES = {
     "MCMC CLAIM REWARD",
     "PHISHTANK PAYMENTS",
@@ -142,7 +142,7 @@ class ContextRequest(BaseModel):
     sender_account: str
     recipient_account: str
     amount: float
-    device_id: str = "demo-web"
+    device_id: str = "web-portal"
     ip_profile: str = "auto"
 
 
@@ -161,14 +161,14 @@ class QRPayload(BaseModel):
 
 class QRTransferRequest(BaseModel):
     sender_account: str
-    device_id: str = "demo-web"
+    device_id: str = "web-portal"
     ip_profile: str = "auto"
     qr: QRPayload
 
 
 class QRThreatScanRequest(BaseModel):
     raw_qr: str
-    device_id: str = "demo-web"
+    device_id: str = "web-portal"
     ip_profile: str = "auto"
     sender_account: str = "ALEX8899"
     extracted_recipient_name: str | None = None
@@ -225,7 +225,7 @@ class AutoReportRequest(BaseModel):
     reason_code: str
     recommendation: str
     transaction_status: str
-    device_id: str = "demo-web"
+    device_id: str = "web-portal"
     ip_profile: str = "auto"
     qr_preview: str | None = None
     evidence: list[str] = Field(default_factory=list)
@@ -823,7 +823,7 @@ def evaluate_qr_integrity(payload: QRPayload):
     }
 
 
-def evaluate_generic_qr_threat(
+async def evaluate_generic_qr_threat(
     raw_qr: str,
     device_id: str,
     ip_profile: str,
@@ -968,6 +968,12 @@ def evaluate_generic_qr_threat(
 
     if extracted_account_norm and extracted_account_norm in KNOWN_SCAM_ACCOUNT_NUMBERS:
         add(0.65, "known_scam_account_number", "Account number matches known scam intelligence.")
+    elif extracted_account_norm:
+        # Check against live PDRM database
+        pdrm_result = await pdrm_service.check_account(extracted_account_norm)
+        if pdrm_result.get("found_in_database"):
+            add(0.75, "pdrm_scam_database_match", "Account number found in PDRM scam database.")
+            status = "BLOCKED" # Force block if found in PDRM
 
     if extracted_amount is not None:
         safe_extracted_amount = max(float(extracted_amount), 0.0)
@@ -1087,9 +1093,21 @@ async def build_transaction_context(payload: ContextRequest, request: Request):
 @app.post("/predict-qr")
 async def predict_qr_fraud(payload: QRTransferRequest, request: Request):
     qr_integrity = evaluate_qr_integrity(payload.qr)
+    
+    # 1. Real-time PDRM Scam Database Check
+    recipient_account = qr_integrity.get("recipient_account") or qr_integrity.get("merchant_id")
+    pdrm_scam_match = False
+    pdrm_warning = None
+    
+    if recipient_account:
+        pdrm_result = await pdrm_service.check_account(recipient_account)
+        if pdrm_result.get("found_in_database"):
+            pdrm_scam_match = True
+            pdrm_warning = pdrm_result.get("message")
+
     context_data = build_context_data(
         sender_account=payload.sender_account,
-        recipient_account=qr_integrity["recipient_account"] or qr_integrity["merchant_id"],
+        recipient_account=recipient_account or "",
         amount=payload.qr.amount,
         device_id=payload.device_id,
         ip_profile=payload.ip_profile,
@@ -1104,6 +1122,13 @@ async def predict_qr_fraud(payload: QRTransferRequest, request: Request):
     recommendation = base_result["recommendation"]
 
     adjustments = base_result.get("score_breakdown", {}).get("adjustments", [])
+
+    if pdrm_scam_match:
+        adjustments.append({"factor": "pdrm_scam_database_match", "delta": 0.65})
+        risk_score = max(risk_score + 0.65, 0.95)
+        status = "BLOCKED"
+        reason_code = "Critical: Recipient account found in PDRM scam database."
+        recommendation = "Stop immediately. This account is officially flagged for fraud by PDRM."
 
     if not qr_integrity["is_verified_merchant"]:
         adjustments.append({"factor": "qr_unverified_merchant", "delta": 0.1})
@@ -1206,7 +1231,7 @@ async def predict_qr_fraud(payload: QRTransferRequest, request: Request):
 
 @app.post("/scan-qr-threat")
 async def scan_qr_threat(payload: QRThreatScanRequest):
-    return evaluate_generic_qr_threat(
+    return await evaluate_generic_qr_threat(
         raw_qr=payload.raw_qr,
         device_id=payload.device_id,
         ip_profile=payload.ip_profile,
@@ -1440,7 +1465,7 @@ async def predict_fraud(txn: Transaction, allow_guardian_approval: bool = True):
     guardian_approval = None
     requires_user_verification = status == "FLAGGED"
     guardian_trigger_threshold = GUARDIAN_APPROVAL_RISK_THRESHOLD
-    # Demo safety policy: flagged transfers with risky IP and high amount should
+    # Safety policy: flagged transfers with risky IP and high amount should
     # consistently require guardian approval after identity verification.
     if status == "FLAGGED" and high_ip_risk and high_amount:
         guardian_trigger_threshold = min(guardian_trigger_threshold, 0.35)
@@ -2856,4 +2881,4 @@ async def validate_recipient(request: ValidateRecipientRequest):
 
 @app.get("/api/pdrm/health")
 async def pdrm_health():
-    return {"status": "operational", "mode": "demo" if pdrm_service.demo_mode else "live"}
+    return {"status": "operational", "mode": "live"}
