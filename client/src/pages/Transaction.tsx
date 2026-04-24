@@ -53,6 +53,25 @@ function formatCallSignalLabel(signal: string) {
   return labelMap[signal] ?? signal.replace(/^[\[]|[\]]$/g, '').replace(/_/g, ' ');
 }
 
+function buildCallSafetyAlertMessage(signals: string[], aiVoiceSuspected: boolean, combinedRisk: number) {
+  const hasOtpSignal = signals.includes('[BANKING_DETAIL_REQUEST]');
+  const hasAIVoiceSignal = aiVoiceSuspected || signals.includes('[AI_VOICE_SUSPECTED]');
+
+  if (hasAIVoiceSignal && !hasOtpSignal) {
+    return 'Risk Alert: Possible AI voice impersonation detected. End this call and verify through an official number.';
+  }
+
+  if (hasOtpSignal) {
+    return 'Risk Alert: Caller is requesting OTP/password details. Do not share any banking credentials.';
+  }
+
+  if (combinedRisk >= 0.7) {
+    return 'Risk Alert: High probability of financial impersonation. End the call and verify identity before taking action.';
+  }
+
+  return 'Risk Alert: Suspicious call behavior detected. Verify identity before proceeding with any payment.';
+}
+
 const MALAYSIA_BANKS = [
   'Maybank',
   'CIMB Bank',
@@ -384,6 +403,22 @@ function cleanQrRecipientName(raw?: string): string | undefined {
     cleaned = cleaned.slice(0, -2);
   }
 
+  const normalized = cleaned.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const genericWalletLabels = [
+    'touchngoewallet',
+    'touchngo',
+    'ngoewallet',
+    'tng',
+    'duitnow',
+    'ewallet',
+    'moneypacket',
+    'moneypacket',
+    'scanandpay',
+  ];
+  if (genericWalletLabels.some((label) => normalized.includes(label))) {
+    return undefined;
+  }
+
   return cleaned || undefined;
 }
 
@@ -456,7 +491,11 @@ function parseQrPayload(raw: string): QrPayload | null {
   try {
     const parsed = JSON.parse(text);
     if (parsed && typeof parsed === 'object') {
-      return parsed as QrPayload;
+      const candidate = parsed as QrPayload;
+      return {
+        ...candidate,
+        account_name: cleanQrRecipientName(candidate.account_name),
+      } as QrPayload;
     }
   } catch {
     // Fallback to URL-style parsing below.
@@ -467,7 +506,7 @@ function parseQrPayload(raw: string): QrPayload | null {
     const amount = Number(url.searchParams.get('amount') || 0);
     return {
       merchant_id: url.searchParams.get('merchant_id') || undefined,
-      account_name: url.searchParams.get('account_name') || undefined,
+      account_name: cleanQrRecipientName(url.searchParams.get('account_name') || undefined),
       provider: url.searchParams.get('provider') || undefined,
       amount: Number.isFinite(amount) && amount > 0 ? amount : undefined,
       currency: url.searchParams.get('currency') || undefined,
@@ -502,7 +541,7 @@ function normalizeCandidateName(raw?: string): string | undefined {
   if (!cleaned) return undefined;
   if (cleaned.length < 3 || cleaned.length > 90) return undefined;
   if (/^\d+$/.test(cleaned)) return undefined;
-  return cleaned;
+  return cleanQrRecipientName(cleaned);
 }
 
 function stripRecipientTailNoise(raw: string): string {
@@ -867,7 +906,7 @@ export default function Transaction() {
 
       setIsCallConsentOpen(false);
       setIsCallConsultOpen(true);
-      setIsListeningCall(true);
+      setIsListeningCall(false);
       setCallError(null);
     };
 
@@ -1130,8 +1169,8 @@ export default function Transaction() {
       ...browserAssessment.reasons,
       ...serverAssessment.reasons,
     ])).slice(0, 5);
-    const suspected = browserAssessment.suspected || serverAssessment.suspected || score >= 0.45;
-    const confidence: 'low' | 'medium' | 'high' = score >= 0.72 ? 'high' : score >= 0.45 ? 'medium' : 'low';
+    const suspected = browserAssessment.suspected || serverAssessment.suspected || score >= 0.35;
+    const confidence: 'low' | 'medium' | 'high' = score >= 0.68 ? 'high' : score >= 0.35 ? 'medium' : 'low';
 
     return {
       suspected,
@@ -1230,7 +1269,7 @@ export default function Transaction() {
 
   const sampleAndScoreCallAudio = async (stream: MediaStream, sessionId: number) => {
     try {
-      setCallVoiceAuditMessage('Running server-side librosa analysis on a short call sample...');
+      setCallVoiceAuditMessage('Checking a short live voice sample...');
       const wavBlob = await recordCallSample(stream);
       if (!wavBlob || callVoiceAuditSessionRef.current !== sessionId) {
         return;
@@ -1262,12 +1301,28 @@ export default function Transaction() {
 
       callBackendVoiceAssessmentRef.current = backendAssessment;
       setCallBackendVoiceAssessment(backendAssessment);
-      setCallVoiceAuditMessage('Server-side voice analysis completed.');
+      setCallVoiceAuditMessage('Voice safety check completed.');
       const browserAssessment = evaluateAIVoiceSuspicion();
-      setAiVoiceAssessment(mergeVoiceAssessments(browserAssessment, backendAssessment));
+      const mergedAssessment = mergeVoiceAssessments(browserAssessment, backendAssessment);
+      setAiVoiceAssessment(mergedAssessment);
+
+      if (mergedAssessment.suspected) {
+        const voiceOnlyRisk = clamp01(Math.max(0.38, mergedAssessment.score * 0.9));
+        const voiceAlertMessage = buildCallSafetyAlertMessage(['[AI_VOICE_SUSPECTED]'], true, voiceOnlyRisk);
+        setCallRiskScore((prev) => Math.max(prev, voiceOnlyRisk));
+        setCallSignals((prev) => Array.from(new Set([...prev, '[AI_VOICE_SUSPECTED]'])));
+        setCallVerdict(voiceAlertMessage);
+        if (!hasPlayedCallAlertRef.current) {
+          hasPlayedCallAlertRef.current = true;
+          spokenCallVerdictRef.current = voiceAlertMessage;
+          speakCallScamWarning(voiceAlertMessage);
+        }
+      } else {
+        setCallVerdict((prev) => (prev === 'Listening...' ? 'Voice sample analyzed. No strong AI-voice markers yet.' : prev));
+      }
     } catch {
       if (callVoiceAuditSessionRef.current === sessionId) {
-        setCallVoiceAuditMessage('Server voice analysis unavailable. Using local heuristics only.');
+        setCallVoiceAuditMessage('Voice check service is temporarily unavailable. Using on-device safety check.');
       }
     }
   };
@@ -1406,7 +1461,7 @@ export default function Transaction() {
     const flatnessHistory = callFlatnessHistoryRef.current;
 
     const sampleCount = Math.min(highRatios.length, centroidHistory.length, energyHistory.length, flatnessHistory.length);
-    if (sampleCount < 12) {
+    if (sampleCount < 8) {
       return {
         suspected: false,
         score: 0,
@@ -1423,29 +1478,29 @@ export default function Transaction() {
     const reasons: string[] = [];
     let score = 0;
 
-    if (avgHighRatio > 0.42) {
+    if (avgHighRatio > 0.35) {
       score += 0.24;
       reasons.push('High-frequency spectral artifacts detected.');
     }
 
-    if (avgFlatness > 0.58) {
+    if (avgFlatness > 0.5) {
       score += 0.22;
       reasons.push('Upper-band texture appears overly synthetic.');
     }
 
-    if (centroidVariance < 32) {
+    if (centroidVariance < 40) {
       score += 0.2;
       reasons.push('Pitch contour is unusually stable for natural speech prosody.');
     }
 
-    if (energyVariance < 0.012) {
+    if (energyVariance < 0.016) {
       score += 0.18;
       reasons.push('Rhythm/energy variation is too uniform for spontaneous human speech.');
     }
 
     score = clamp01(score);
-    const suspected = score >= 0.45;
-    const confidence: 'low' | 'medium' | 'high' = score >= 0.72 ? 'high' : score >= 0.45 ? 'medium' : 'low';
+    const suspected = score >= 0.35;
+    const confidence: 'low' | 'medium' | 'high' = score >= 0.68 ? 'high' : score >= 0.35 ? 'medium' : 'low';
 
     return {
       suspected,
@@ -1472,10 +1527,7 @@ export default function Transaction() {
 
   const startCallConsultation = () => {
     const speechApi = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!speechApi) {
-      setCallError('Live listening is not supported in this browser. Please use Chrome or Edge.');
-      return;
-    }
+    const canTranscribe = Boolean(speechApi);
 
     setCallError(null);
     setCallRiskScore(0.06);
@@ -1494,59 +1546,66 @@ export default function Transaction() {
     callVoiceAuditSessionRef.current += 1;
     const sessionId = callVoiceAuditSessionRef.current;
 
-    const recognition = new speechApi();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-MY';
+    if (canTranscribe) {
+      const recognition = new speechApi();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-MY';
 
-    recognition.onresult = (event: any) => {
-      let transcriptText = '';
-      for (let i = 0; i < event.results.length; i += 1) {
-        transcriptText += `${event.results[i][0].transcript} `;
-      }
+      recognition.onresult = (event: any) => {
+        let transcriptText = '';
+        for (let i = 0; i < event.results.length; i += 1) {
+          transcriptText += `${event.results[i][0].transcript} `;
+        }
 
-      const cleaned = transcriptText.trim();
-      const { risk, matched } = evaluateCallRisk(cleaned);
-      const aiAssessment = mergeVoiceAssessments(evaluateAIVoiceSuspicion(), callBackendVoiceAssessmentRef.current);
-      setAiVoiceAssessment(aiAssessment);
+        const cleaned = transcriptText.trim();
+        const { risk, matched } = evaluateCallRisk(cleaned);
+        const aiAssessment = mergeVoiceAssessments(evaluateAIVoiceSuspicion(), callBackendVoiceAssessmentRef.current);
+        setAiVoiceAssessment(aiAssessment);
 
-      const combinedRisk = clamp01(
-        risk + (aiAssessment.suspected ? Math.max(0.18, aiAssessment.score * 0.36) : aiAssessment.score * 0.14),
-      );
-      const riskAlertMessage = combinedRisk >= 0.7 || aiAssessment.suspected
-        ? 'Risk Alert: High probability of financial impersonation. Do not share your bank details or OTP.'
-        : 'Risk Alert: Suspicious patterns detected. Do not share your bank details or OTP.';
+        const combinedRisk = clamp01(
+          risk + (aiAssessment.suspected ? Math.max(0.18, aiAssessment.score * 0.36) : aiAssessment.score * 0.14),
+        );
 
-      const mergedSignals = Array.from(new Set([
-        ...matched,
-        ...(aiAssessment.suspected ? ['[AI_VOICE_SUSPECTED]'] : []),
-      ]));
+        const mergedSignals = Array.from(new Set([
+          ...matched,
+          ...(aiAssessment.suspected ? ['[AI_VOICE_SUSPECTED]'] : []),
+        ]));
+        const riskAlertMessage = buildCallSafetyAlertMessage(mergedSignals, aiAssessment.suspected, combinedRisk);
 
-      setCallRiskScore(combinedRisk);
-      setCallSignals(mergedSignals);
+        setCallRiskScore(combinedRisk);
+        setCallSignals(mergedSignals);
 
-      if (combinedRisk >= 0.35) {
-        setCallVerdict(combinedRisk >= 0.7 || aiAssessment.suspected
-          ? riskAlertMessage
-          : 'Suspicious patterns detected.');
-      } else {
-        setCallVerdict('No strong scam signs yet.');
-      }
-    };
+        if (combinedRisk >= 0.35) {
+          setCallVerdict(riskAlertMessage);
+          if (!hasPlayedCallAlertRef.current) {
+            hasPlayedCallAlertRef.current = true;
+            spokenCallVerdictRef.current = riskAlertMessage;
+            speakCallScamWarning(riskAlertMessage);
+          }
+        } else {
+          setCallVerdict('No strong scam signs yet.');
+        }
+      };
 
-    recognition.onerror = () => {
-      setCallError('Listening error occurred. You can stop and start again.');
-      stopCallAudioSampling();
-      setIsListeningCall(false);
-    };
+      recognition.onerror = () => {
+        setCallError('Listening error occurred. You can stop and start again.');
+        stopCallAudioSampling();
+        setIsListeningCall(false);
+      };
 
-    recognition.onend = () => {
-      stopCallAudioSampling();
-      setIsListeningCall(false);
-    };
+      recognition.onend = () => {
+        stopCallAudioSampling();
+        setIsListeningCall(false);
+      };
 
-    recognition.start();
-    callRecognitionRef.current = recognition;
+      recognition.start();
+      callRecognitionRef.current = recognition;
+    } else {
+      setCallError('Speech transcription is unavailable in this browser. Running AI voice detection only.');
+      callRecognitionRef.current = null;
+    }
+
     setIsListeningCall(true);
 
     void startCallAudioSampling().then((stream) => {
@@ -1685,6 +1744,15 @@ export default function Transaction() {
     else setModalState('blocked');
   };
 
+  const isReportOnlyScamCase = Boolean(
+    fraudResult?.status === 'FLAGGED'
+    && fraudResult?.qr_integrity
+    && (
+      (fraudResult.qr_integrity.warnings?.length ?? 0) > 0
+      || /scam|suspicious|danger|red alert|unknown qr/i.test(fraudResult.reason_code || '')
+    ),
+  );
+
   const scanQrThreat = async (decodedText: string, extracted?: OcrExtractionResult) => {
     const response = await fetch(`${FRAUD_API_BASE_URL}/scan-qr-threat`, {
       method: 'POST',
@@ -1716,12 +1784,24 @@ export default function Transaction() {
 
   const handleDecodedQrText = async (decodedText: string) => {
     setLastQrPreview(decodedText.slice(0, 120));
-    const threatResult = await scanQrThreat(decodedText);
-
     const parsed = parseQrPayload(decodedText);
+    const parsedExtracted: OcrExtractionResult | undefined = parsed
+      ? {
+        accountNumber: parsed.merchant_id || undefined,
+        recipientName: parsed.account_name || undefined,
+        amount: parsed.amount,
+        currency: parsed.currency,
+      }
+      : undefined;
+
+    const threatResult = await scanQrThreat(decodedText, parsedExtracted);
+
     if (parsed && (parsed.merchant_id || parsed.account_name)) {
       setScannedQrPayload(parsed);
-      setRecipientAccount(parsed.merchant_id || parsed.account_name || '');
+      const accountFromQr = normalizeLikelyAccountNumber(parsed.merchant_id || '');
+      if (accountFromQr) {
+        setRecipientAccount(accountFromQr);
+      }
       setRecipientName(parsed.account_name || recipientName);
       if (typeof parsed.amount === 'number' && parsed.amount > 0) {
         setAmount(String(parsed.amount));
@@ -1819,8 +1899,8 @@ export default function Transaction() {
           applyExtractedTransferData(extracted);
           setOcrSummary('Details extracted from camera. Please verify.');
           
-          // Run risk check on the extracted text
-          const threatResult = await scanQrThreat(extractedText, extracted);
+          // OCR mode should not be treated as raw QR payload.
+          const threatResult = await scanQrThreat('OCR_ONLY_MODE', extracted);
           if (threatResult.status === 'APPROVED') {
             setFraudResult(threatResult);
             closeQrScanner();
@@ -1903,6 +1983,7 @@ export default function Transaction() {
     setOcrSummary('Processing document for risk and details...');
     setIsOcrProcessing(true);
     let decodedText = '';
+    let qrDecodedFromImage = false;
     let extractedDetails: OcrExtractionResult | undefined;
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
@@ -1911,6 +1992,7 @@ export default function Transaction() {
       try {
         const html5Qr = new Html5Qrcode(scannerRegionId);
         decodedText = await html5Qr.scanFile(file, true);
+        qrDecodedFromImage = true;
 
         // If QR decode succeeded, try to parse its specific financial fields
         const parsed = parseQrPayload(decodedText);
@@ -1940,7 +2022,7 @@ export default function Transaction() {
     }
 
     // Step 2: Extract Details via OCR (if not already found by QR/PDF text)
-    if (!extractedDetails || (!extractedDetails.accountNumber && !extractedDetails.recipientName && !extractedDetails.amount)) {
+    if ((!qrDecodedFromImage || isPdf) && (!extractedDetails || (!extractedDetails.accountNumber && !extractedDetails.recipientName && !extractedDetails.amount))) {
       try {
         const processedCanvas = isPdf
           ? await renderFirstPdfPageToCanvas(file)
@@ -2202,7 +2284,7 @@ export default function Transaction() {
                 {qrScanStatus.tone === 'safe' ? <CheckCircle size={20} className="mt-0.5" /> : qrScanStatus.tone === 'danger' ? <ShieldAlert size={20} className="mt-0.5" /> : <AlertTriangle size={20} className="mt-0.5" />}
                 <div className="flex flex-col gap-1">
                   <p className="text-sm font-extrabold tracking-[0.02em]">
-                    {qrScanStatus.tone === 'safe' ? 'Recipient Verified via MCMC Database' : qrScanStatus.tone === 'danger' ? 'Scam Risk Alert' : 'Manual Verification Required'}
+                    {qrScanStatus.tone === 'safe' ? 'Low Risk Scan Result' : qrScanStatus.tone === 'danger' ? 'Scam Risk Alert' : 'Manual Verification Required'}
                   </p>
                   <p className="text-sm font-semibold">{qrScanStatus.message}</p>
                 </div>
@@ -2662,7 +2744,9 @@ export default function Transaction() {
               {(() => {
                 const status = statusConfig.find((cfg) => callRiskScore >= cfg.min && callRiskScore < cfg.max) || statusConfig[0];
                 const isAlertState = callRiskScore >= 0.35 || callSignals.length > 0;
-                const statusText = isAlertState ? 'Suspicious patterns detected.' : status.text;
+                const statusText = isAlertState
+                  ? buildCallSafetyAlertMessage(callSignals, aiVoiceAssessment.suspected, callRiskScore)
+                  : status.text;
                 const statusColor = isAlertState ? '#C2410C' : status.bg;
                 const statusDot = isAlertState ? '#EF4444' : status.bg;
                 const statusBg = isAlertState ? '#FFF7ED' : '#ECFDF3';
@@ -2673,10 +2757,8 @@ export default function Transaction() {
                     <div className="flex items-center gap-3">
                       <span
                         style={{ background: statusDot }}
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-full text-white text-lg font-bold shadow-sm"
-                      >
-                        {status.emoji}
-                      </span>
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-full shadow-sm"
+                      />
                       <div>
                         <span className="text-[#111827] font-bold text-base">Live Scam Detection</span>
                       </div>
@@ -2714,13 +2796,6 @@ export default function Transaction() {
                     </span>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {(callSignals.length > 0 || callRiskScore >= 0.35) && (
-              <div className="rounded-xl border border-[#FF3B3030] bg-[#FFF7F7] p-4 shadow-sm">
-                <p className="text-xs uppercase tracking-[0.14em] text-[#B91C1C]">Safety Alert</p>
-                <p className="mt-2 text-sm font-semibold text-[#7F1D1D]">Risk Alert: High probability of financial impersonation. Do not share your bank details or OTP.</p>
               </div>
             )}
 
@@ -2930,6 +3005,23 @@ export default function Transaction() {
           {/* 4. Verification Required */}
           {modalState === 'verification' && (
             <div className="w-[400px] bg-[#FFFFFF] dark:bg-[#1A1A1A] border border-[#FF9F0A40] rounded-3xl p-8 flex flex-col items-center gap-6">
+              {autoReportState.status === 'sent' ? (
+                <div className="w-full rounded-2xl border border-[#32D74B40] bg-[#32D74B15] p-5 flex flex-col items-center gap-3 text-center">
+                  <p className="text-sm font-bold text-[#32D74B]">CASE REPORTED</p>
+                  <p className="text-xs text-[#B4D9C3]">Reported to MCMC Malaysia & Google Safe Browsing</p>
+                  {autoReportState.externalReportId && (
+                    <p className="text-xs font-semibold text-[#B4D9C3]">Report ID: {autoReportState.externalReportId}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={dismissReportedCase}
+                    className="mt-1 inline-flex items-center justify-center rounded-lg border border-[#32D74B55] bg-[#32D74B18] px-4 py-2 text-xs font-semibold text-[#B4D9C3] hover:bg-[#32D74B25]"
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <>
               <h2 className="text-[#111827] dark:text-white text-[22px] font-bold font-['Sora'] text-center leading-tight">Status: Verification Required</h2>
               <div className="bg-[#FF9F0A15] px-4 py-2 rounded-full">
                 <span className="text-[#FF9F0A] font-semibold text-sm">Safety Level: {formatPercent(fraudResult?.risk_score)} (Careful)</span>
@@ -2942,58 +3034,37 @@ export default function Transaction() {
                 <p className="text-sm text-[#CDA77A] leading-6">
                   {t('tx.autoReport.descVerify')}
                 </p>
-                {autoReportState.status !== 'sent' && (
-                  <button
-                    type="button"
-                    onClick={() => void submitAutoReport()}
-                    disabled={autoReportState.status === 'sending'}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FF5500] px-3 py-2.5 text-xs font-semibold text-white hover:bg-[#E04B00] disabled:opacity-60"
-                  >
-                    <Globe size={14} />
-                    <Send size={14} />
-                    {autoReportState.status === 'sending' ? t('tx.autoReport.submitting') : t('tx.autoReport.button')}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => void submitAutoReport()}
+                  disabled={autoReportState.status === 'sending'}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FF5500] px-3 py-2.5 text-xs font-semibold text-white hover:bg-[#E04B00] disabled:opacity-60"
+                >
+                  <Globe size={14} />
+                  <Send size={14} />
+                  {autoReportState.status === 'sending' ? t('tx.autoReport.submitting') : t('tx.autoReport.button')}
+                </button>
                 {autoReportState.status !== 'idle' && (
                   <div className="text-sm text-[#D9E6F4] leading-7">
-                    {autoReportState.status === 'sent' ? (
-                      <div className="text-[#D7FFE1] space-y-2">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle size={16} className="text-[#32D74B]" />
-                          <p className="text-sm font-bold">{t('tx.autoReport.caseReported')}</p>
-                        </div>
-                        <p className="mt-2">{t('tx.autoReport.successLine1')}</p>
-                        <p className="mt-2">{t('tx.autoReport.reportedTo')}</p>
-                        <ul className="mt-2 space-y-1 list-disc list-inside">
-                          <li>Google Safe Browsing</li>
-                          <li>MCMC Malaysia</li>
-                        </ul>
-                        <p className="mt-2">{t('tx.autoReport.thankYou')}</p>
-                        {autoReportState.externalReportId && (
-                          <p className="mt-2 font-semibold">Report ID: {autoReportState.externalReportId}</p>
-                        )}
-                        <button
-                          type="button"
-                          onClick={dismissReportedCase}
-                          className="mt-3 inline-flex items-center justify-center rounded-lg border border-[#32D74B55] bg-[#32D74B18] px-3 py-2 text-xs font-semibold text-[#D7FFE1] hover:bg-[#32D74B25]"
-                        >
-                          {t('tx.autoReport.close')}
-                        </button>
-                      </div>
-                    ) : (
-                      <p>{autoReportState.message}</p>
+                    {autoReportState.externalReportId && (
+                      <p className="mb-2 font-semibold text-[#FFE7CC]">Report ID: {autoReportState.externalReportId}</p>
                     )}
+                    <p>{autoReportState.message}</p>
                   </div>
                 )}
               </div>
-              <button
-                onClick={() => {
-                  setModalState('face-id');
-                }}
-                className="w-full bg-[#FF9F0A] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E68F09]"
-              >
-                Verify Identity
-              </button>
+              {!isReportOnlyScamCase && (
+                <button
+                  onClick={() => {
+                    setModalState('face-id');
+                  }}
+                  className="w-full bg-[#FF9F0A] text-[#111111] rounded-lg py-4 font-semibold text-[15px] cursor-pointer hover:bg-[#E68F09]"
+                >
+                  Verify Identity
+                </button>
+              )}
+                </>
+              )}
             </div>
           )}
 
@@ -3077,15 +3148,6 @@ export default function Transaction() {
                 </>
               ) : null}
 
-              {/* Simplified Auto-Report Pipeline */}
-              <button
-                type="button"
-                onClick={markBlockedScamForAdminDemo}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-[#FF3B3040] bg-[#FF3B3010] px-4 py-3 text-sm font-bold text-[#FF3B30] hover:bg-[#FF3B301A] transition-colors"
-              >
-                Cancel Transfer
-              </button>
-
               {autoReportState.status === 'idle' && (
                 <button
                   type="button"
@@ -3109,9 +3171,6 @@ export default function Transaction() {
                     <p className="text-sm font-bold text-[#32D74B]">{t('tx.autoReport.caseReported')}</p>
                   </div>
                   <p className="text-xs text-[#32D74B] mb-1">Reported to MCMC Malaysia & Google Safe Browsing</p>
-                  {autoReportState.externalReportId && (
-                    <p className="text-xs text-[#32D74B] opacity-80">ID: {autoReportState.externalReportId}</p>
-                  )}
                   <button
                     type="button"
                     onClick={dismissReportedCase}
@@ -3125,6 +3184,10 @@ export default function Transaction() {
                 <div className="w-full rounded-lg bg-[#FF3B3010] border border-[#FF3B3040] px-4 py-3">
                   <p className="text-sm text-[#FF3B30] font-semibold">{autoReportState.message}</p>
                 </div>
+              )}
+
+              {autoReportState.status !== 'idle' && autoReportState.externalReportId && (
+                <p className="w-full text-center text-xs font-semibold text-[#FFD2CE]">Report ID: {autoReportState.externalReportId}</p>
               )}
             </div>
           )}

@@ -406,13 +406,13 @@ def _encode_voice_response(
     high_band_energy: float,
 ) -> dict:
     confidence = "low"
-    if score >= 0.72:
+    if score >= 0.68:
         confidence = "high"
-    elif score >= 0.45:
+    elif score >= 0.35:
         confidence = "medium"
 
     return VoiceAuthenticityResponse(
-        suspected=score >= 0.45,
+        suspected=score >= 0.35,
         score=round(float(min(max(score, 0.0), 0.999)), 4),
         confidence=confidence,
         reasons=reasons,
@@ -431,7 +431,13 @@ def check_voice_authenticity(audio_file: UploadFile) -> dict:
         raise ValueError("No audio data received.")
 
     audio_stream = BytesIO(content)
-    y, sr = librosa.load(audio_stream, sr=22050, mono=True)
+    # Force a consistent model input rate so browser/device capture differences do not skew features.
+    y, sr = librosa.load(audio_stream, sr=16000, mono=True)
+    if y.size:
+        peak = float(np.max(np.abs(y)))
+        if peak > 0:
+            y = y / peak
+
     if y.size < sr // 2:
         raise ValueError("Audio sample is too short for authenticity analysis.")
 
@@ -468,40 +474,40 @@ def check_voice_authenticity(audio_file: UploadFile) -> dict:
     reasons: list[str] = []
 
     # Aggressive, explainable logic for hackathon demo
-    if artifact_ratio >= 0.28:
+    if artifact_ratio >= 0.24:
         score += 0.28
         reasons.append("High-frequency spectral artifacts detected in the 4-8kHz band (AI TTS artifact).")
-    elif artifact_ratio >= 0.18:
+    elif artifact_ratio >= 0.14:
         score += 0.16
         reasons.append("Elevated upper-band energy can indicate TTS compression artifacts.")
 
-    if mfcc_variability <= 7.5:
-        score += 0.26
+    if mfcc_variability <= 8.8:
+        score += 0.24
         reasons.append("MFCC texture is overly uniform (AI voice lacks natural timbre variation).")
-    elif mfcc_variability <= 10.5:
+    elif mfcc_variability <= 11.8:
         score += 0.14
         reasons.append("MFCC contour is flatter than expected for spontaneous human voice.")
 
     # Pitch smoothness (low std means too stable)
-    if pitch_smoothness <= 1.8:
-        score += 0.18
+    if pitch_smoothness <= 2.4:
+        score += 0.16
         reasons.append("Pitch contour is unusually smooth and lacks human jitter (AI prosody).")
-    elif pitch_smoothness <= 4.5:
-        score += 0.09
+    elif pitch_smoothness <= 5.2:
+        score += 0.10
         reasons.append("Pitch variation is lower than expected for natural prosody.")
 
     # Pitch jitter (mean abs diff): if near zero, flag as AI
-    if pitch_jitter < 0.1:
-        score += 0.32
+    if pitch_jitter < 0.14:
+        score += 0.28
         reasons.append("Unnatural pitch stability detected (robotic monotone, low jitter).")
 
     # Spectral centroid variance: if too low, flag as AI
-    if cent_std < 100:
-        score += 0.28
+    if cent_std < 130:
+        score += 0.24
         reasons.append("Synthetic spectral consistency detected (low brightness variance).")
 
-    if speech_band_energy > 0 and high_band_energy / max(speech_band_energy, 1e-6) > 0.35:
-        score += 0.16
+    if speech_band_energy > 0 and high_band_energy / max(speech_band_energy, 1e-6) > 0.28:
+        score += 0.14
         reasons.append("Upper-band energy is high relative to the speech band.")
 
     if not reasons:
@@ -841,7 +847,9 @@ async def evaluate_generic_qr_threat(
         if warning:
             warnings.append(warning)
 
-    if compact.startswith("0002"):
+    if text == "OCR_ONLY_MODE":
+        qr_type = "document_text"
+    elif compact.startswith("0002"):
         qr_type = "emv_payment"
     elif text.startswith("{") and text.endswith("}"):
         qr_type = "json"
@@ -910,6 +918,8 @@ async def evaluate_generic_qr_threat(
         add(0.04, "emv_payment_qr", "EMV payment QR detected.")
     elif qr_type == "json":
         add(0.06, "json_qr", "Custom structured QR detected.")
+    elif qr_type == "document_text":
+        add(0.03, "document_ocr_scan", "Scanned payment details from document text.")
     else:
         add(0.15, "unknown_qr_type", "Unknown QR format; verify before proceeding.")
 
@@ -921,9 +931,37 @@ async def evaluate_generic_qr_threat(
         add(0.15, "high_risk_ip", "Network looks risky right now.")
 
     extracted_name_norm = (extracted_recipient_name or "").strip().upper()
+    extracted_name_compact = "".join(ch for ch in extracted_name_norm if ch.isalnum())
+    generic_wallet_name_tokens = (
+        "TOUCHNGO",
+        "NGOEWALLET",
+        "TNG",
+        "EWALLET",
+        "DUITNOW",
+        "MONEYPACKET",
+        "SCANANDPAY",
+    )
+    is_generic_wallet_name = bool(extracted_name_compact) and any(
+        token in extracted_name_compact for token in generic_wallet_name_tokens
+    )
+
     # For account number: extract digits, but only return if it looks like a valid account (8+ digits)
     extracted_account_digits = "".join(ch for ch in (extracted_account_number or "") if ch.isdigit())
     extracted_account_norm = extracted_account_digits if len(extracted_account_digits) >= 8 else ""
+
+    if not extracted_account_norm and (not extracted_name_norm or is_generic_wallet_name):
+        add(
+            0.48,
+            "missing_payee_account_details",
+            "This scan does not expose a specific payee account. Verify recipient manually before payment.",
+        )
+
+    if is_generic_wallet_name:
+        add(
+            0.24,
+            "generic_wallet_brand_name",
+            "Recipient name looks like a wallet platform label, not a verified payee.",
+        )
 
     if extracted_name_norm and extracted_name_norm in KNOWN_SCAM_RECIPIENT_NAMES:
         add(0.55, "known_scam_recipient_name", "Recipient name matches known scam intelligence.")
@@ -966,6 +1004,13 @@ async def evaluate_generic_qr_threat(
         risk = max(risk, 0.95)
         reason_code = "Red alert: recipient matches known scam reports."
         recommendation = "Do not proceed. Verify recipient with official bank or trusted contact channels."
+
+    if is_generic_wallet_name and not extracted_account_norm:
+        status = "BLOCKED"
+        color = "red"
+        risk = max(risk, 0.9)
+        reason_code = "Danger: QR shows only wallet platform branding without a specific payee account."
+        recommendation = "Do not proceed until you confirm the exact recipient account with an official channel."
 
     pattern_match_percent = int(min(max(round(risk * 100), 1), 99))
 
