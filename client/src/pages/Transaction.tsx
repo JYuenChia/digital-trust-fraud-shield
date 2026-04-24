@@ -16,7 +16,7 @@ const statusConfig = [
     min: 0,
     max: 0.15,
     bg: '#10B981',
-    text: 'Human Voice Verified. Safe to talk.',
+    text: 'Voice verified. No scam detected.',
     label: 'Safe',
     emoji: '🟢',
   },
@@ -37,6 +37,20 @@ const statusConfig = [
     emoji: '🔴',
   },
 ];
+
+function formatCallSignalLabel(signal: string) {
+  const labelMap: Record<string, string> = {
+    '[AUTHORITY_CLAIM]': 'Authority Claim',
+    '[URGENCY_CUE]': 'Sense of Urgency',
+    '[FINANCIAL_ACTION]': '💰 Bank Account Request',
+    '[BANKING_DETAIL_REQUEST]': '🔑 OTP/Password Request',
+    '[ISOLATION_TACTIC]': 'Isolation Tactic',
+    '[THREAT_LANGUAGE]': 'Threat Language',
+    '[AI_VOICE_SUSPECTED]': 'AI Voice Suspected',
+  };
+
+  return labelMap[signal] ?? signal.replace(/^[\[]|[\]]$/g, '').replace(/_/g, ' ');
+}
 
 const MALAYSIA_BANKS = [
   'Maybank',
@@ -825,6 +839,7 @@ export default function Transaction() {
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const callRecognitionRef = useRef<any>(null);
   const hasPlayedCallAlertRef = useRef(false);
+  const spokenCallVerdictRef = useRef<string>('');
   const callAudioContextRef = useRef<AudioContext | null>(null);
   const callAnalyserRef = useRef<AnalyserNode | null>(null);
   const callAudioRafRef = useRef<number | null>(null);
@@ -1029,14 +1044,33 @@ export default function Transaction() {
     }
   };
 
-  const speakCallScamWarning = () => {
+  const speakCallScamWarning = (message: string) => {
     if (!('speechSynthesis' in window)) return;
-    const utterance = new SpeechSynthesisUtterance('Warning. This caller may be a scammer and is asking for your banking details.');
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(message);
     utterance.rate = 0.92;
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
+    const voice = window.speechSynthesis.getVoices().find((candidate) => /en/i.test(candidate.lang) || /female|zira|samantha|susan/i.test(candidate.name));
+    if (voice) {
+      utterance.voice = voice;
+    }
     window.speechSynthesis.speak(utterance);
   };
+
+  useEffect(() => {
+    if (!isListeningCall) {
+      spokenCallVerdictRef.current = '';
+      return;
+    }
+
+    const shouldSpeak = callVerdict.startsWith('Suspicious patterns detected') || callVerdict.startsWith('Risk Alert:');
+    if (!shouldSpeak) return;
+
+    if (spokenCallVerdictRef.current === callVerdict) return;
+    spokenCallVerdictRef.current = callVerdict;
+    speakCallScamWarning(callVerdict);
+  }, [callVerdict, isListeningCall]);
 
   const getCallRiskClass = (score: number) => {
     if (score >= 0.7) return 'bg-[#FF3B30]';
@@ -1477,6 +1511,9 @@ export default function Transaction() {
       const combinedRisk = clamp01(
         risk + (aiAssessment.suspected ? Math.max(0.18, aiAssessment.score * 0.36) : aiAssessment.score * 0.14),
       );
+      const riskAlertMessage = combinedRisk >= 0.7 || aiAssessment.suspected
+        ? 'Risk Alert: High probability of financial impersonation. Do not share your bank details or OTP.'
+        : 'Risk Alert: Suspicious patterns detected. Do not share your bank details or OTP.';
 
       const mergedSignals = Array.from(new Set([
         ...matched,
@@ -1486,16 +1523,10 @@ export default function Transaction() {
       setCallRiskScore(combinedRisk);
       setCallSignals(mergedSignals);
 
-      if (combinedRisk >= 0.7 || aiAssessment.suspected) {
-        setCallVerdict(aiAssessment.suspected
-          ? 'High risk detected. Suspected AI-generated voice on this call.'
-          : 'High risk detected. End the call now.');
-        if (!hasPlayedCallAlertRef.current) {
-          hasPlayedCallAlertRef.current = true;
-          speakCallScamWarning();
-        }
-      } else if (combinedRisk >= 0.35) {
-        setCallVerdict('Warning signs detected. Stay careful.');
+      if (combinedRisk >= 0.35) {
+        setCallVerdict(combinedRisk >= 0.7 || aiAssessment.suspected
+          ? riskAlertMessage
+          : 'Suspicious patterns detected.');
       } else {
         setCallVerdict('No strong scam signs yet.');
       }
@@ -1589,20 +1620,20 @@ export default function Transaction() {
     if (!qr) return null;
 
     return (
-      <div className="w-full rounded-lg border border-black/10 dark:border-white/10 bg-black/5 dark:bg-[#FFFFFF05] px-4 py-3 text-left">
-        <p className="text-xs uppercase tracking-[0.16em] text-[#6B7280] dark:text-[#8A8A8A]">QR Integrity Shield</p>
+      <div className="w-full rounded-lg border border-black/10 bg-[#F8FAFC] px-4 py-3 text-left">
+        <p className="text-xs uppercase tracking-[0.16em] text-[#6B7280]">QR Integrity Shield</p>
         <p className={`mt-1 text-sm font-semibold ${qr.is_verified_merchant ? 'text-[#32D74B]' : 'text-[#FF9F0A]'}`}>
           Merchant Verification: {qr.is_verified_merchant ? 'Verified' : 'Unverified'}
         </p>
         {qr.pattern_match_message && (
-          <p className="mt-2 text-xs text-slate-600 dark:text-[#C9D3DF]">
+          <p className="mt-2 text-xs text-slate-600">
             {qr.pattern_match_message}
           </p>
         )}
         {qr.warnings.length > 0 && (
           <div className="mt-2 flex flex-col gap-1">
             {qr.warnings.slice(0, 2).map((warning, index) => (
-              <p key={`${warning}-${index}`} className="text-xs text-[#D0D0D0]">
+              <p key={`${warning}-${index}`} className="text-xs text-[#6B7280]">
                 • {warning}
               </p>
             ))}
@@ -2116,12 +2147,12 @@ export default function Transaction() {
           />
 
           {qrScanStatus && (
-            <div className={`rounded-2xl px-5 py-5 ${
+            <div className={`rounded-2xl border px-5 py-5 ${
               qrScanStatus.tone === 'safe'
-                ? 'bg-[#19A75A] text-white'
+                ? 'border-[#1F9D55]/25 bg-[#ECFDF3] text-[#14532D]'
                 : qrScanStatus.tone === 'danger'
-                  ? 'bg-[#C62828] text-white'
-                  : 'bg-[#B56B00] text-white'
+                  ? 'border-[#DC2626]/25 bg-[#FEF2F2] text-[#7F1D1D]'
+                  : 'border-[#D97706]/25 bg-[#FFFBEB] text-[#7C2D12]'
             }`}>
               <div className="flex items-start gap-3">
                 {qrScanStatus.tone === 'safe' ? <CheckCircle size={20} className="mt-0.5" /> : qrScanStatus.tone === 'danger' ? <ShieldAlert size={20} className="mt-0.5" /> : <AlertTriangle size={20} className="mt-0.5" />}
@@ -2503,42 +2534,42 @@ export default function Transaction() {
 
       {isCallConsentOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-[560px] rounded-3xl border border-[#5DA8FF40] bg-[#121A28] p-6 md:p-8 flex flex-col gap-5">
+          <div className="w-full max-w-[560px] rounded-3xl border border-black/10 bg-[#FFFFFF] p-6 md:p-8 flex flex-col gap-5 shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className={`h-11 w-11 rounded-xl ${isListeningCall ? 'bg-[#5DA8FF33] animate-pulse' : 'bg-[#5DA8FF1A]'} flex items-center justify-center`}>
-                  <ShieldCheck size={20} className="text-[#8FC7FF]" />
+                <div className={`h-11 w-11 rounded-xl ${isListeningCall ? 'bg-[#5DA8FF20] animate-pulse' : 'bg-[#5DA8FF12]'} flex items-center justify-center`}>
+                  <ShieldCheck size={20} className="text-[#3B82F6]" />
                 </div>
                 <div>
-                  <h3 className="text-white text-xl font-bold font-['Sora']">Before We Start</h3>
-                  <p className="text-xs text-[#A9C1DA]">Your privacy comes first.</p>
+                  <h3 className="text-[#111827] text-xl font-bold font-['Sora']">Before We Start</h3>
+                  <p className="text-xs text-[#6B7280]">Your privacy comes first.</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsCallConsentOpen(false)}
-                className="h-9 w-9 rounded-lg border border-white/15 text-[#8A8A8A] hover:text-white"
+                className="h-9 w-9 rounded-lg border border-black/10 text-[#6B7280] hover:text-[#111827] hover:bg-black/5"
               >
                 <X size={17} className="mx-auto" />
               </button>
             </div>
 
-            <div className="rounded-xl border border-[#5DA8FF40] bg-[#0D1624] p-4">
-              <p className="text-sm font-semibold text-[#DDEEFF]">Call audio is not recorded.</p>
+            <div className="rounded-xl border border-[#5DA8FF30] bg-[#EFF6FF] p-4">
+              <p className="text-sm font-semibold text-[#111827]">Call audio is not recorded.</p>
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] font-semibold">
-                <div className="rounded-lg border border-[#5DA8FF33] bg-[#5DA8FF1A] px-3 py-2 text-[#CFE7FF]">No recording saved</div>
-                <div className="rounded-lg border border-[#5DA8FF33] bg-[#5DA8FF1A] px-3 py-2 text-[#CFE7FF]">Personal details hidden</div>
-                <div className="rounded-lg border border-[#5DA8FF33] bg-[#5DA8FF1A] px-3 py-2 text-[#CFE7FF]">End-to-end encrypted</div>
+                <div className="rounded-lg border border-black/10 bg-white px-3 py-2 text-[#1D4ED8] shadow-sm">No recording saved</div>
+                <div className="rounded-lg border border-black/10 bg-white px-3 py-2 text-[#1D4ED8] shadow-sm">Personal details hidden</div>
+                <div className="rounded-lg border border-black/10 bg-white px-3 py-2 text-[#1D4ED8] shadow-sm">End-to-end encrypted</div>
               </div>
             </div>
 
-            <p className="text-xs text-[#A7BDD3]">Do you consent to start live scam-check listening for this call?</p>
+            <p className="text-xs text-[#6B7280]">Do you consent to start live scam-check listening for this call?</p>
 
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
                 onClick={() => setIsCallConsentOpen(false)}
-                className="flex-1 rounded-lg border border-white/20 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10"
+                className="flex-1 rounded-lg border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-[#111827] hover:bg-black/5"
               >
                 Not Now
               </button>
@@ -2548,7 +2579,7 @@ export default function Transaction() {
                   setIsCallConsentOpen(false);
                   setIsCallConsultOpen(true);
                 }}
-                className="flex-1 rounded-lg bg-[#5DA8FF] px-4 py-2.5 text-sm font-semibold text-[#101418] hover:bg-[#4B97EA]"
+                className="flex-1 rounded-lg bg-[#5DA8FF] px-4 py-2.5 text-sm font-semibold text-[#101418] hover:bg-[#4B97EA] shadow-[0_12px_30px_rgba(93,168,255,0.25)]"
               >
                 I Consent, Continue
               </button>
@@ -2559,47 +2590,60 @@ export default function Transaction() {
 
       {isCallConsultOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-[760px] rounded-3xl border border-[#5DA8FF40] bg-[#131822] p-6 md:p-8 flex flex-col gap-5 relative">
+          <div className="w-full max-w-[760px] rounded-3xl border border-black/10 bg-[#FFFFFF] p-6 md:p-8 flex flex-col gap-5 relative shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className={`h-11 w-11 rounded-xl ${isListeningCall ? 'bg-[#5DA8FF33] animate-pulse' : 'bg-[#5DA8FF1A]'} flex items-center justify-center`}>
-                  <ShieldCheck size={20} className="text-[#8FC7FF]" />
+                <div className={`h-11 w-11 rounded-xl ${isListeningCall ? 'bg-[#5DA8FF20] animate-pulse' : 'bg-[#5DA8FF12]'} flex items-center justify-center`}>
+                  <ShieldCheck size={20} className="text-[#3B82F6]" />
                 </div>
                 <div>
-                  <h3 className="text-white text-xl font-bold font-['Sora']">Call Consultation</h3>
-                  <p className="text-xs text-[#9CB3CB]">Privacy-first call shield with instant scam warning.</p>
-                  <p className="mt-1 text-[11px] text-[#8FC7FF]">Consent given • audio not recorded</p>
+                  <h3 className="text-[#111827] text-xl font-bold font-['Sora']">Call Consultation</h3>
+                  <p className="text-xs text-[#6B7280]">Privacy-first call shield with instant scam warning.</p>
+                  <p className="mt-1 text-[11px] text-[#3B82F6]">Consent given • audio not recorded</p>
                 </div>
               </div>
-              <button type="button" onClick={() => setIsCallConsultOpen(false)} className="h-9 w-9 rounded-lg border border-white/15 text-[#8A8A8A] hover:text-white">
+              <button type="button" onClick={() => setIsCallConsultOpen(false)} className="h-9 w-9 rounded-lg border border-black/10 text-[#6B7280] hover:text-[#111827] hover:bg-black/5">
                 <X size={17} className="mx-auto" />
               </button>
             </div>
 
-            <div className="rounded-xl border border-[#0B3D91]/35 bg-[#0B3D91]/14 p-4 flex flex-col gap-2">
+            <div className="rounded-xl border border-[#5DA8FF30] bg-[#EFF6FF] p-4 flex flex-col gap-2">
               {(() => {
                 const status = statusConfig.find((cfg) => callRiskScore >= cfg.min && callRiskScore < cfg.max) || statusConfig[0];
+                const isAlertState = callRiskScore >= 0.35 || callSignals.length > 0;
+                const statusText = isAlertState ? 'Suspicious patterns detected.' : status.text;
+                const statusColor = isAlertState ? '#C2410C' : status.bg;
+                const statusDot = isAlertState ? '#EF4444' : status.bg;
+                const statusBg = isAlertState ? '#FFF7ED' : '#ECFDF3';
+                const statusBorder = isAlertState ? '#FDBA74' : '#86EFAC';
                 const liveRiskPercent = Math.round(callRiskScore * 100);
                 return (
                   <>
                     <div className="flex items-center gap-3">
-                      <span style={{ background: status.bg }} className="inline-flex items-center justify-center w-8 h-8 rounded-full text-white text-lg font-bold">
+                      <span
+                        style={{ background: statusDot }}
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-full text-white text-lg font-bold shadow-sm"
+                      >
                         {status.emoji}
                       </span>
                       <div>
-                        <span className="text-white font-bold text-base">Live Scam Detection</span>
-                        <span className="ml-2 text-xs text-[#D8E8FA]">Live scam-pattern scan</span>
+                        <span className="text-[#111827] font-bold text-base">Live Scam Detection</span>
                       </div>
                     </div>
-                    <div className="mt-2 text-sm font-semibold" style={{ color: status.bg }}>{status.text}</div>
+                    <div
+                      className="mt-1 rounded-lg border px-3 py-2 text-sm font-semibold"
+                      style={{ color: statusColor, background: statusBg, borderColor: statusBorder }}
+                    >
+                      {statusText}
+                    </div>
                     <div className="mt-2">
-                      <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                      <div className="h-2 overflow-hidden rounded-full bg-white">
                         <div
                           className="h-full rounded-full transition-all duration-200 ease-out"
-                          style={{ width: `${liveRiskPercent}%`, background: status.bg }}
+                          style={{ width: `${liveRiskPercent}%`, background: statusDot }}
                         />
                       </div>
-                      <div className="mt-2 flex items-center justify-between text-[11px] uppercase tracking-[0.14em] text-[#D8E8FA]">
+                      <div className="mt-2 flex items-center justify-between text-[11px] uppercase tracking-[0.14em] text-[#6B7280]">
                         <span>Live risk</span>
                         <span>{liveRiskPercent}%</span>
                       </div>
@@ -2609,62 +2653,46 @@ export default function Transaction() {
               })()}
             </div>
 
-            <div className={`rounded-xl border p-4 ${aiVoiceAssessment.suspected ? 'border-[#FF3B3055] bg-[#FF3B3016]' : 'border-[#32D74B55] bg-[#32D74B14]'}`}>
-              <div className="flex items-center gap-3">
-                <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${aiVoiceAssessment.suspected ? 'bg-[#FF3B3020]' : 'bg-[#32D74B20]'}`}>
-                  {aiVoiceAssessment.suspected ? <AlertTriangle size={16} className="text-[#FFB9B4]" /> : <span className="text-[18px] leading-none">🟢</span>}
-                </span>
-                <div className="flex flex-col">
-                  <p className="text-sm font-semibold text-white">Voice Authenticity</p>
-                  <span className={`text-xs font-bold uppercase tracking-[0.12em] ${aiVoiceAssessment.suspected ? 'text-[#FFB9B4]' : 'text-[#B9F8C6]'}`}>
-                    {aiVoiceAssessment.suspected ? 'Suspected AI Voice' : 'No AI Voice Pattern'}
-                  </span>
-                </div>
-              </div>
-              <p className="mt-3 text-xs text-[#C8DBEE]">
-                {aiVoiceAssessment.suspected
-                  ? 'This call is suspected to use synthetic or AI-generated voice characteristics.'
-                  : 'No strong synthetic voice fingerprints detected yet.'}
-              </p>
-            </div>
-
             {callSignals.length > 0 && (
-              <div className="rounded-xl border border-[#FFB37A44] bg-[#FFB37A12] p-3">
-                <p className="text-xs uppercase tracking-[0.14em] text-[#FFD5AF]">Possible Scam Signs</p>
+              <div className="rounded-xl border border-[#FDBA74]/40 bg-[#FFF7ED] p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-[#C2410C]">Possible Scam Signs</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {callSignals.map((signal) => (
-                    <span key={signal} className="rounded-full bg-[#FFFFFF18] px-2.5 py-1 text-[11px] text-[#FFE1C4]">{signal}</span>
+                    <span key={signal} className="rounded-full border border-[#FDBA74]/40 bg-[#FFFFFF] px-2.5 py-1 text-[11px] text-[#9A3412] shadow-sm">
+                      {formatCallSignalLabel(signal)}
+                    </span>
                   ))}
                 </div>
               </div>
             )}
 
             {(callSignals.length > 0 || callRiskScore >= 0.35) && (
-              <div className="rounded-xl border border-[#FF3B3055] bg-[#FF3B3014] p-3">
-                <p className="text-xs uppercase tracking-[0.14em] text-[#FFB8B3]">Safety Alert</p>
-                <p className="mt-2 text-sm font-semibold text-[#FFD8D4]">Warning. This caller may be a scammer and is asking for your banking details.</p>
+              <div className="rounded-xl border border-[#FF3B3030] bg-[#FFF7F7] p-4 shadow-sm">
+                <p className="text-xs uppercase tracking-[0.14em] text-[#B91C1C]">Safety Alert</p>
+                <p className="mt-2 text-sm font-semibold text-[#7F1D1D]">Risk Alert: High probability of financial impersonation. Do not share your bank details or OTP.</p>
               </div>
             )}
 
-            {callError && <p className="text-xs text-[#FFBCB7]">{callError}</p>}
+            {callError && <p className="text-xs text-[#B42318]">{callError}</p>}
 
             <div className="flex flex-wrap gap-3 items-center">
               <button
                 type="button"
                 onClick={() => (isListeningCall ? stopCallConsultation() : startCallConsultation())}
-                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold ${isListeningCall ? 'bg-[#FF3B30] text-white hover:bg-[#E6352B]' : 'bg-[#5DA8FF] text-[#101418] hover:bg-[#4B97EA]'}`}
+                className={`inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-base font-bold min-w-[240px] transition-all ${isListeningCall ? 'bg-[#FF3B30] text-white shadow-[0_16px_40px_rgba(255,59,48,0.35)] hover:bg-[#E6352B]' : 'bg-[#5DA8FF] text-[#101418] hover:bg-[#4B97EA] shadow-[0_16px_32px_rgba(93,168,255,0.24)]'}`}
               >
                 {isListeningCall ? <MicOff size={16} /> : <Mic size={16} />}
-                {isListeningCall ? 'Stop Listening' : 'Start Listening'}
+                {isListeningCall ? 'End Call Immediately' : 'Start Listening'}
               </button>
               {(callSignals.length > 0 || aiVoiceAssessment.suspected) && (
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold bg-[#F59E0B] text-[#101418] hover:bg-[#FFD700] ml-2"
+                  className="inline-flex items-center gap-2 rounded-lg border border-[#F59E0B]/40 bg-[#FFF7E6] px-4 py-2.5 text-sm font-semibold text-[#92400E] hover:bg-[#FEF3C7] ml-2"
                   onClick={() => {
                     const number = '+6012-345-6789'; // Replace with actual detected number if available
                     const score = formatPercent(callRiskScore);
-                    const msg = encodeURIComponent(`Fraud Report: Scam call detected from ${number}. Risk Score: ${score}. Evidence: ${callSignals.join(', ') || 'AI voice suspicion detected.'}`);
+                    const evidence = callSignals.map((signal) => formatCallSignalLabel(signal)).join(', ') || 'AI voice suspicion detected.';
+                    const msg = encodeURIComponent(`Fraud Report: Scam call detected from ${number}. Risk Score: ${score}. Evidence: ${evidence}`);
                     window.open(`https://wa.me/60162206262?text=${msg}`);
                   }}
                 >
@@ -3052,35 +3080,6 @@ export default function Transaction() {
 
         </div>
       )}
-    </div>
-  );
-}
-
-// Traffic Light UI for Voice Authenticity
-function VoiceTrafficLightBanner({ score }: { score: number }) {
-  let color = '#32D74B', bg = '#E6F9ED', text = 'No AI patterns found. Safe to talk.';
-  let icon = <CheckCircle size={18} className="text-[#32D74B]" />;
-  let label = 'Voice Authenticity';
-  if (score >= 0.75) {
-    color = '#FF3B30';
-    bg = '#FF3B3012';
-    text = '🛑 STOP: AI CLONE DETECTED. This is not a real person. Hang up immediately!';
-    icon = <ShieldAlert size={18} className="text-[#FF3B30]" />;
-  } else if (score >= 0.5) {
-    color = '#FF9F0A';
-    bg = '#FF9F0A18';
-    text = '⚠️ Warning: Unusual Voice. This might be a computer. Be careful what you say.';
-    icon = <AlertTriangle size={18} className="text-[#FF9F0A]" />;
-  }
-  return (
-    <div className="mb-4">
-      <div className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: bg, border: `1.5px solid ${color}` }}>
-        {icon}
-        <div className="flex flex-col">
-          <span className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color }}>{label}</span>
-          <span className="text-sm font-semibold" style={{ color }}>{text}</span>
-        </div>
-      </div>
     </div>
   );
 }
