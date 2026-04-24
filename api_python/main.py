@@ -623,51 +623,48 @@ def resolve_expired_guardian_approvals():
             approval["resolved_at"] = datetime.now().isoformat() + "Z"
 
 
-def send_guardian_notification(sender_account: str, sender_name: str, risk_score: float, reason: str):
-    """Send email alerts to all guardians of a senior account."""
-    if sender_account not in GUARDIAN_LINKS:
-        return
 
-    guardian_data = GUARDIAN_LINKS[sender_account]
-    guardians = guardian_data.get("guardians", [])
 
-    if not guardians:
-        return
+def send_guardian_notification(sender_account: str, sender_name: str, risk_score: float, reason: str, amount: float = 0):
+    """Log alert to senior's incident history and optionally email linked guardians."""
+    alert_id = f"ALERT-{str(uuid4())[:8].upper()}"
+    timestamp = datetime.now().isoformat() + "Z"
 
-    risk_level = "CRITICAL" if risk_score >= 0.8 else "HIGH"
+    # Always log — so seniors see their own history even without a guardian linked
+    GUARDIAN_ALERT_LOGS.append({
+        "alert_id": alert_id,
+        "sender_account": sender_account,
+        "sender_name": sender_name,
+        "type": "HIGH_RISK_TRANSACTION",
+        "risk_score": round(risk_score, 4),
+        "risk_reason": reason,
+        "amount": round(amount, 2),
+        "timestamp": timestamp,
+        "status": "FLAGGED"
+    })
+    print(f"[ALERT-LOGGED] {alert_id} | {sender_name} | risk={risk_score:.2f} | amount={amount}")
 
-    for guardian in guardians:
-        guardian_email = guardian.get("email")
-        guardian_name  = guardian.get("guardian_name", "Guardian")
-        guardian_account = guardian.get("guardian_account", "")
+    # Email guardians if any are linked
+    if sender_account in GUARDIAN_LINKS:
+        risk_level = "CRITICAL" if risk_score >= 0.8 else "HIGH"
+        for guardian in GUARDIAN_LINKS[sender_account].get("guardians", []):
+            guardian_email = guardian.get("email")
+            guardian_name = guardian.get("guardian_name", "Guardian")
+            if guardian_email:
+                try:
+                    from guardian_email import send_guardian_alert_email
+                    send_guardian_alert_email(
+                        guardian_email=guardian_email,
+                        guardian_name=guardian_name,
+                        senior_name=sender_name,
+                        risk_level=risk_level,
+                        risk_score=risk_score,
+                        reason=reason,
+                    )
+                except Exception as e:
+                    print(f"[EMAIL-ALERT-FAILED] {guardian_email}: {e}")
 
-        GUARDIAN_ALERT_LOGS.append({
-            "sender_account": sender_account,
-            "sender_name": sender_name,
-            "guardian_account": guardian_account,
-            "guardian_name": guardian_name,
-            "type": "HIGH_RISK_TRANSACTION",
-            "risk_score": round(risk_score, 4),
-            "risk_reason": reason,
-            "timestamp": datetime.now().isoformat() + "Z",
-        })
-
-        # Send email alert
-        if guardian_email:
-            try:
-                from guardian_email import send_guardian_alert_email
-                send_guardian_alert_email(
-                    guardian_email=guardian_email,
-                    guardian_name=guardian_name,
-                    senior_name=sender_name,
-                    risk_level=risk_level,
-                    risk_score=risk_score,
-                    reason=reason,
-                )
-            except Exception as e:
-                print(f"[EMAIL-ALERT-FAILED] {guardian_email}: {str(e)}")
-        else:
-            print(f"[EMAIL-DEMO] Guardian {guardian_name} has no email configured.")
+    return alert_id
 
 
 def build_context_data(
@@ -1184,37 +1181,6 @@ async def voice_authenticity(audio_file: UploadFile = File(...)):
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Unable to analyze the audio sample.") from exc
 
-def send_guardian_notification(sender_account: str, sender_name: str, risk_score: float, reason: str, amount: float = 0):
-    """Log a high-risk alert for the senior's incident history and optionally email linked guardians."""
-    alert_id = f"ALERT-{str(uuid4())[:8].upper()}"
-    timestamp = datetime.now().isoformat() + "Z"
-    GUARDIAN_ALERT_LOGS.append({
-        "alert_id": alert_id,
-        "sender_account": sender_account,
-        "sender_name": sender_name,
-        "type": "HIGH_RISK_TRANSACTION",
-        "risk_score": round(risk_score, 4),
-        "risk_reason": reason,
-        "amount": round(amount, 2),
-        "timestamp": timestamp,
-        "status": "FLAGGED"
-    })
-    print(f"[ALERT-LOGGED] {alert_id} | {sender_name} | risk={risk_score:.2f}")
-    try:
-        from guardian_email import send_guardian_alert_email
-        for g in GUARDIAN_LINKS.get(sender_account, {}).get("guardians", []):
-            if g.get("email"):
-                send_guardian_alert_email(
-                    guardian_email=g["email"],
-                    guardian_name=g.get("guardian_name", "Guardian"),
-                    senior_name=sender_name,
-                    risk_level="HIGH",
-                    risk_score=risk_score,
-                    reason=reason
-                )
-    except Exception as e:
-        print(f"[EMAIL-WARN] {e}")
-    return alert_id
 
 
 @app.post("/predict")
