@@ -6,7 +6,7 @@ import { useTour } from '@/contexts/TourContext';
 const LESSON_STORAGE_KEY = 'fraud-shield-lesson-v1';
 const LESSON_POINTS_STORAGE_KEY = 'fraud-shield-lesson-points-v1';
 
-const LESSON_CARDS = [
+const LESSON_CARDS 
   {
     title: 'What Is Fraud?',
     desc: 'Fraud means someone lies or hides the truth to get your money, goods, or personal details.',

@@ -36,9 +36,7 @@ app.add_middleware(
         "http://localhost:3000", 
         "http://127.0.0.1:3000", 
         "http://localhost:5173", 
-        "http://127.0.0.1:5173",
-        "https://digital-trust-blue.vercel.app",
-        "https://digital-trust-backend-fnm1.onrender.com"
+        "http://127.0.0.1:5173"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -1484,44 +1482,41 @@ async def predict_fraud(txn: Transaction, allow_guardian_approval: bool = True):
 
 # ============ GUARDIAN LINK ENDPOINTS ============
 
-@app.get("/guardians/{sender_account}")
+@app.get("/api/guardians/{sender_account}")
 async def get_guardians(sender_account: str):
     """Get all guardians linked to a senior account, including pending invitations."""
-    # Start with accepted guardians
     guardians_list = []
-    senior_name = "Unknown"
     
+    # 1. Get Accepted/Verified Guardians
     if sender_account in GUARDIAN_LINKS:
         data = GUARDIAN_LINKS[sender_account]
-        senior_name = data.get("senior_name", "")
-        for g in data.get("guardians", []):
-            guardians_list.append({
-                **g,
-                "status": "ACCEPTED"
-            })
-            
-    # Add pending/rejected invites from GUARDIAN_INVITE_CODES
-    for token, invite in GUARDIAN_INVITE_CODES.items():
-        if invite.get("sender_account") == sender_account:
-            # Avoid duplicates if already accepted (though logic should prevent this)
-            is_already_accepted = any(g["email"] == invite["guardian_email"] for g in guardians_list if g.get("status") == "ACCEPTED")
-            if not is_already_accepted:
+        if isinstance(data, dict):
+            for g in data.get("guardians", []):
                 guardians_list.append({
-                    "guardian_account": invite.get("guardian_account", "PENDING"),
-                    "guardian_name": invite["guardian_name"],
-                    "email": invite["guardian_email"],
-                    "phone": "",
-                    "linked_at": invite["created_at"],
-                    "status": invite["status"],
-                    "token": token
+                    **g,
+                    "status": "VERIFIED" # Map ACCEPTED to VERIFIED for UI consistency
+                })
+        elif isinstance(data, list):
+             for g in data:
+                guardians_list.append({
+                    **g,
+                    "status": "VERIFIED"
+                })
+
+    # 2. Add Pending/Rejected Invitations
+    for invite in GUARDIAN_INVITE_CODES.values():
+        if invite.get("sender_account") == sender_account:
+            # Avoid duplicates
+            if not any(g.get("email") == invite.get("guardian_email") for g in guardians_list):
+                guardians_list.append({
+                    "guardian_account": "PENDING",
+                    "guardian_name": invite.get("guardian_name", "Guardian"),
+                    "email": invite.get("guardian_email"),
+                    "phone": "Pending Verification",
+                    "status": invite.get("status", "PENDING")
                 })
     
-    return {
-        "sender_account": sender_account,
-        "senior_name": senior_name,
-        "guardians": guardians_list,
-        "notification_threshold_risk": 0.75 if sender_account not in GUARDIAN_LINKS else GUARDIAN_LINKS[sender_account].get("notification_threshold_risk", 0.75),
-    }
+    return {"guardians": guardians_list}
 
 
 @app.post("/guardians/link")
@@ -1803,7 +1798,7 @@ async def generate_invite_code_endpoint(data: dict):
     }
 
 
-@app.post("/guardians/send-email-invite")
+@app.post("/api/guardians/send-email-invite")
 async def send_email_invite_endpoint(data: dict):
     """Generate a token-based invite and send via email."""
     sender_account = data.get("sender_account", "ALEX8899")
@@ -1832,7 +1827,10 @@ async def send_email_invite_endpoint(data: dict):
     GUARDIAN_INVITE_CODES[code] = invite
     
     try:
-        from guardian_email import send_guardian_invite_email
+        from guardian_email import send_guardian_invite_email, EMAIL_USER, EMAIL_PASS
+        if not EMAIL_USER or not EMAIL_PASS:
+            return {"success": False, "message": "Backend email credentials (EMAIL_USER/EMAIL_PASS) are not configured. Please check .env or Render settings."}
+            
         sender_name = SENDER_PROFILES.get(sender_account, {}).get("name", "Digital Fraud Shield User")
         
         send_guardian_invite_email(
@@ -1944,36 +1942,75 @@ async def process_verification(req: GuardianVerifyRequest):
         raise HTTPException(status_code=500, detail=f"Operation failed: {str(e)}")
 
 
-@app.post("/guardians/verify-invite-code")
-async def verify_invite_code_endpoint(data: dict):
-    """Verify the 6-digit invite code and proceed to ID verification."""
-    sender_account = data.get("sender_account")
+@app.post("/api/guardians/verify-code")
+async def verify_guardian_code_endpoint(data: dict):
+    """
+    Verify the 6-digit code for a guardian.
+    Invalidates the code after successful verification.
+    """
     code = data.get("code", "").strip()
+    email = data.get("email", "").strip()
     
-    if not sender_account or not code:
-        return {"success": False, "message": "sender_account and code are required"}
+    if not code or not email:
+        raise HTTPException(status_code=400, detail="Both email and 6-digit code are required.")
     
+    # 1. Find the invite by code
     invite = GUARDIAN_INVITE_CODES.get(code)
     if not invite:
-        return {"success": False, "message": "Invalid or expired invite code"}
+        raise HTTPException(status_code=404, detail="Invalid or expired verification code.")
     
-    # Check if code belongs to this sender
-    if invite["sender_account"] != sender_account:
-        return {"success": False, "message": "Invite code does not match this account"}
+    # 2. Verify email matches
+    if invite.get("guardian_email") != email:
+        raise HTTPException(status_code=400, detail="Verification code does not match this email address.")
     
-    # Check if code is expired
+    # 3. Check expiry
     expires_at = datetime.fromisoformat(invite["expires_at"].replace("Z", "+00:00"))
     if datetime.now(expires_at.tzinfo) > expires_at:
         invite["status"] = "EXPIRED"
-        return {"success": False, "message": "Invite code has expired"}
+        raise HTTPException(status_code=400, detail="This verification code has expired.")
     
-    # Mark code as verified (next step: ID verification)
-    invite["status"] = "VERIFIED"
+    # 4. Success! Link the guardian
+    sender_account = invite["sender_account"]
+    guardian_name = invite["guardian_name"]
     
+    # Create a unique guardian ID
+    guardian_account_id = f"G-{uuid4().hex[:6].upper()}"
+    
+    new_link = {
+        "guardian_account": guardian_account_id,
+        "guardian_name": guardian_name,
+        "email": email,
+        "phone": "+60 12-000 0000", # Placeholder
+        "linked_at": datetime.now().isoformat(),
+        "status": "VERIFIED"
+    }
+    
+    if sender_account not in GUARDIAN_LINKS:
+        GUARDIAN_LINKS[sender_account] = {"guardians": [], "senior_name": sender_name}
+    
+    # Ensure it's a dict structure if it was initialized differently
+    if isinstance(GUARDIAN_LINKS[sender_account], list):
+        GUARDIAN_LINKS[sender_account] = {"guardians": GUARDIAN_LINKS[sender_account]}
+    
+    # Remove any existing link for this email first
+    GUARDIAN_LINKS[sender_account]["guardians"] = [l for l in GUARDIAN_LINKS[sender_account]["guardians"] if l["email"] != email]
+    GUARDIAN_LINKS[sender_account]["guardians"].append(new_link)
+    
+    # 5. Invalidate the code
+    del GUARDIAN_INVITE_CODES[code]
+    
+    # 6. Send confirmation email (re-using template logic)
+    try:
+        from guardian_email import send_guardian_accepted_confirmation
+        # Use sender_account as fallback for email
+        send_guardian_accepted_confirmation(email, f"{sender_account}@example.com", sender_name, guardian_name, code)
+    except:
+        pass # Non-critical
+        
     return {
         "success": True,
-        "message": "Invite code verified successfully. Please proceed to ID verification.",
-        "next_step": "id_verification",
+        "message": f"Guardian {guardian_name} has been successfully verified!",
+        "guardian_account": guardian_account_id
     }
 
 

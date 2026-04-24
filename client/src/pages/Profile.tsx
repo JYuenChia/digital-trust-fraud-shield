@@ -142,6 +142,9 @@ export default function Profile() {
     guardian_name: '',
     email: '',
   });
+  const [verificationCode, setVerificationCode] = useState('');
+  const [activeInviteEmail, setActiveInviteEmail] = useState('');
+  const [showVerificationStep, setShowVerificationStep] = useState(false);
   const [recoveryForm, setRecoveryForm] = useState({
     incident_description: 'Scam transfer attempt detected by AI shield.',
     amount_lost: '',
@@ -222,7 +225,7 @@ export default function Profile() {
   };
 
   const loadGuardians = async () => {
-    const response = await fetch(`${FRAUD_API_BASE_URL}/guardians/${SENIOR_ACCOUNT}`);
+    const response = await fetch(`${FRAUD_API_BASE_URL}/api/guardians/${SENIOR_ACCOUNT}`);
     if (!response.ok) throw new Error('Failed to load guardians');
     const data = await response.json();
     const contacts: GuardianContact[] = data.guardians ?? [];
@@ -279,7 +282,7 @@ export default function Profile() {
 
     try {
       setIsGuardianLoading(true);
-      const response = await fetch(`${FRAUD_API_BASE_URL}/guardians/send-email-invite`, {
+      const response = await fetch(`${FRAUD_API_BASE_URL}/api/guardians/send-email-invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -294,11 +297,46 @@ export default function Profile() {
         throw new Error(data.message || 'Unable to send invitation.');
       }
 
-      toast.success(`Invitation email sent to ${guardianForm.email}`);
-      setGuardianForm({ guardian_name: '', email: '' });
+      toast.success(`Invitation sent to ${guardianForm.email}`);
+      setActiveInviteEmail(guardianForm.email);
+      setShowVerificationStep(true);
       await loadGuardians();
     } catch (error: any) {
       toast.error(error.message || 'Unable to send invitation.');
+    } finally {
+      setIsGuardianLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (verificationCode.length !== 6) {
+      toast.error('Please enter a valid 6-digit code.');
+      return;
+    }
+
+    try {
+      setIsGuardianLoading(true);
+      const response = await fetch(`${FRAUD_API_BASE_URL}/api/guardians/verify-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: activeInviteEmail,
+          code: verificationCode,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'Verification failed.');
+      }
+
+      toast.success(data.message || 'Guardian linked successfully!');
+      setShowVerificationStep(false);
+      setVerificationCode('');
+      setGuardianForm({ guardian_name: '', email: '' });
+      await loadGuardians();
+    } catch (error: any) {
+      toast.error(error.message);
     } finally {
       setIsGuardianLoading(false);
     }
@@ -561,43 +599,76 @@ export default function Profile() {
                 </div>
 
                 <div className="rounded-[8px] bg-[#F9FAFB] p-6 flex flex-col gap-6 shadow-sm border border-[#E5E7EB]">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="flex flex-col gap-2">
-                      <label className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Guardian Name</label>
-                      <div className="relative">
-                        <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                  {!showVerificationStep ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Guardian Name</label>
+                        <div className="relative">
+                          <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                          <input
+                            type="text"
+                            value={guardianForm.guardian_name}
+                            onChange={(e) => setGuardianForm((prev) => ({ ...prev, guardian_name: e.target.value }))}
+                            placeholder="Full Name"
+                            className="h-12 w-full rounded-[8px] border border-[#D1D5DB] bg-white pl-11 pr-4 text-sm text-gray-900 focus:ring-2 focus:ring-orange-500/20 outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Guardian Email Address</label>
+                        <div className="relative">
+                          <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                          <input
+                            type="email"
+                            value={guardianForm.email}
+                            onChange={(e) => setGuardianForm((prev) => ({ ...prev, email: e.target.value }))}
+                            placeholder="email@example.com"
+                            className="h-12 w-full rounded-[8px] border border-[#D1D5DB] bg-white pl-11 pr-4 text-sm text-gray-900 focus:ring-2 focus:ring-orange-500/20 outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleLinkGuardian}
+                        disabled={isGuardianLoading}
+                        className="h-12 md:col-span-2 self-start rounded-[8px] bg-[#FF5500] px-8 text-sm font-bold text-white hover:bg-[#E64D00] shadow-lg shadow-orange-500/20 active:scale-95 transition-all disabled:opacity-60"
+                      >
+                        {isGuardianLoading ? 'Sending...' : 'Send Verification Code'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-6 py-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                      <div className="text-center space-y-1">
+                        <h3 className="text-lg font-bold text-gray-900">Enter Verification Code</h3>
+                        <p className="text-sm text-gray-500">We've sent a 6-digit code to <strong>{activeInviteEmail}</strong></p>
+                      </div>
+                      <div className="flex flex-col gap-4 w-full max-w-xs">
                         <input
                           type="text"
-                          value={guardianForm.guardian_name}
-                          onChange={(e) => setGuardianForm((prev) => ({ ...prev, guardian_name: e.target.value }))}
-                          placeholder="Full Name"
-                          className="h-12 w-full rounded-[8px] border border-[#D1D5DB] bg-white pl-11 pr-4 text-sm text-gray-900 focus:ring-2 focus:ring-orange-500/20 outline-none transition-all"
+                          maxLength={6}
+                          value={verificationCode}
+                          onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                          placeholder="000000"
+                          className="h-14 w-full text-center text-3xl font-bold tracking-[12px] rounded-[12px] border-2 border-orange-200 bg-white focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 outline-none transition-all"
                         />
+                        <button
+                          type="button"
+                          onClick={handleVerifyCode}
+                          disabled={isGuardianLoading || verificationCode.length !== 6}
+                          className="h-12 rounded-[8px] bg-gray-900 text-white font-bold hover:bg-black transition-all disabled:opacity-50"
+                        >
+                          {isGuardianLoading ? 'Verifying...' : 'Link Guardian'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowVerificationStep(false)}
+                          className="text-xs font-bold text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          Cancel and try another email
+                        </button>
                       </div>
                     </div>
-                    <div className="flex flex-col gap-2">
-                      <label className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Guardian Email Address</label>
-                      <div className="relative">
-                        <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input
-                          type="email"
-                          value={guardianForm.email}
-                          onChange={(e) => setGuardianForm((prev) => ({ ...prev, email: e.target.value }))}
-                          placeholder="email@example.com"
-                          className="h-12 w-full rounded-[8px] border border-[#D1D5DB] bg-white pl-11 pr-4 text-sm text-gray-900 focus:ring-2 focus:ring-orange-500/20 outline-none transition-all"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleLinkGuardian}
-                    disabled={isGuardianLoading}
-                    className="h-12 self-start rounded-[8px] bg-[#FF5500] px-8 text-sm font-bold text-white hover:bg-[#E64D00] shadow-lg shadow-orange-500/20 active:scale-95 transition-all disabled:opacity-60"
-                  >
-                    {isGuardianLoading ? 'Sending Invite...' : 'Send Invitation Email'}
-                  </button>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-3 max-h-[400px] overflow-auto pr-2 custom-scrollbar">
@@ -612,7 +683,7 @@ export default function Profile() {
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-bold text-gray-900">{g.guardian_name}</span>
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                              g.status === 'ACCEPTED' ? 'bg-green-50 text-green-600 border-green-100' :
+                              g.status === 'VERIFIED' || g.status === 'ACCEPTED' ? 'bg-green-50 text-green-600 border-green-100' :
                               g.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100' :
                               'bg-orange-50 text-orange-600 border-orange-100'
                             }`}>
@@ -624,10 +695,10 @@ export default function Profile() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleRemoveGuardian(g.status === 'ACCEPTED' ? g.guardian_account : g.email)}
+                        onClick={() => handleRemoveGuardian(g.status === 'VERIFIED' || g.status === 'ACCEPTED' ? g.guardian_account : g.email)}
                         className="text-xs font-bold text-red-500 hover:text-red-700 bg-red-50 px-3 py-1.5 rounded-[6px] transition-colors"
                       >
-                        {g.status === 'ACCEPTED' ? 'Remove' : 'Cancel Invite'}
+                        {g.status === 'VERIFIED' || g.status === 'ACCEPTED' ? 'Remove' : 'Cancel Invite'}
                       </button>
                     </div>
                   ))}
@@ -662,7 +733,7 @@ export default function Profile() {
                         <option value="">Choose guardian account...</option>
                         {guardians.map((g) => (
                             <option key={g.guardian_account} value={g.guardian_account}>
-                            {g.guardian_name} ({g.guardian_account})
+                            {g.guardian_name} ({g.status})
                             </option>
                         ))}
                         </select>
