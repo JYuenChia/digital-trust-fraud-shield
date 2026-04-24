@@ -38,6 +38,7 @@
   - **Account Emptying Indicator:** Detects patterns where balance drops to 0
   - **Temporal Patterns:** Hour-of-day and day-index features capture unusual timing
   - **Amount-to-Balance Ratio:** Behavioral intensity indicator
+  - **AI Voice Authenticity Analysis:** Detects synthetic speech, TTS artifacts, and robotic prosody patterns (pitch jitter, spectral centroid variance) to prevent AI clone scams.
   - **SMOTE Resampling:** Handles the imbalanced nature of fraud (rare events)
 
 - **Risk Scoring Logic:**
@@ -47,11 +48,13 @@
 
 #### B. Real-Time API Backend (FastAPI)
 - Processes transactions in milliseconds
+- **Live PDRM Semak Mule Integration:** Real-time scraping of the Malaysian Police (PDRM) database to check for reported scam accounts.
 - Enriches transaction context using:
   - Sender profiles and known recipient lists
   - Device trust scores
   - Merchant verification status
-  - Guardian escalation system (for senior citizen protection)
+  - **Multi-Step Guardian Verification:** Secure linking via 6-digit codes, ID photo validation, and Bluetooth/GPS proximity checks.
+  - **Advanced Guardian Hub:** Permission tiers (View Only, Co-Signer, Full Protector) and trusted recipient whitelisting.
 - Sends alerts to guardians for high-risk transactions on linked accounts
 
 #### C. Premium UI/UX Dashboard
@@ -70,6 +73,7 @@
 - **Answer Feedback Audio:** Correct/wrong answer sound cues for stronger learning retention
 - **Wallet PIN Verification:** PIN challenge before transaction processing when enabled in profile
 - **Guardian Approval Escalation:** High-risk cases can enter a pending guardian review path
+- **AI Voice Call Protection:** Real-time assessment of incoming calls for AI clone markers with instant safety weather alerts.
 
 ### Differentiation from Existing Systems
 | Feature | Traditional Systems | Digital Fraud Shield |
@@ -103,6 +107,7 @@
   
 - **QR Code Scanner:** Scan transaction details via camera
 - **QR Integrity Shield:** Merchant verification and warning summary from scanned payload
+- **Live Call Assessment:** Simulation of incoming calls with real-time AI voice authenticity scoring and risk weather indicators.
 - **Wallet PIN Step:** 6-digit PIN validation before transaction processing (when enabled)
 - **Guardian Approval Pending Modal:** Supports approval-required decision path for flagged risk
 - **Instant Risk Assessment:** 
