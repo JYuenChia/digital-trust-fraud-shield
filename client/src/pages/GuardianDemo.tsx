@@ -1,30 +1,25 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'wouter';
-import { ShieldAlert, RefreshCw, ArrowLeft, User } from 'lucide-react';
+import { ShieldAlert, RefreshCw, ArrowLeft, User, ArrowRight, X } from 'lucide-react';
 import { FRAUD_API_BASE_URL } from '@/const';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'sonner';
 
-type GuardianContact = {
-  guardian_account: string;
-  guardian_name: string;
-  phone: string;
-  email: string;
+type SeniorContact = {
+  senior_account: string;
+  senior_name: string;
   linked_at: string;
-  status?: string;
 };
 
 type GuardianAlertsResponse = {
-  guardian_account: string;
-  notification_count: number;
   notifications: Array<{
+    alert_id: string;
     sender_account: string;
     sender_name: string;
-    guardian_account: string;
-    guardian_name: string;
     type: string;
     risk_score: number;
     risk_reason: string;
+    transaction_id?: string;
     timestamp: string;
   }>;
 };
@@ -52,75 +47,66 @@ type PendingApproval = {
   resolution_note: string | null;
 };
 
-const SENIOR_ACCOUNT = 'ALEX8899';
+const GUARDIAN_EMAIL = 'jyuenchia@gmail.com'; // Hardcoded for demo
 
 export default function GuardianDemo() {
   const { t } = useLanguage();
-  const [guardians, setGuardians] = useState<GuardianContact[]>([]);
-  const [selectedGuardianAccount, setSelectedGuardianAccount] = useState('');
+  const [seniors, setSeniors] = useState<SeniorContact[]>([]);
+  const [selectedSeniorAccount, setSelectedSeniorAccount] = useState('');
   const [alerts, setAlerts] = useState<GuardianAlertsResponse['notifications']>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [decisionBusyId, setDecisionBusyId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
-  const selectedGuardian = useMemo(
-    () => guardians.find((g) => g.guardian_account === selectedGuardianAccount),
-    [guardians, selectedGuardianAccount],
+  const selectedSenior = useMemo(
+    () => seniors.find((s) => s.senior_account === selectedSeniorAccount),
+    [seniors, selectedSeniorAccount],
   );
 
-  const loadGuardians = async () => {
-    const response = await fetch(`${FRAUD_API_BASE_URL}/guardians/${SENIOR_ACCOUNT}`);
+  const loadSeniors = async () => {
+    const response = await fetch(`${FRAUD_API_BASE_URL}/api/guardians/seniors/${GUARDIAN_EMAIL}`);
     if (!response.ok) throw new Error(t('guardian.errorLoadGuardians'));
     const data = await response.json();
-    const nextGuardians: GuardianContact[] = data.guardians ?? [];
-    setGuardians(nextGuardians);
-    if (nextGuardians.length > 0) {
-      // Prioritize an accepted guardian if one is already selected or default to the first accepted one
-      const accepted = nextGuardians.filter(g => g.status === 'ACCEPTED');
-      if (accepted.length > 0) {
-        setSelectedGuardianAccount(prev => {
-          const stillExists = accepted.find(g => g.guardian_account === prev);
-          return stillExists ? prev : accepted[0].guardian_account;
-        });
-      } else {
-        setSelectedGuardianAccount(nextGuardians[0].guardian_account);
-      }
+    const nextSeniors: SeniorContact[] = data.seniors ?? [];
+    setSeniors(nextSeniors);
+    if (nextSeniors.length > 0 && !selectedSeniorAccount) {
+      setSelectedSeniorAccount(nextSeniors[0].senior_account);
     }
   };
 
-  const loadAlerts = async (guardianAccount: string) => {
-    if (!guardianAccount) {
+  const loadAlerts = async (seniorAccount: string) => {
+    if (!seniorAccount) {
       setAlerts([]);
       return;
     }
-    const response = await fetch(`${FRAUD_API_BASE_URL}/guardian-notifications/${guardianAccount}`);
+    const response = await fetch(`${FRAUD_API_BASE_URL}/api/guardian-notifications/${seniorAccount}`);
     if (!response.ok) throw new Error(t('guardian.errorLoadNotifications'));
     const data: GuardianAlertsResponse = await response.json();
     setAlerts(data.notifications ?? []);
   };
 
-  const loadPendingApprovals = async (guardianAccount: string) => {
-    if (!guardianAccount) {
+  const loadPendingApprovals = async (seniorAccount: string) => {
+    if (!seniorAccount) {
       setPendingApprovals([]);
       return;
     }
-    const response = await fetch(`${FRAUD_API_BASE_URL}/guardian-pending-approvals/${guardianAccount}`);
+    const response = await fetch(`${FRAUD_API_BASE_URL}/api/guardian-pending-approvals/${seniorAccount}`);
     if (!response.ok) throw new Error(t('guardian.errorLoadPending'));
     const data = await response.json();
     setPendingApprovals((data.approvals ?? []) as PendingApproval[]);
   };
 
   const decideApproval = async (approvalId: string, decision: 'APPROVE' | 'REJECT') => {
-    if (!selectedGuardianAccount) return;
+    if (!selectedSeniorAccount) return;
     try {
       setDecisionBusyId(approvalId);
       setStatus(null);
-      const response = await fetch(`${FRAUD_API_BASE_URL}/guardian-pending-approvals/${approvalId}/decision`, {
+      const response = await fetch(`${FRAUD_API_BASE_URL}/api/guardian-pending-approvals/${approvalId}/decision`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          guardian_account: selectedGuardianAccount,
+          guardian_account: selectedSeniorAccount,
           decision,
           note: decision === 'APPROVE' ? t('guardian.noteApprove') : t('guardian.noteReject'),
         }),
@@ -130,8 +116,8 @@ export default function GuardianDemo() {
         throw new Error(data.message || t('guardian.errorRecordDecision'));
       }
       toast.success(decision === 'APPROVE' ? t('guardian.approvedByGuardian') : t('guardian.rejectedByGuardian'));
-      await loadPendingApprovals(selectedGuardianAccount);
-      await loadAlerts(selectedGuardianAccount);
+      await loadPendingApprovals(selectedSeniorAccount);
+      await loadAlerts(selectedSeniorAccount);
     } catch (error: any) {
       toast.error(error.message || t('guardian.errorRecordDecision'));
     } finally {
@@ -143,7 +129,7 @@ export default function GuardianDemo() {
     try {
       setIsLoading(true);
       setStatus(null);
-      await loadGuardians();
+      await loadSeniors();
     } catch {
       setStatus(t('guardian.errorLoadDataNow'));
     } finally {
@@ -155,15 +141,20 @@ export default function GuardianDemo() {
     refreshAll();
   }, []);
 
+  const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
+
   useEffect(() => {
-    if (!selectedGuardianAccount) return;
+    if (!selectedSeniorAccount) return;
     Promise.all([
-      loadAlerts(selectedGuardianAccount),
-      loadPendingApprovals(selectedGuardianAccount),
-    ]).catch(() => {
+      loadAlerts(selectedSeniorAccount),
+      loadPendingApprovals(selectedSeniorAccount),
+    ]).then(() => {
+      toast.success(t('guardian.dataRefreshed'));
+    }).catch(() => {
       setStatus(t('guardian.errorLoadNotificationsNow'));
+      toast.error(t('guardian.errorRefresh'));
     });
-  }, [selectedGuardianAccount]);
+  }, [selectedSeniorAccount]);
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] text-foreground font-sans flex flex-col items-center pt-16">
@@ -174,8 +165,8 @@ export default function GuardianDemo() {
               <ShieldAlert size={28} className="text-[#FF5500]" />
             </div>
             <div className="flex flex-col gap-1">
-              <h1 className="text-gray-900 font-['Sora'] text-4xl font-bold">{t('guardian.title')}</h1>
-              <p className="text-gray-500 text-lg">{t('guardian.subtitle')}</p>
+              <h1 className="text-gray-900 dark:text-white font-['Sora'] text-4xl font-bold">Guardian Hub</h1>
+              <p className="text-gray-500 text-lg">Monitoring protected senior accounts.</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -186,11 +177,22 @@ export default function GuardianDemo() {
             </Link>
             <button
               type="button"
-              onClick={() => {
-                loadAlerts(selectedGuardianAccount);
-                loadPendingApprovals(selectedGuardianAccount);
+              onClick={async () => {
+                setIsLoading(true);
+                try {
+                  await Promise.all([
+                    loadSeniors(),
+                    selectedSeniorAccount ? loadAlerts(selectedSeniorAccount) : Promise.resolve(),
+                    selectedSeniorAccount ? loadPendingApprovals(selectedSeniorAccount) : Promise.resolve(),
+                  ]);
+                  toast.success(t('guardian.dataRefreshed'));
+                } catch (err) {
+                  toast.error(t('guardian.errorRefresh'));
+                } finally {
+                  setIsLoading(false);
+                }
               }}
-              disabled={!selectedGuardianAccount}
+              disabled={isLoading}
               className="h-11 rounded-[8px] bg-[#FF5500] px-5 text-sm font-semibold text-white hover:bg-[#E64D00] flex items-center gap-2 shadow-sm transition-all disabled:opacity-60"
             >
               <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} /> {t('guardian.refresh')}
@@ -221,44 +223,43 @@ export default function GuardianDemo() {
           <section className="flex-1 p-8 md:p-10 flex flex-col gap-8 bg-white min-h-[600px]">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="flex flex-col gap-8">
-                {/* Guardian Account Selection */}
-                <div className="flex flex-col gap-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Guardian Account</h3>
+                {/* Senior Account Selection */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Select Protected Account</label>
                   <select
-                    value={selectedGuardianAccount}
-                    onChange={(e) => setSelectedGuardianAccount(e.target.value)}
-                    className="h-12 w-full rounded-[8px] border border-[#D1D5DB] bg-[#F9FAFB] px-4 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-orange-500/20 shadow-sm transition-all"
+                    value={selectedSeniorAccount}
+                    onChange={(e) => setSelectedSeniorAccount(e.target.value)}
+                    className="h-14 w-full md:w-[320px] rounded-xl border border-black/10 bg-white px-5 font-['Sora'] text-lg font-bold text-[#111827] shadow-sm focus:border-[#FF5500] focus:ring-2 focus:ring-[#FF5500]/20 transition-all outline-none"
                   >
-                    <option value="">{t('guardian.chooseGuardian')}</option>
-                    {guardians.map((g) => (
-                      <option key={g.guardian_account + g.email} value={g.guardian_account}>
-                        {g.guardian_name} ({g.status})
+                    {seniors.length === 0 && <option value="">No seniors linked</option>}
+                    {seniors.map((s) => (
+                      <option key={s.senior_account} value={s.senior_account}>
+                        {s.senior_name} ({s.senior_account})
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* Current Guardian Details */}
+                {/* Current Senior Details */}
                 <div className="rounded-[8px] border border-[#F3F4F6] bg-[#F9FAFB] p-6 shadow-sm flex flex-col gap-4">
                   <div className="flex items-center gap-3 border-b border-[#E5E7EB] pb-3">
                     <User size={18} className="text-orange-500" />
-                    <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wide">Selected Guardian</h3>
+                    <h3 className="font-bold text-gray-900 text-sm uppercase tracking-wide">Selected Senior</h3>
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-lg font-bold text-gray-900">{selectedGuardian?.guardian_name || t('guardian.notSelected')}</p>
-                      {selectedGuardian && (
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                          selectedGuardian.status === 'ACCEPTED' ? 'bg-green-50 text-green-600 border-green-100' :
-                          selectedGuardian.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100' :
-                          'bg-orange-50 text-orange-600 border-orange-100'
-                        }`}>
-                          {selectedGuardian.status}
-                        </span>
-                      )}
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Account Name:</span>
+                      <p className="text-sm font-bold text-gray-900">{selectedSenior?.senior_name || t('guardian.notSelected')}</p>
                     </div>
-                    <div className="flex flex-col gap-1 mt-2">
-                      <p className="text-sm text-gray-500 font-medium">{selectedGuardian?.email || t('guardian.noEmail')}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Account ID:</span>
+                      <p className="text-sm font-medium text-gray-600">{selectedSenior?.senior_account || '-'}</p>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Linked Since:</span>
+                      <p className="text-xs font-medium text-gray-500">
+                        {selectedSenior?.linked_at ? new Date(selectedSenior.linked_at).toLocaleDateString() : '-'}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -280,17 +281,40 @@ export default function GuardianDemo() {
                     )}
 
                     {alerts.map((alert, idx) => (
-                      <div key={`${alert.timestamp}-${idx}`} className="rounded-[8px] border border-[#F3F4F6] bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
+                      <div key={`${alert.timestamp}-${idx}`} className="group rounded-xl border border-black/5 bg-white p-5 shadow-sm hover:shadow-md hover:border-[#FF5500]/30 transition-all duration-300">
                         <div className="flex items-center justify-between gap-2 mb-3">
-                          <span className="text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-[6px] uppercase tracking-tight">
-                            {Math.round((alert.risk_score || 0) * 100)}% {t('guardian.risk')}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-[6px] uppercase tracking-tight">
+                              {Math.round((alert.risk_score || 0) * 100)}% {t('guardian.risk')}
+                            </span>
+                            {alert.type === 'HIGH_RISK_TRANSACTION' && (
+                              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                            )}
+                          </div>
                           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{alert.type.replaceAll('_', ' ')}</span>
                         </div>
                         <p className="text-sm font-bold text-gray-900 mb-1">{alert.sender_name}</p>
-                        <p className="text-xs text-gray-500 leading-relaxed font-medium">{alert.risk_reason}</p>
-                        <div className="mt-3 pt-3 border-t border-[#F9FAFB] text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-                          {new Date(alert.timestamp).toLocaleString()}
+                        <p className="text-xs text-gray-500 leading-relaxed font-medium mb-4 line-clamp-2">{alert.risk_reason}</p>
+
+                        <div className="flex items-center justify-between mt-auto">
+                          {alert.transaction_id ? (
+                            <button
+                              onClick={() => setSelectedTransaction({
+                                id: alert.transaction_id,
+                                senior: alert.sender_name,
+                                reason: alert.risk_reason,
+                                score: alert.risk_score,
+                                timestamp: alert.timestamp
+                              })}
+                              className="text-[11px] font-bold text-[#FF5500] hover:text-[#E64D00] flex items-center gap-1 uppercase tracking-wider transition-colors"
+                            >
+                              View Transaction <ArrowRight size={12} />
+                            </button>
+                          ) : <div />}
+
+                          <div className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">
+                            {new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -320,14 +344,13 @@ export default function GuardianDemo() {
                         <div className="flex flex-col gap-1">
                           <p className="text-sm font-bold text-gray-900">{item.sender_name}</p>
                           <div className="flex items-center gap-2">
-                             <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">
+                            <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">
                               {Math.round((item.risk_score || 0) * 100)}% {t('guardian.risk')}
                             </span>
-                             <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-tight ${
-                               item.status === 'PENDING' ? 'bg-orange-50 text-orange-600 border border-orange-100' : 
-                               item.status === 'APPROVED' ? 'bg-green-50 text-green-600 border border-green-100' : 
-                               'bg-red-50 text-red-600 border border-red-100'
-                             }`}>
+                            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-tight ${item.status === 'PENDING' ? 'bg-orange-50 text-orange-600 border border-orange-100' :
+                                item.status === 'APPROVED' ? 'bg-green-50 text-green-600 border border-green-100' :
+                                  'bg-red-50 text-red-600 border border-red-100'
+                              }`}>
                               {item.status}
                             </span>
                           </div>
@@ -376,7 +399,7 @@ export default function GuardianDemo() {
             </div>
 
             {status && (
-              <div className="mt-8 px-6 py-4 rounded-[8px] bg-gray-50 border border-[#E5E7EB] text-sm text-gray-600 font-medium flex items-center gap-3 shadow-inner">
+              <div className="mt-8 px-6 py-4 rounded-xl bg-orange-50 border border-orange-100 text-sm text-orange-800 font-medium flex items-center gap-3 shadow-sm">
                 <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
                 {status}
               </div>
@@ -384,6 +407,55 @@ export default function GuardianDemo() {
           </section>
         </div>
       </div>
+
+      {/* Transaction Detail Modal */}
+      {selectedTransaction && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-[#1A1A1A] w-full max-w-[500px] rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 border border-white/10">
+            <div className="bg-[#FF5500] p-8 text-white">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-xs font-bold uppercase tracking-[0.2em] opacity-80">Transaction Detail</span>
+                <button onClick={() => setSelectedTransaction(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
+              <h2 className="text-3xl font-['Sora'] font-bold mb-1">{selectedTransaction.senior}</h2>
+              <p className="text-white/70 text-sm font-medium">Ref ID: {selectedTransaction.id}</p>
+            </div>
+
+            <div className="p-8 flex flex-col gap-8">
+              <div className="flex items-center justify-between p-6 bg-red-50 dark:bg-red-500/10 rounded-2xl border border-red-100 dark:border-red-500/20">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase tracking-widest mb-1">AI Risk Assessment</span>
+                  <span className="text-2xl font-bold text-red-700 dark:text-red-400">{Math.round(selectedTransaction.score * 100)}% Threat</span>
+                </div>
+                <ShieldAlert size={40} className="text-red-500 opacity-80" />
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Reason for Alert</span>
+                  <p className="text-[#111827] dark:text-[#E0E0E0] font-medium leading-relaxed italic border-l-4 border-[#FF5500] pl-4">
+                    "{selectedTransaction.reason}"
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Detection Time</span>
+                  <p className="text-[#111827] dark:text-white font-bold">{new Date(selectedTransaction.timestamp).toLocaleString()}</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedTransaction(null)}
+                className="w-full h-14 rounded-2xl bg-[#111827] text-white font-bold hover:bg-black transition-all active:scale-[0.98]"
+              >
+                Close Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

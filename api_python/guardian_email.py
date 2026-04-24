@@ -39,9 +39,9 @@ _load_env(_ENV_PATH)
 # ---------------------------------------------------------------------------
 SMTP_HOST  = os.getenv("SMTP_HOST",  "smtp.gmail.com")
 SMTP_PORT  = int(os.getenv("SMTP_PORT", "587"))
-EMAIL_USER = os.environ["EMAIL_USER"]   # raises clearly if missing
-EMAIL_PASS = os.environ["EMAIL_PASS"]
-APP_BASE_URL = os.getenv("APP_BASE_URL", "https://digital-trust-blue.vercel.app")
+EMAIL_USER = os.getenv("EMAIL_USER", "")
+EMAIL_PASS = os.getenv("EMAIL_PASS", "")
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:3000")
 
 
 # ---------------------------------------------------------------------------
@@ -74,12 +74,9 @@ def send_guardian_invite_email(
 ) -> None:
     """
     Send the guardian verification invite.
-    Guardian clicks Accept/Reject from the link in this email.
+    Guardian enters the 6-digit code in the app to link.
     """
-    verify_url = f"{APP_BASE_URL}/verify-guardian?token={token}"
-    reject_url = f"{APP_BASE_URL}/verify-guardian?token={token}&action=reject"
-
-    subject = "Guardian Verification Request - Digital Fraud Shield"
+    subject = "Guardian Verification Code - Digital Fraud Shield"
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -87,63 +84,53 @@ def send_guardian_invite_email(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f3f4f6; margin: 0; padding: 0; }}
-    .wrapper {{ max-width: 560px; margin: 40px auto; background: #fff; border-radius: 12px;
-                overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.10); }}
-    .header {{ background: linear-gradient(135deg, #003049 0%, #051d3e 100%);
-               padding: 36px 32px; text-align: center; }}
-    .header h1 {{ color: #F77F00; font-size: 22px; margin: 0 0 4px; letter-spacing: 0.5px; }}
-    .header p {{ color: #FCBF49; font-size: 13px; margin: 0; }}
-    .body {{ padding: 32px; color: #1f2937; line-height: 1.7; }}
-    .body h2 {{ font-size: 18px; color: #003049; margin-top: 0; }}
-    .info-box {{ background: #fff8ee; border-left: 4px solid #F77F00;
-                 border-radius: 6px; padding: 14px 16px; margin: 20px 0; font-size: 14px; }}
-    .btn-accept {{ display: inline-block; background: #16a34a; color: #fff; font-weight: 700;
-                   font-size: 15px; padding: 14px 32px; border-radius: 8px;
-                   text-decoration: none; margin: 8px 8px 8px 0; }}
-    .btn-reject {{ display: inline-block; background: #dc2626; color: #fff; font-weight: 700;
-                   font-size: 15px; padding: 14px 32px; border-radius: 8px;
-                   text-decoration: none; margin: 8px 0; }}
-    .footer {{ background: #f9fafb; padding: 20px 32px; font-size: 12px;
-               color: #9ca3af; text-align: center; border-top: 1px solid #e5e7eb; }}
-    .token-code {{ font-family: monospace; font-size: 12px; color: #6b7280;
-                   background: #f3f4f6; padding: 4px 8px; border-radius: 4px; }}
+    body {{ font-family: 'Sora', 'Segoe UI', Arial, sans-serif; background: #f9fafb; margin: 0; padding: 0; }}
+    .wrapper {{ max-width: 500px; margin: 40px auto; background: #fff; border-radius: 16px;
+                overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.08); border: 1px solid #f1f5f9; }}
+    .header {{ background: #000; padding: 40px 32px; text-align: center; }}
+    .header h1 {{ color: #FF5500; font-size: 24px; margin: 0; font-weight: 800; letter-spacing: -0.5px; }}
+    .header p {{ color: #94a3b8; font-size: 14px; margin: 8px 0 0; font-weight: 500; }}
+    .body {{ padding: 40px 32px; color: #334155; line-height: 1.6; }}
+    .body h2 {{ font-size: 20px; color: #0f172a; margin: 0 0 16px; font-weight: 700; }}
+    .code-container {{ background: #f8fafc; border-radius: 12px; padding: 32px;
+                       text-align: center; margin: 24px 0; border: 2px dashed #e2e8f0; }}
+    .code-label {{ font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }}
+    .code-val {{ font-size: 48px; font-weight: 800; color: #FF5500; letter-spacing: 10px; margin: 0; line-height: 1; }}
+    .info-box {{ background: #fff7ed; border-radius: 12px; padding: 20px; margin: 24px 0; border: 1px solid #ffedd5; }}
+    .info-box strong {{ color: #9a3412; font-size: 14px; display: block; margin-bottom: 4px; }}
+    .info-box p {{ color: #c2410c; font-size: 13px; margin: 0; }}
+    .footer {{ padding: 24px 32px; font-size: 12px; color: #94a3b8; text-align: center; background: #f8fafc; border-top: 1px solid #f1f5f9; }}
   </style>
 </head>
 <body>
   <div class="wrapper">
     <div class="header">
       <h1>Digital Fraud Shield</h1>
-      <p>Guardian Verification Request</p>
+      <p>Security Infrastructure</p>
     </div>
     <div class="body">
       <h2>Hello {guardian_name},</h2>
       <p>
-        <strong>{senior_name}</strong> has added you as a <strong>trusted guardian</strong>
-        on Digital Fraud Shield — a fraud protection platform that protects seniors
-        from online scams.
+        <strong>{senior_name}</strong> has invited you to be their trusted guardian on Digital Fraud Shield.
       </p>
+      
+      <div class="code-container">
+        <div class="code-label">Verification Code</div>
+        <p class="code-val">{token}</p>
+      </div>
+
       <div class="info-box">
-        <strong>What does being a guardian mean?</strong><br>
-        You will receive alerts when suspicious transactions are detected on
-        {senior_name}'s account, and can help review or block them.
+        <strong>What is a Guardian?</strong>
+        <p>You'll receive alerts when suspicious transactions are detected on {senior_name}'s account and can help prevent fraud in real-time.</p>
       </div>
-      <p>Please click one of the buttons below to respond:</p>
-      <div>
-        <a href="{verify_url}" class="btn-accept">Accept</a>
-        <a href="{reject_url}" class="btn-reject">Reject</a>
-      </div>
-      <p style="margin-top:24px; font-size:13px; color:#6b7280;">
-        Or paste this link into your browser:<br>
-        <span class="token-code">{verify_url}</span>
-      </p>
-      <p style="font-size:13px; color:#9ca3af;">
-        This link expires in 24 hours. If you did not expect this email, you can safely ignore it.
+
+      <p style="margin-top: 32px; font-size: 14px; font-weight: 500;">
+        How to verify:<br>
+        <span style="color: #64748b; font-weight: 400;">Please go back to the Digital Fraud Shield app or website and enter the 6-digit code above.</span>
       </p>
     </div>
     <div class="footer">
-      Digital Fraud Shield &bull; Protecting Seniors Online<br>
-      Token: <span class="token-code">{token}</span>
+      Digital Fraud Shield &bull; Protecting the Vulnerable
     </div>
   </div>
 </body>
