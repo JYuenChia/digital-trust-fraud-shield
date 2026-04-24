@@ -1,6 +1,6 @@
 export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
-export const FRAUD_API_BASE_URL = "https://digital-trust-blue.vercel.app/";
+export const FRAUD_API_BASE_URL = "https://digital-trust-backend-fnm1.onrender.com";
 
 // Generate login URL at runtime so redirect URI reflects the current origin.
 export const getLoginUrl = () => {
