@@ -41,7 +41,7 @@ SMTP_HOST  = os.getenv("SMTP_HOST",  "smtp.gmail.com")
 SMTP_PORT  = int(os.getenv("SMTP_PORT", "587"))
 EMAIL_USER = os.environ["EMAIL_USER"]   # raises clearly if missing
 EMAIL_PASS = os.environ["EMAIL_PASS"]
-APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:3000")
+APP_BASE_URL = os.getenv("APP_BASE_URL", "https://digital-trust-blue.vercel.app")
 
 
 # ---------------------------------------------------------------------------
