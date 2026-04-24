@@ -5,13 +5,7 @@ import { useTour } from '@/contexts/TourContext';
 import { 
   ShieldCheck, 
   UserPlus, 
-  Smartphone, 
-  ArrowRight, 
-  CheckCircle2, 
-  Fingerprint, 
-  Search, 
-  MessageSquare,
-  ChevronRight
+  Smartphone
 } from 'lucide-react';
 
 const LESSON_STORAGE_KEY = 'fraud-shield-lesson-v1';
@@ -522,9 +516,7 @@ export default function Landing() {
                 <p className="font-['Inter'] text-sm leading-[1.6] text-[#6B7280] dark:text-[#8A8A8A]">
                   {feat.desc}
                 </p>
-                <div className="mt-auto pt-4 flex items-center gap-2 text-[#FF5500] text-xs font-bold uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">
-                  Learn More <ChevronRight size={14} />
-                </div>
+
               </div>
             ))}
           </div>
