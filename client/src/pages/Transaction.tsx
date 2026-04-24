@@ -1681,11 +1681,16 @@ export default function Transaction() {
     if (!qr) return null;
 
     return (
-      <div className="w-full rounded-lg border border-black/10 bg-[#F8FAFC] px-4 py-3 text-left">
-        <p className="text-xs uppercase tracking-[0.16em] text-[#6B7280]">QR Integrity Shield</p>
-        <p className={`mt-1 text-sm font-semibold ${qr.is_verified_merchant ? 'text-[#32D74B]' : 'text-[#FF9F0A]'}`}>
-          Merchant Verification: {qr.is_verified_merchant ? 'Verified' : 'Unverified'}
-        </p>
+      <div className="w-full rounded-xl border border-black/5 bg-white px-5 py-4 text-left shadow-sm">
+        <div className="flex items-center justify-between gap-3 mb-3 border-b border-gray-50 pb-3">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/5 px-2.5 py-1 text-blue-600 text-[10px] tracking-[0.12em] uppercase font-bold">
+            <Shield size={12} />
+            QR Integrity Shield
+          </div>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-tight ${qr.is_verified_merchant ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-orange-50 text-orange-600 border border-orange-100'}`}>
+            {qr.is_verified_merchant ? 'Verified Merchant' : 'Unverified Merchant'}
+          </span>
+        </div>
         {qr.pattern_match_message && (
           <p className="mt-2 text-xs text-slate-600">
             {qr.pattern_match_message}

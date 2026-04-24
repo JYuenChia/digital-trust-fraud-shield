@@ -151,7 +151,7 @@ export default function Admin() {
 
       <div className="w-full max-w-[1444px] relative z-10 px-10 py-10 flex flex-col gap-8">
         <div className="flex flex-col gap-2">
-          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-muted-foreground text-xs tracking-[0.18em] uppercase font-bold shadow-sm">
+          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/5 px-3 py-1 text-blue-600 text-xs tracking-[0.18em] uppercase font-bold shadow-sm">
             <Building2 size={14} />
             {t('admin.badge')}
           </div>

@@ -834,7 +834,12 @@ export default function Profile() {
                             </div>
                             <div>
                               <p className="text-sm font-bold text-gray-900">AI Recovery Dossier Ready</p>
-                              <p className="text-[10px] text-gray-500 font-medium">Verified Evidence • {new Date(recoveryReport.generated_at).toLocaleDateString()}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-bold text-green-600 border border-green-100 uppercase tracking-tight">
+                                  Verified Evidence
+                                </span>
+                                <span className="text-[10px] text-gray-400 font-medium tracking-tight">• {new Date(recoveryReport.generated_at).toLocaleDateString()}</span>
+                              </div>
                             </div>
                           </div>
                           <button
