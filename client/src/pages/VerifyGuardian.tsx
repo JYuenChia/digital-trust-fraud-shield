@@ -17,53 +17,59 @@ export default function VerifyGuardian() {
   const [inviteData, setInviteData] = useState<any>(null);
   const [status, setStatus] = useState<"pending" | "accepted" | "rejected" | "error">("pending");
   const [errorMsg, setErrorMsg] = useState("");
+  const [manualCode, setManualCode] = useState("");
+  const [isManualEntry, setIsManualEntry] = useState(!token);
+
+  const fetchInvite = async (targetToken: string) => {
+    setLoading(true);
+    setStatus("pending");
+    setErrorMsg("");
+    try {
+      const response = await fetch(`${FRAUD_API_BASE_URL}/api/guardian/verify?token=${targetToken}`);
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || "Invalid or expired invitation code.");
+      }
+      const data = await response.json();
+      setInviteData(data);
+      
+      if (data.status === "ACCEPTED") setStatus("accepted");
+      else if (data.status === "REJECTED") setStatus("rejected");
+      
+      // If there's an action in the URL, auto-process it
+      if (initialAction && data.status === "PENDING") {
+        handleAction(initialAction.toUpperCase() === "ACCEPT" ? "ACCEPT" : "REJECT", targetToken, data);
+      }
+      setIsManualEntry(false);
+    } catch (err: any) {
+      setStatus("error");
+      setErrorMsg(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (!token) {
+    if (token) {
+      fetchInvite(token);
+    } else {
       setLoading(false);
-      setStatus("error");
-      setErrorMsg("Missing invitation token.");
-      return;
     }
-
-    const fetchInvite = async () => {
-      try {
-        const response = await fetch(`${FRAUD_API_BASE_URL}/api/guardian/verify?token=${token}`);
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.detail || "Failed to fetch invitation details.");
-        }
-        const data = await response.json();
-        setInviteData(data);
-        
-        if (data.status === "ACCEPTED") setStatus("accepted");
-        else if (data.status === "REJECTED") setStatus("rejected");
-        
-        // If there's an action in the URL, auto-process it
-        if (initialAction && data.status === "PENDING") {
-          handleAction(initialAction.toUpperCase() === "ACCEPT" ? "ACCEPT" : "REJECT");
-        }
-      } catch (err: any) {
-        setStatus("error");
-        setErrorMsg(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchInvite();
   }, [token]);
 
-  const handleAction = async (action: "ACCEPT" | "REJECT") => {
+  const handleAction = async (action: "ACCEPT" | "REJECT", activeToken?: string, dataOverride?: any) => {
     setProcessing(true);
+    const targetToken = activeToken || token || manualCode;
+    const currentData = dataOverride || inviteData;
+
     try {
       const response = await fetch(`${FRAUD_API_BASE_URL}/api/guardian/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          token,
+          token: targetToken,
           action,
-          guardian_name: inviteData?.guardian_name
+          guardian_name: currentData?.guardian_name
         }),
       });
 
@@ -85,26 +91,45 @@ export default function VerifyGuardian() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
         <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground animate-pulse">Verifying invitation...</p>
+        <p className="text-muted-foreground animate-pulse">Verifying invitation code...</p>
       </div>
     );
   }
 
-  if (status === "error") {
+  // Manual Entry or Error Screen
+  if (isManualEntry || status === "error") {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-4">
-        <Card className="w-full max-w-md border-destructive/20 shadow-xl">
-          <CardHeader className="text-center pb-2">
-            <div className="mx-auto bg-destructive/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
-              <Shield className="w-8 h-8 text-destructive" />
+        <Card className="w-full max-w-md border-slate-200 shadow-xl overflow-hidden">
+          <div className="h-2 bg-primary" />
+          <CardHeader className="text-center">
+            <div className="mx-auto bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+              <Mail className="w-8 h-8 text-primary" />
             </div>
-            <CardTitle className="text-2xl text-destructive">Invalid Invitation</CardTitle>
-            <CardDescription>{errorMsg}</CardDescription>
+            <CardTitle className="text-2xl">Enter Verification Code</CardTitle>
+            <CardDescription>
+              {errorMsg ? <span className="text-destructive font-medium">{errorMsg}</span> : "Please enter the 6-digit code sent to your email."}
+            </CardDescription>
           </CardHeader>
-          <CardFooter className="flex justify-center">
-            <Button variant="outline" onClick={() => window.location.href = "/"}>
-              Return to Homepage
+          <CardContent className="space-y-4">
+            <input
+              type="text"
+              maxLength={6}
+              value={manualCode}
+              onChange={(e) => setManualCode(e.target.value.replace(/\D/g, ""))}
+              placeholder="000000"
+              className="w-full h-16 text-center text-4xl font-bold tracking-[12px] border-2 border-slate-200 rounded-xl focus:border-primary focus:ring-0 outline-none transition-all"
+            />
+            <Button 
+              className="w-full h-12 text-lg font-bold" 
+              onClick={() => fetchInvite(manualCode)}
+              disabled={manualCode.length !== 6}
+            >
+              Verify Code
             </Button>
+          </CardContent>
+          <CardFooter className="flex justify-center border-t bg-slate-50 py-4">
+            <p className="text-xs text-slate-400">Can't find the code? Check your spam folder.</p>
           </CardFooter>
         </Card>
       </div>

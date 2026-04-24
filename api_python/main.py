@@ -1813,14 +1813,14 @@ async def send_email_invite_endpoint(data: dict):
     if not guardian_email:
         raise HTTPException(status_code=400, detail="guardian_email is required")
     
-    # Generate a unique token
-    token = uuid4().hex
+    # Generate a unique 6-digit code
+    code = generate_invite_code()
     created_at = datetime.now()
     expires_at = created_at + timedelta(hours=24)
     
     invite = {
         "sender_account": sender_account,
-        "token": token,
+        "code": code,
         "created_at": created_at.isoformat() + "Z",
         "expires_at": expires_at.isoformat() + "Z",
         "status": "PENDING",
@@ -1828,8 +1828,8 @@ async def send_email_invite_endpoint(data: dict):
         "guardian_name": guardian_name,
     }
     
-    # Store by token for easy lookup
-    GUARDIAN_INVITE_CODES[token] = invite
+    # Store by code for easy lookup
+    GUARDIAN_INVITE_CODES[code] = invite
     
     try:
         from guardian_email import send_guardian_invite_email
@@ -1837,7 +1837,7 @@ async def send_email_invite_endpoint(data: dict):
         
         send_guardian_invite_email(
             guardian_email=guardian_email,
-            token=token,
+            token=code,  # Use code as the identifier
             senior_name=sender_name,
             guardian_name=guardian_name
         )
@@ -1845,7 +1845,7 @@ async def send_email_invite_endpoint(data: dict):
         return {
             "success": True,
             "message": f"Invitation email sent to {guardian_email}",
-            "token": token
+            "token": code
         }
     except Exception as e:
         print(f"[EMAIL-ERROR] {str(e)}")

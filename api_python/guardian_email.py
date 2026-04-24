@@ -98,16 +98,14 @@ def send_guardian_invite_email(
     .body h2 {{ font-size: 18px; color: #003049; margin-top: 0; }}
     .info-box {{ background: #fff8ee; border-left: 4px solid #F77F00;
                  border-radius: 6px; padding: 14px 16px; margin: 20px 0; font-size: 14px; }}
+    .code-box {{ background: #f3f4f6; border: 2px dashed #003049; border-radius: 8px;
+                 padding: 24px; text-align: center; margin: 24px 0; }}
+    .code-val {{ font-size: 42px; font-weight: 800; color: #003049; letter-spacing: 8px; margin: 0; }}
     .btn-accept {{ display: inline-block; background: #16a34a; color: #fff; font-weight: 700;
                    font-size: 15px; padding: 14px 32px; border-radius: 8px;
                    text-decoration: none; margin: 8px 8px 8px 0; }}
-    .btn-reject {{ display: inline-block; background: #dc2626; color: #fff; font-weight: 700;
-                   font-size: 15px; padding: 14px 32px; border-radius: 8px;
-                   text-decoration: none; margin: 8px 0; }}
     .footer {{ background: #f9fafb; padding: 20px 32px; font-size: 12px;
                color: #9ca3af; text-align: center; border-top: 1px solid #e5e7eb; }}
-    .token-code {{ font-family: monospace; font-size: 12px; color: #6b7280;
-                   background: #f3f4f6; padding: 4px 8px; border-radius: 4px; }}
   </style>
 </head>
 <body>
@@ -120,30 +118,31 @@ def send_guardian_invite_email(
       <h2>Hello {guardian_name},</h2>
       <p>
         <strong>{senior_name}</strong> has added you as a <strong>trusted guardian</strong>
-        on Digital Fraud Shield — a fraud protection platform that protects seniors
-        from online scams.
+        on Digital Fraud Shield.
       </p>
+      
+      <div class="code-box">
+        <p style="margin: 0 0 8px 0; font-size: 13px; color: #6b7280; font-weight: 600; text-transform: uppercase;">Your Verification Code</p>
+        <p class="code-val">{token}</p>
+      </div>
+
       <div class="info-box">
         <strong>What does being a guardian mean?</strong><br>
         You will receive alerts when suspicious transactions are detected on
         {senior_name}'s account, and can help review or block them.
       </div>
-      <p>Please click one of the buttons below to respond:</p>
+
+      <p>Please click the button below to go to the verification page and enter your code:</p>
       <div>
-        <a href="{verify_url}" class="btn-accept">Accept</a>
-        <a href="{reject_url}" class="btn-reject">Reject</a>
+        <a href="{verify_url}" class="btn-accept">Verify Invitation</a>
       </div>
-      <p style="margin-top:24px; font-size:13px; color:#6b7280;">
-        Or paste this link into your browser:<br>
-        <span class="token-code">{verify_url}</span>
-      </p>
-      <p style="font-size:13px; color:#9ca3af;">
-        This link expires in 24 hours. If you did not expect this email, you can safely ignore it.
+      
+      <p style="font-size:13px; color:#9ca3af; margin-top: 24px;">
+        This code expires in 24 hours. If you did not expect this email, you can safely ignore it.
       </p>
     </div>
     <div class="footer">
-      Digital Fraud Shield &bull; Protecting Seniors Online<br>
-      Token: <span class="token-code">{token}</span>
+      Digital Fraud Shield &bull; Protecting Seniors Online
     </div>
   </div>
 </body>
