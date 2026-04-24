@@ -85,6 +85,8 @@ const MALAYSIA_BANKS = [
 
 const PROFILE_STORAGE_KEY = 'fraud-shield-profile-v1';
 const CARD_STORAGE_KEY = 'fraud-shield-cards-v1';
+const PROFILE_PIN_KEY = 'fraud-shield-profile-v1-pin';
+const PROFILE_PIN_VALUE_KEY = 'fraud-shield-profile-v1-pin-value';
 const SENIOR_ACCOUNT = 'ALEX8899';
 
 export default function Profile() {
@@ -101,6 +103,8 @@ export default function Profile() {
   });
   const [phone, setPhone] = useState(() => localStorage.getItem(`${PROFILE_STORAGE_KEY}-phone`) ?? '+60 12-777 8899');
   const [nationality, setNationality] = useState(() => localStorage.getItem(`${PROFILE_STORAGE_KEY}-nationality`) ?? 'Malaysia');
+  const [walletPinEnabled, setWalletPinEnabled] = useState(() => localStorage.getItem(PROFILE_PIN_KEY) === 'true');
+  const [walletPin, setWalletPin] = useState(() => localStorage.getItem(PROFILE_PIN_VALUE_KEY) ?? '');
   const [saveMessage, setSaveMessage] = useState('');
   const [activeTab, setActiveTab] = useState<ProfileTab>('account');
 
@@ -170,6 +174,8 @@ export default function Profile() {
     localStorage.setItem(`${PROFILE_STORAGE_KEY}-email`, email);
     localStorage.setItem(`${PROFILE_STORAGE_KEY}-phone`, phone);
     localStorage.setItem(`${PROFILE_STORAGE_KEY}-nationality`, nationality);
+    localStorage.setItem(PROFILE_PIN_KEY, String(walletPinEnabled));
+    localStorage.setItem(PROFILE_PIN_VALUE_KEY, walletPin);
     setSaveMessage(t('profile.updated'));
     setTimeout(() => setSaveMessage(''), 1800);
   };
@@ -341,7 +347,7 @@ export default function Profile() {
   const handleRemoveGuardian = async (guardianAccount: string) => {
     try {
       setIsGuardianLoading(true);
-      const response = await fetch(`${FRAUD_API_BASE_URL}/guardians/${SENIOR_ACCOUNT}/remove/${guardianAccount}`, {
+      const response = await fetch(`${FRAUD_API_BASE_URL}/api/guardians/${SENIOR_ACCOUNT}/remove/${guardianAccount}`, {
         method: 'POST',
       });
       const data = await response.json();
@@ -490,6 +496,46 @@ export default function Profile() {
                     <option value="ms">{t('language.malay')}</option>
                     <option value="zh">{t('language.chinese')}</option>
                   </select>
+                </div>
+
+                <div className="rounded-[8px] bg-[#F3F4F6] p-6 flex flex-col gap-5 shadow-sm border border-[#E5E7EB]">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-gray-900 text-sm font-bold">Wallet Transaction PIN</span>
+                      <p className="text-xs text-gray-500 mt-1">Require a 6-digit PIN for all transfers to prevent unauthorized access.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setWalletPinEnabled(!walletPinEnabled)}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        walletPinEnabled ? 'bg-[#FF5500]' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          walletPinEnabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {walletPinEnabled && (
+                    <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-gray-400">Set 6-Digit PIN</label>
+                      <input
+                        type="password"
+                        maxLength={6}
+                        value={walletPin}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '');
+                          if (val.length <= 6) setWalletPin(val);
+                        }}
+                        placeholder="••••••"
+                        className="w-full md:w-48 h-12 rounded-[8px] border border-[#D1D5DB] bg-white px-4 text-lg font-bold tracking-[0.5em] text-gray-900 focus:ring-2 focus:ring-orange-500/20 outline-none transition-all placeholder:tracking-normal placeholder:font-normal"
+                      />
+                      <p className="text-[10px] text-gray-400 italic">This PIN will be stored locally on your device for maximum security.</p>
+                    </div>
+                  )}
                 </div>
 
                 {saveMessage && <div className="text-green-600 font-medium bg-green-50 px-4 py-2 rounded-[8px] inline-block self-start">{saveMessage}</div>}

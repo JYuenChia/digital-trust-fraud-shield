@@ -1546,38 +1546,32 @@ async def get_seniors_for_guardian(guardian_email: str):
     return {"seniors": linked_seniors}
 
 
-@app.post("/guardians/{sender_account}/remove/{guardian_id}")
+@app.post("/api/guardians/{sender_account}/remove/{guardian_id}")
 async def remove_guardian(sender_account: str, guardian_id: str):
-    """Remove a guardian from a senior account."""
-    if sender_account in GUARDIAN_LINKS:
-        initial_count = len(GUARDIAN_LINKS[sender_account]["guardians"])
-        GUARDIAN_LINKS[sender_account]["guardians"] = [
-            g for g in GUARDIAN_LINKS[sender_account]["guardians"] 
-            if g.get("guardian_account") != guardian_id
-        ]
-        if len(GUARDIAN_LINKS[sender_account]["guardians"]) < initial_count:
-            return {"success": True, "message": "Guardian removed successfully."}
-    
-    raise HTTPException(status_code=404, detail="Guardian not found.")
+    """Remove a guardian from a senior account or cancel a pending invitation."""
     removed = False
     message = "Guardian not found."
 
-    # 1. Check verified guardians
+    # 1. Check verified guardians in GUARDIAN_LINKS
     if sender_account in GUARDIAN_LINKS:
-        guardians = GUARDIAN_LINKS[sender_account]["guardians"]
+        guardians = GUARDIAN_LINKS[sender_account].get("guardians", [])
         initial_count = len(guardians)
         # Try to match by account ID or email
-        GUARDIAN_LINKS[sender_account]["guardians"] = [
-            g for g in guardians if g.get("guardian_account") != guardian_id and g.get("email") != guardian_id
+        new_guardians = [
+            g for g in guardians 
+            if g.get("guardian_account") != guardian_id and g.get("email") != guardian_id
         ]
-        if len(GUARDIAN_LINKS[sender_account]["guardians"]) < initial_count:
+        
+        if len(new_guardians) < initial_count:
+            GUARDIAN_LINKS[sender_account]["guardians"] = new_guardians
             removed = True
             message = "Guardian removed successfully."
 
-    # 2. Check pending invitations
+    # 2. Check pending invitations in GUARDIAN_INVITE_CODES
     tokens_to_remove = []
     for token, invite in GUARDIAN_INVITE_CODES.items():
         if invite.get("sender_account") == sender_account:
+            # Match by email or potential guardian_account if it exists in invite
             if invite.get("guardian_email") == guardian_id or invite.get("guardian_account") == guardian_id:
                 tokens_to_remove.append(token)
     
@@ -1590,7 +1584,8 @@ async def remove_guardian(sender_account: str, guardian_id: str):
 
     if removed:
         return {"success": True, "message": message}
-    return {"success": False, "message": "Guardian or invitation not found."}
+    
+    raise HTTPException(status_code=404, detail="Guardian or invitation not found.")
 
 
 @app.get("/guardian-notifications/{guardian_account}")

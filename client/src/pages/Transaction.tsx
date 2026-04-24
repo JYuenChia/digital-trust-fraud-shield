@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X, PhoneCall, Mic, MicOff, Lock, Smartphone, Send, Globe, Download } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Loader, CheckCircle, AlertTriangle, Play, ChevronDown, ScanLine, X, PhoneCall, Mic, MicOff, Lock, Smartphone, Send, Globe, Download, RefreshCw } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeScanner } from 'html5-qrcode';
 import { FRAUD_API_BASE_URL } from '@/const';
 import { useFraudEvents } from '@/contexts/FraudEventsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { toast } from 'sonner';
 
 const TRUSTED_CONTACTS = [
   '+6012-111-2222',
@@ -781,6 +782,7 @@ export default function Transaction() {
   const [fraudResult, setFraudResult] = useState<FraudResult | null>(null);
   const [isQrActionPickerOpen, setIsQrActionPickerOpen] = useState(false);
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
   const [qrScanError, setQrScanError] = useState<string | null>(null);
   const [lastQrPreview, setLastQrPreview] = useState<string>('');
   const [isQrImageDecoding, setIsQrImageDecoding] = useState(false);
@@ -836,7 +838,7 @@ export default function Transaction() {
   const [callBackendVoiceAssessment, setCallBackendVoiceAssessment] = useState<AIVoiceAssessment | null>(null);
   const [callVoiceAuditMessage, setCallVoiceAuditMessage] = useState<string>('');
   const [callError, setCallError] = useState<string | null>(null);
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
   const callRecognitionRef = useRef<any>(null);
   const hasPlayedCallAlertRef = useRef(false);
   const spokenCallVerdictRef = useRef<string>('');
@@ -880,7 +882,7 @@ export default function Transaction() {
   }, [callBackendVoiceAssessment]);
 
   const continueTransactionAfterGate = () => {
-    const pinEnabled = localStorage.getItem('fraud-shield-profile-v1-pin') !== 'false';
+    const pinEnabled = localStorage.getItem('fraud-shield-profile-v1-pin') === 'true';
     if (pinEnabled) {
       setEnteredPin('');
       setPinError(null);
@@ -1643,12 +1645,18 @@ export default function Transaction() {
     );
   };
 
-  const closeQrScanner = () => {
-    setIsQrScannerOpen(false);
+  const closeQrScanner = async () => {
     if (scannerRef.current) {
-      scannerRef.current.clear().catch(() => undefined);
+      if (scannerRef.current.isScanning) {
+        try {
+          await scannerRef.current.stop();
+        } catch (err) {
+          console.warn('Error stopping scanner:', err);
+        }
+      }
       scannerRef.current = null;
     }
+    setIsQrScannerOpen(false);
   };
 
   const applyExtractedTransferData = (extracted: OcrExtractionResult) => {
@@ -1756,99 +1764,135 @@ export default function Transaction() {
     }
   };
 
+  const handleCameraScannerClick = async () => {
+    try {
+      // Explicitly ask for permission before opening modal for better UX
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      // Close the stream immediately after permission is granted, 
+      // as Html5QrcodeScanner will manage its own stream.
+      stream.getTracks().forEach(track => track.stop());
+      
+      setIsQrActionPickerOpen(false);
+      setIsQrScannerOpen(true);
+    } catch (err) {
+      console.error('Camera permission denied:', err);
+      toast.error('Camera access is required for the scanner. Please check your browser permissions.');
+    }
+  };
+
+  const captureAndScanOcr = async () => {
+    if (!isQrScannerOpen) return;
+    
+    // Find the video element created by html5-qrcode
+    const video = document.querySelector(`#${scannerRegionId} video`) as HTMLVideoElement;
+    if (!video) {
+      // If we can't find it via selector, try the ref or instance directly
+      const instance = scannerRef.current;
+      if (!instance) {
+        toast.error('Scanner not initialized.');
+        return;
+      }
+      toast.error('Camera feed not ready. Please wait for camera to start.');
+      return;
+    }
+
+    try {
+      setIsOcrProcessing(true);
+      setOcrSummary('Capturing frame and running OCR analysis...');
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Run OCR on the captured frame
+      const tesseract = await import('tesseract.js');
+      const ocrResult = await tesseract.recognize(canvas, 'eng');
+      const extractedText = ocrResult.data.text || '';
+      
+      if (extractedText.trim()) {
+        const extracted = extractFinancialDataFromText(extractedText);
+        if (extracted.accountNumber || extracted.recipientName || extracted.amount) {
+          applyExtractedTransferData(extracted);
+          setOcrSummary('Details extracted from camera. Please verify.');
+          
+          // Run risk check on the extracted text
+          const threatResult = await scanQrThreat(extractedText, extracted);
+          if (threatResult.status === 'APPROVED') {
+            setFraudResult(threatResult);
+            closeQrScanner();
+            if (extracted.amount) {
+              setModalState('confirming');
+            } else {
+              setQrScanStatus({ tone: 'safe', message: 'OCR Scan complete. Please enter amount.' });
+            }
+          } else {
+            applyResultModal(threatResult);
+          }
+        } else {
+          setOcrSummary('Could not find account details in this frame. Try adjusting the angle.');
+        }
+      } else {
+        setOcrSummary('No text detected in the current frame.');
+      }
+    } catch (err) {
+      console.error('OCR Capture failed:', err);
+      toast.error('Failed to process image for OCR.');
+    } finally {
+      setIsOcrProcessing(false);
+    }
+  };
+
   useEffect(() => {
     if (!isQrScannerOpen) return;
 
     setQrScanError(null);
     setOcrSummary(null);
-    const scanner = new Html5QrcodeScanner(
-      scannerRegionId,
-      {
-        fps: 10,
-        qrbox: { width: 260, height: 260 },
-        rememberLastUsedCamera: true,
-      },
-      false,
-    );
+    
+    const html5Qr = new Html5Qrcode(scannerRegionId);
+    scannerRef.current = html5Qr;
 
-    scannerRef.current = scanner;
-    scanner.render(
-      async (decodedText) => {
-        try {
-          const parsed = parseQrPayload(decodedText);
-          let extracted: OcrExtractionResult | undefined;
-
-          if (parsed && (parsed.merchant_id || parsed.account_name)) {
-            const detectedAccount = normalizeLikelyAccountNumber(parsed.merchant_id);
-            setScannedQrPayload(parsed);
-            setRecipientAccount(detectedAccount || '');
-            setRecipientName(parsed.account_name || recipientName);
-            if (typeof parsed.amount === 'number' && parsed.amount > 0) {
-              setAmount(parsed.amount.toFixed(2));
+    const startCamera = async () => {
+      try {
+        await html5Qr.start(
+          { facingMode: facingMode },
+          {
+            fps: 10,
+            qrbox: { width: 260, height: 260 },
+          },
+          async (decodedText) => {
+            // Check if still scanning before processing
+            if (html5Qr.isScanning) {
+              await handleDecodedQrText(decodedText);
             }
-            if (parsed.provider) {
-              setSelectedProvider(parsed.provider);
-            }
-            extracted = {
-              accountNumber: detectedAccount,
-              recipientName: parsed.account_name,
-              amount: parsed.amount,
-              currency: parsed.currency,
-            };
-          } else {
-            extracted = extractFinancialDataFromText(decodedText);
-            if (extracted.accountNumber || extracted.recipientName || extracted.amount) {
-              applyExtractedTransferData(extracted);
-              setOcrSummary('Financial details were extracted from scanned text. Please verify before confirming.');
-            }
-            setScannedQrPayload(null);
+          },
+          () => {
+            // Ignore frame scan errors
           }
+        );
+      } catch (err) {
+        console.error("Failed to start camera:", err);
+        setQrScanError("Could not access camera. Please ensure permissions are granted.");
+      }
+    };
 
-          const threatResult = await scanQrThreat(decodedText, extracted);
-
-          closeQrScanner();
-
-          const hasAutoFill = Boolean(
-            extracted?.accountNumber || extracted?.recipientName || extracted?.amount,
-          );
-          const hasDetectedAmount = typeof extracted?.amount === 'number' && extracted.amount > 0;
-
-          if (hasAutoFill && threatResult.status === 'APPROVED') {
-            setFraudResult(threatResult);
-            setRecipientVerification({ label: 'Verified' });
-            if (hasDetectedAmount) {
-              setQrScanStatus({ tone: 'safe', message: 'Scan complete. Account, recipient, and amount were filled for your verification.' });
-              // Auto-trigger confirmation modal for immediate user verification when amount is available.
-              setModalState('confirming');
-            } else {
-              setQrScanStatus({ tone: 'safe', message: 'Scan complete. Recipient details are filled. Please enter amount to continue.' });
-              setActiveStep('recipient');
-              window.setTimeout(() => amountInputRef.current?.focus(), 0);
-            }
-          } else if (threatResult.status === 'BLOCKED') {
-            setRecipientVerification(null);
-            setQrScanStatus({ tone: 'danger', message: threatResult.reason_code || 'Red alert: this payment destination appears risky.' });
-            applyResultModal(threatResult);
-          } else {
-            setRecipientVerification(null);
-            setQrScanStatus({ tone: 'warn', message: threatResult.reason_code || 'This QR needs caution.' });
-            applyResultModal(threatResult);
-          }
-        } catch (error) {
-          console.error('QR threat scan error:', error);
-          setQrScanError('Unable to scan QR risk right now. Please try again.');
-        }
-      },
-      () => {
-        // Ignore scan frame errors to avoid noisy UI.
-      },
-    );
+    // Slight delay to ensure DOM is ready
+    const timer = setTimeout(startCamera, 100);
 
     return () => {
-      scanner.clear().catch(() => undefined);
-      scannerRef.current = null;
+      clearTimeout(timer);
+      if (scannerRef.current) {
+        const instance = scannerRef.current;
+        if (instance.isScanning) {
+          instance.stop().catch(() => undefined);
+        }
+        scannerRef.current = null;
+      }
     };
-  }, [activeDeviceId, activeIpProfile, isQrScannerOpen, recipientName]);
+  }, [isQrScannerOpen, facingMode]);
 
   const handleUnifiedUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -2432,10 +2476,7 @@ export default function Transaction() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => {
-                  setIsQrActionPickerOpen(false);
-                  setIsQrScannerOpen(true);
-                }}
+                onClick={handleCameraScannerClick}
                 className="rounded-xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-[#0F0F0F] px-4 py-4 text-left hover:border-[#FF5500]/50 hover:bg-[#FF5500]/10 transition-colors cursor-pointer"
               >
                 <p className="text-sm font-bold text-[#111827] dark:text-white">Use Camera Scanner</p>
@@ -2471,13 +2512,23 @@ export default function Transaction() {
                   <p className="text-[#6B7280] dark:text-[#8A8A8A] text-sm">Scan QR live, or upload screenshot/receipt for OCR extraction.</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={closeQrScanner}
-                className="w-9 h-9 rounded-lg border border-black/10 dark:border-white/10 text-[#6B7280] dark:text-[#8A8A8A] hover:text-[#111827] dark:hover:text-white hover:border-black/20 dark:hover:border-white/20 flex items-center justify-center cursor-pointer"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFacingMode(prev => prev === 'user' ? 'environment' : 'user')}
+                  title="Switch Camera"
+                  className="w-9 h-9 rounded-lg border border-black/10 dark:border-white/10 text-[#6B7280] dark:text-[#8A8A8A] hover:text-[#111827] dark:hover:text-white hover:border-black/20 dark:hover:border-white/20 flex items-center justify-center cursor-pointer"
+                >
+                  <RefreshCw size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={closeQrScanner}
+                  className="w-9 h-9 rounded-lg border border-black/10 dark:border-white/10 text-[#6B7280] dark:text-[#8A8A8A] hover:text-[#111827] dark:hover:text-white hover:border-black/20 dark:hover:border-white/20 flex items-center justify-center cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-slate-50 dark:bg-[#101010] p-3">
@@ -2486,11 +2537,11 @@ export default function Transaction() {
                 <button
                   type="button"
                   disabled={isOcrProcessing || isQrImageDecoding}
-                  onClick={() => unifiedInputRef.current?.click()}
+                  onClick={captureAndScanOcr}
                   className="w-full py-4 rounded-xl bg-[#FF5500] hover:bg-[#E04B00] text-[#111827] dark:text-white font-bold transition-all shadow-lg flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer"
                 >
-                  <Download size={20} className="rotate-180" />
-                  {isOcrProcessing || isQrImageDecoding ? 'Risk Analysis in Progress...' : 'Upload QR or Transaction Record'}
+                  <ScanLine size={20} />
+                  {isOcrProcessing ? 'Analyzing Document...' : 'Scan Document (OCR)'}
                 </button>
                 <p className="text-center text-xs text-[#6B7280] dark:text-[#A0A0A0]">
                   Extracts recipient, account, and amount from images/PDF and screens scam risk in one step.
